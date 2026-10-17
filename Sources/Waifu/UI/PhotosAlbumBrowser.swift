@@ -1,4 +1,3 @@
-import Photos
 import SwiftUI
 
 /// Shared order glyph for the toolbar filter and the small synced-photo badge.
@@ -63,8 +62,9 @@ struct PhotosFavoriteButton: View {
             guard scenePhase == .active,
                   let item = PhotosMedia.shared.item(url) else { return }
             // Refetch after returning from Photos or remounting a scrolled cell.
-            isFavorite = PHAsset.fetchAssets(withLocalIdentifiers: [item.asset.localIdentifier], options: nil)
-                .firstObject?.isFavorite ?? item.asset.isFavorite
+            let favorite = await PhotosMedia.shared.favoriteStatus(url) ?? item.asset.isFavorite
+            guard !Task.isCancelled else { return }
+            isFavorite = favorite
         }
         .alert("Couldn't update Favorite", isPresented: Binding(
             get: { error != nil }, set: { if !$0 { error = nil } }
