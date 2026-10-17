@@ -58,6 +58,32 @@ enum FirefoxIntegration {
         if FileManager.default.fileExists(atPath: healthFile.path) { try FileManager.default.removeItem(at: healthFile) }
     }
 
+    /// The temporary add-on loader page.
+    ///
+    /// Written literally: `/usr/bin/open` re-parses its argument as a URL and
+    /// percent-encodes the `#` of a scheme-only URL, so this exact string used to
+    /// reach Firefox as `about:debugging%23/runtime/this-firefox` — a page name that
+    /// does not exist. Firefox's own command line takes the fragment verbatim, and a
+    /// running instance picks the request up as a remote command line, so the
+    /// launcher inside the bundle is run directly instead of going through `open`.
+    static let addOnLoaderURL = "about:debugging#/runtime/this-firefox"
+
+    /// Arguments that ask Firefox for `url` in a new tab.
+    static let addOnLoaderArguments = ["-new-tab", addOnLoaderURL]
+
+    /// The runnable launcher inside a Firefox application bundle, when there is one.
+    static func launcher(in application: URL) -> URL? {
+        let directory = application.appendingPathComponent("Contents/MacOS")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path))?.sorted() ?? []
+        for name in names where name.lowercased().hasPrefix("firefox") {
+            let candidate = directory.appendingPathComponent(name)
+            guard FileManager.default.isExecutableFile(atPath: candidate.path),
+                  (try? candidate.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            return candidate
+        }
+        return nil
+    }
+
     /// Opens Firefox's temporary add-on loader and selects the packaged XPI in
     /// Finder so a local install doesn't require navigating to WaifuFinder's bundle.
     static func openExtensionSetup() throws {
@@ -72,8 +98,15 @@ enum FirefoxIntegration {
             throw MediaImport.failure("The packaged Firefox add-on is missing. Rebuild WaifuFinder and try again.")
         }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", firefox.path, "about:debugging#/runtime/this-firefox"]
+        if let launcher = launcher(in: firefox) {
+            process.executableURL = launcher
+            process.arguments = addOnLoaderArguments
+        } else {
+            // Nothing runnable in the bundle: `open` still reaches the page, so drop
+            // the fragment it would corrupt rather than handing over a dead URL.
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = ["-a", firefox.path, "about:debugging"]
+        }
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()

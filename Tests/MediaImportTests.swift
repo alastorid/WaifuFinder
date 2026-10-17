@@ -52,6 +52,27 @@ func registerMediaImportTests() {
         checkNil(FirefoxIntegration.incomingURL(URL(string: "waifufinder://open?url=file:///etc/passwd")!), "bridge cannot load local paths")
         checkEqual(FirefoxIntegration.suffixes(".MP4, ts .dms,mp4, ../bad"), ["dms", "mp4", "ts"], "normalizes suffixes")
     })
+    Registry.shared.add(suite: suite, TestCase(name: "add-on loader keeps its URL fragment by running Firefox's own launcher", knownBug: nil) {
+        // `/usr/bin/open` percent-encodes the `#` of a scheme-only URL, which used to
+        // leave Firefox on `about:debugging%23/runtime/this-firefox`.
+        checkEqual(FirefoxIntegration.addOnLoaderURL, "about:debugging#/runtime/this-firefox", "loader URL keeps a literal fragment")
+        check(!FirefoxIntegration.addOnLoaderURL.contains("%23"), "loader URL is never percent-encoded")
+        checkEqual(FirefoxIntegration.addOnLoaderArguments, ["-new-tab", "about:debugging#/runtime/this-firefox"],
+                   "Firefox receives the URL on its own command line, not through `open`")
+
+        let bundle = try Temporary.directory("firefox-bundle").appendingPathComponent("Firefox.app")
+        let binDirectory = bundle.appendingPathComponent("Contents/MacOS")
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        checkNil(FirefoxIntegration.launcher(in: bundle), "a bundle with no launcher reports none")
+
+        try FileManager.default.createDirectory(at: binDirectory.appendingPathComponent("firefox-shim"), withIntermediateDirectories: true)
+        checkNil(FirefoxIntegration.launcher(in: bundle), "a directory named like the launcher is not runnable")
+
+        let launcher = binDirectory.appendingPathComponent("firefox")
+        try "#!/bin/sh\nexit 0\n".write(to: launcher, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: launcher.path)
+        checkEqual(FirefoxIntegration.launcher(in: bundle), launcher, "launcher inside the bundle is found")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "extensionless and misleading HTTP media imports use native decoding", knownBug: nil) {
         let dir = try Temporary.directory("http-import")
         let clip = try VideoFixture.makeMP4(in: dir, durationSeconds: 1, width: 64, height: 48, frameRate: 5)
