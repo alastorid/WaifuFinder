@@ -40,9 +40,9 @@ compressed score payload. The header fields appear in this order:
 |---:|---|---|
 | 4 bytes | `pathLength` | Number of bytes in the source path |
 | 8 bytes | `sampleIndex` | Decoded-frame ordinal (`f000123` is index 123) |
-| 8 bytes | `sourceSize` | Source video size in bytes |
+| 8 bytes | `sourceSize` | Source video size in bytes, or a Photos asset's pixel geometry |
 | 8 bytes | `sourceModifiedMilliseconds` | Source modification time since the Unix epoch, in milliseconds |
-| 4 bytes | `analysisWidth` | Width used to analyze the video |
+| 4 bytes | `analysisWidth` | Width used to analyze the video, or the tagger's input size for a photo |
 | 8 bytes | `vocabularyFingerprint` | Numeric fingerprint of the ordered vocabulary and categories |
 | 8 bytes | `savedAtMilliseconds` | Time this changed result was written, in milliseconds since the Unix epoch |
 | 4 bytes | `payloadLength` | Number of bytes in the compressed payload |
@@ -59,6 +59,30 @@ path, a different analysis width, or a different vocabulary cannot reuse that
 entry. The vocabulary fingerprint is a 64-bit FNV-1a hash over the normalized
 label bytes in model-head order, with a separator and numeric category for each
 label. It does not contain the label text.
+
+### Photos photos
+
+A photo from Photos has no file to stat, so its key is built from the asset
+rather than from a path:
+
+| Field | Photos value |
+|---|---|
+| Source path | `photos-asset-v1/` followed by the PhotoKit asset identifier |
+| `sourceSize` | Pixel width in the high 32 bits, pixel height in the low 32 |
+| `sourceModifiedMilliseconds` | The asset's modification date, else its creation date |
+| `analysisWidth` | `448`, the tagger's own input size |
+
+Each photo is keyed **individually**, and its record always sits at ordinal `0`,
+so album position is not part of the key at all. This matters because PhotoKit
+does not guarantee the member order of a fetch made without a sort descriptor: an
+album-wide key changed between sessions even when no photo had been edited, and
+every cached tag was thrown away. Per-photo keys mean that reopening an album in
+a different order reuses everything, editing one photo invalidates only that
+photo, and a photo already tagged in another album is not tagged again.
+
+Entries written by earlier builds used an album-wide key under
+`photos-rendition-v3/`. They are simply never matched again and expire with the
+rest of the cache.
 
 ### Score payload (`WDF9`)
 

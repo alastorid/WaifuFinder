@@ -13,14 +13,6 @@ struct TagResultCacheIdentity: Hashable, Sendable {
     let vocabularyFingerprint: UInt64
 
     init?(videoURL: URL, vocabulary: TagVocabulary, analysisWidth: Int, analysisMode: AnalysisMode = .full) {
-        if let photos = PhotosMedia.shared.cacheSource(videoURL, mode: analysisMode) {
-            sourcePath = photos.path + "/tagger-direct-v1"
-            sourceSize = photos.count
-            sourceModifiedMilliseconds = 0
-            self.analysisWidth = UInt32(WDTaggerBackend.imageSize)
-            vocabularyFingerprint = vocabulary.cacheFingerprint
-            return
-        }
         let source = videoURL.standardizedFileURL.resolvingSymlinksInPath()
         guard source.isFileURL,
               analysisWidth > 0, analysisWidth <= Int(UInt32.max),
@@ -35,6 +27,24 @@ struct TagResultCacheIdentity: Hashable, Sendable {
         vocabularyFingerprint = vocabulary.cacheFingerprint
     }
 
+    /// One Photos photo, keyed by the asset rather than by its position in an
+    /// album. The rendition the tagger scored is a pure function of the asset's
+    /// own revision and pixel geometry, so those three values are the whole key:
+    /// reopening the album in a different order, adding a photo to it, or taking
+    /// one away cannot invalidate another photo's tags, and the same photo tagged
+    /// in another album is reused instead of scored again.
+    init?(photosAssetKey: PhotosMedia.AssetCacheKey, vocabulary: TagVocabulary) {
+        let identifier = photosAssetKey.identifier
+        guard !identifier.isEmpty, identifier.utf8.count <= 1_048_576 else { return nil }
+        sourcePath = "photos-asset-v1/\(identifier)"
+        // Both dimensions are needed: 4000x3000 and 3000x4000 render different
+        // 448-pixel renditions even though they hold the same pixel count.
+        sourceSize = (UInt64(photosAssetKey.pixelWidth) << 32) | UInt64(photosAssetKey.pixelHeight)
+        sourceModifiedMilliseconds = photosAssetKey.modifiedMilliseconds
+        self.analysisWidth = UInt32(WDTaggerBackend.imageSize)
+        vocabularyFingerprint = vocabulary.cacheFingerprint
+    }
+
     fileprivate init(sourcePath: String, sourceSize: UInt64, sourceModifiedMilliseconds: UInt64,
                      analysisWidth: UInt32, vocabularyFingerprint: UInt64) {
         self.sourcePath = sourcePath
@@ -42,6 +52,70 @@ struct TagResultCacheIdentity: Hashable, Sendable {
         self.sourceModifiedMilliseconds = sourceModifiedMilliseconds
         self.analysisWidth = analysisWidth
         self.vocabularyFingerprint = vocabularyFingerprint
+    }
+}
+
+/// The cache keys for the frames of one loaded source.
+///
+/// A video file has exactly one identity, shared by every frame: its path, size
+/// and modification time describe the whole file. A Photos album has none worth
+/// trusting — PhotoKit does not guarantee the member order of a fetch without a
+/// sort descriptor, so an album-wide key changes whenever that order or the
+/// membership shifts and every cached tag is thrown away. Each photo therefore
+/// carries its own key and nothing is written for a frame that has no photo.
+struct TagResultCacheKeys: Hashable, Sendable {
+    let source: TagResultCacheIdentity?
+    private let bySampleIndex: [Int: TagResultCacheIdentity]
+
+    init(source: TagResultCacheIdentity?, bySampleIndex: [Int: TagResultCacheIdentity] = [:]) {
+        self.source = source
+        self.bySampleIndex = bySampleIndex
+    }
+
+    static let none = TagResultCacheKeys(source: nil)
+
+    var isEmpty: Bool { source == nil && bySampleIndex.isEmpty }
+
+    /// The identity for one frame, or nil when that frame is not cacheable.
+    /// Falling back to the source key is only correct when every frame shares it.
+    func key(for frame: AnalyzedFrame) -> TagResultCacheIdentity? {
+        if let identity = bySampleIndex[frame.id.sampleIndex] { return identity }
+        return bySampleIndex.isEmpty ? source : nil
+    }
+
+    /// The ordinal a frame's record occupies within its identity. A file shares
+    /// one identity across many frames, so each keeps its own ordinal. A photo
+    /// identity already names exactly one photo, so its single record always sits
+    /// at the same ordinal: storing the album position as well would make the
+    /// entry unreachable the next time the album is fetched in another order.
+    func recordIndex(for frame: AnalyzedFrame) -> Int {
+        bySampleIndex.isEmpty ? frame.id.sampleIndex : 0
+    }
+
+    var identities: [TagResultCacheIdentity] {
+        if !bySampleIndex.isEmpty { return Array(Set(bySampleIndex.values)) }
+        return source.map { [$0] } ?? []
+    }
+
+    /// Photos frames are keyed individually; every other source is a file.
+    static func make(videoURL: URL?, frames: [AnalyzedFrame], vocabulary: TagVocabulary?,
+                     analysisWidth: Int, analysisMode: AnalysisMode) -> TagResultCacheKeys {
+        guard let videoURL, let vocabulary else { return .none }
+        if PhotosMedia.shared.album(videoURL) != nil {
+            var bySampleIndex: [Int: TagResultCacheIdentity] = [:]
+            bySampleIndex.reserveCapacity(frames.count)
+            for frame in frames {
+                guard let assetKey = PhotosMedia.shared.photoAssetCacheKey(for: videoURL,
+                                                                          seconds: frame.timeSeconds),
+                      let identity = TagResultCacheIdentity(photosAssetKey: assetKey,
+                                                            vocabulary: vocabulary) else { continue }
+                bySampleIndex[frame.id.sampleIndex] = identity
+            }
+            return TagResultCacheKeys(source: nil, bySampleIndex: bySampleIndex)
+        }
+        return TagResultCacheKeys(source: TagResultCacheIdentity(videoURL: videoURL, vocabulary: vocabulary,
+                                                                 analysisWidth: analysisWidth,
+                                                                 analysisMode: analysisMode))
     }
 }
 
@@ -57,7 +131,11 @@ struct TagResultCacheStats: Sendable {
 }
 
 struct TagResultCacheRead: Sendable {
-    let probabilitiesBySampleIndex: [Int: Data]
+    /// Grouped by cache identity first and frame ordinal second. The identity
+    /// comes first because a Photos photo carries its own: the ordinal alone
+    /// would hand one photo's stored tags to whichever photo now sits at that
+    /// position in the album.
+    let probabilitiesByIdentity: [TagResultCacheIdentity: [Int: Data]]
     let stats: TagResultCacheStats
 }
 
@@ -95,9 +173,10 @@ final class TagResultMemory: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     let fileURL = TagResultDiskCache.defaultFileURL
-    private let disk = TagResultDiskCache.shared
+    private let disk: TagResultDiskCache
 
-    private init() {
+    init(disk: TagResultDiskCache = .shared) {
+        self.disk = disk
         Task { await refresh() }
     }
 
@@ -118,12 +197,14 @@ final class TagResultMemory: ObservableObject {
         }
     }
 
-    func cachedResults(for identity: TagResultCacheIdentity) async -> [Int: Data] {
+    func cachedResults(for keys: TagResultCacheKeys) async -> [TagResultCacheIdentity: [Int: Data]] {
         guard rememberTaggingResults else { return [:] }
+        let identities = keys.identities
+        guard !identities.isEmpty else { return [:] }
         do {
-            let result = try await disk.results(for: identity, retentionDays: retentionDays)
+            let result = try await disk.results(for: identities, retentionDays: retentionDays)
             apply(result.stats)
-            return result.probabilitiesBySampleIndex
+            return result.probabilitiesByIdentity
         } catch {
             errorMessage = error.localizedDescription
             return [:]
@@ -132,49 +213,52 @@ final class TagResultMemory: ObservableObject {
 
     /// Adds missing or changed runtime results. Names are regenerated from the
     /// vocabulary when read and never written into the cache.
-    func remember(identity: TagResultCacheIdentity, frames: [AnalyzedFrame]) async {
+    func remember(frames: [AnalyzedFrame], keys: TagResultCacheKeys) async {
         guard rememberTaggingResults else { return }
         // Decoding every full score vector and compressing its sparse form can
         // take seconds for a long video. Never do that on the UI executor.
         let records = await Task.detached(priority: .utility) {
-            Self.records(from: frames, identity: identity)
+            Self.records(from: frames, keys: keys)
         }.value
         guard rememberTaggingResults else { return }
         guard !records.isEmpty else { return }
-        do {
-            let stats = try await disk.remember(records, for: identity, retentionDays: retentionDays)
-            apply(stats)
-        } catch {
-            errorMessage = error.localizedDescription
+        for (identity, group) in records {
+            do {
+                apply(try await disk.remember(group, for: identity, retentionDays: retentionDays))
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     /// Shutdown hook: all normal writes are asynchronous, but wait for this final
     /// delta so process exit cannot discard a newly completed frame result.
-    func flushAtTermination(identity: TagResultCacheIdentity, frames: [AnalyzedFrame]) {
+    func flushAtTermination(frames: [AnalyzedFrame], keys: TagResultCacheKeys) {
         guard rememberTaggingResults else { return }
         let disk = self.disk
         let retentionDays = self.retentionDays
         let finished = DispatchSemaphore(value: 0)
         Task.detached(priority: .utility) {
-            let records = Self.records(from: frames, identity: identity)
-            _ = try? await disk.remember(records, for: identity, retentionDays: retentionDays)
+            for (identity, group) in Self.records(from: frames, keys: keys) {
+                _ = try? await disk.remember(group, for: identity, retentionDays: retentionDays)
+            }
             finished.signal()
         }
         finished.wait()
     }
 
-    func restore(_ frames: [AnalyzedFrame], identity: TagResultCacheIdentity,
+    func restore(_ frames: [AnalyzedFrame], keys: TagResultCacheKeys,
                  vocabulary: TagVocabulary, threshold: Float) async -> RestoredTagResults {
         guard rememberTaggingResults else { return RestoredTagResults(frames: frames, restoredCount: 0) }
-        let cached = await cachedResults(for: identity)
+        let cached = await cachedResults(for: keys)
         guard !cached.isEmpty else { return RestoredTagResults(frames: frames, restoredCount: 0) }
 
         return await Task.detached(priority: .utility) {
             var restoredCount = 0
             let restoredFrames = frames.map { original -> AnalyzedFrame in
-                guard original.tagRating == nil,
-                      let encoded = cached[original.id.sampleIndex],
+                guard let identity = keys.key(for: original),
+                      original.tagRating == nil,
+                      let encoded = cached[identity]?[keys.recordIndex(for: original)],
                       let probabilities = TagResultCacheProbabilityCodec.decode(encoded),
                       let runtimeProbabilities = TagProbabilityCodec.encode(probabilities),
                       let result = try? vocabulary.result(probabilities: probabilities, threshold: threshold) else {
@@ -199,19 +283,23 @@ final class TagResultMemory: ObservableObject {
         errorMessage = nil
     }
 
+    /// One group per cache identity, each sorted by frame ordinal so a run
+    /// appends in a stable order regardless of how the frames were produced.
     private nonisolated static func records(from frames: [AnalyzedFrame],
-                                identity: TagResultCacheIdentity) -> [TagResultMemoryRecord] {
-        var recordsBySampleIndex: [Int: Data] = [:]
+                                            keys: TagResultCacheKeys) -> [(TagResultCacheIdentity, [TagResultMemoryRecord])] {
+        var grouped: [TagResultCacheIdentity: [Int: Data]] = [:]
         for frame in frames {
-            if frame.tagVocabularyFingerprint == identity.vocabularyFingerprint,
-               let probabilities = frame.tagProbabilities,
-               let sparseScores = TagResultCacheProbabilityCodec.encode(probabilities) {
-                recordsBySampleIndex[frame.id.sampleIndex] = sparseScores
-            }
+            guard let identity = keys.key(for: frame),
+                  frame.tagVocabularyFingerprint == identity.vocabularyFingerprint,
+                  let probabilities = frame.tagProbabilities,
+                  let sparseScores = TagResultCacheProbabilityCodec.encode(probabilities) else { continue }
+            grouped[identity, default: [:]][keys.recordIndex(for: frame)] = sparseScores
         }
-        return recordsBySampleIndex.map {
-            TagResultMemoryRecord(sampleIndex: $0.key, compressedSparseScores: $0.value)
-        }.sorted { $0.sampleIndex < $1.sampleIndex }
+        return grouped.map { identity, entries in
+            (identity, entries.map { TagResultMemoryRecord(sampleIndex: $0.key,
+                                                           compressedSparseScores: $0.value) }
+                .sorted { $0.sampleIndex < $1.sampleIndex })
+        }.sorted { $0.0.sourcePath < $1.0.sourcePath }
     }
 }
 
@@ -363,8 +451,14 @@ actor TagResultDiskCache {
             .appendingPathComponent("tag-results.db")
     }
 
+    /// The production cache lives in Application Support; tests point this at a
+    /// temporary directory so a regression run never touches real results.
+    init(fileURL: URL = TagResultDiskCache.defaultFileURL) {
+        self.fileURL = fileURL
+    }
+
     private static let magic = Data([0x57, 0x54, 0x52, 0x31]) // WTR1
-    private let fileURL = TagResultDiskCache.defaultFileURL
+    private let fileURL: URL
     private var isLoaded = false
     private var mappedData: Data?
     private var latestRecordsByIdentity: [TagResultCacheIdentity: [Int: Location]] = [:]
@@ -399,19 +493,28 @@ actor TagResultDiskCache {
         return makeStats()
     }
 
-    func results(for identity: TagResultCacheIdentity, retentionDays: Int) throws -> TagResultCacheRead {
+    /// Reads every identity a source addresses at once. A Photos album
+    /// contributes one identity per photo, so this is many keys per lookup
+    /// rather than one key per lookup.
+    func results(for identities: [TagResultCacheIdentity], retentionDays: Int) throws -> TagResultCacheRead {
         try loadIndexIfNeeded()
         try pruneExpired(retentionDays: retentionDays)
         guard let data = try readMappedDataIfPresent() else {
-            return TagResultCacheRead(probabilitiesBySampleIndex: [:], stats: makeStats())
+            return TagResultCacheRead(probabilitiesByIdentity: [:], stats: makeStats())
         }
 
-        var results: [Int: Data] = [:]
-        for (sampleIndex, location) in latestRecordsByIdentity[identity] ?? [:] {
-            let range = location.payloadOffset..<(location.payloadOffset + location.payloadLength)
-            results[sampleIndex] = data[range]
+        var results: [TagResultCacheIdentity: [Int: Data]] = [:]
+        for identity in identities {
+            guard let locations = latestRecordsByIdentity[identity], !locations.isEmpty else { continue }
+            var payloads: [Int: Data] = [:]
+            payloads.reserveCapacity(locations.count)
+            for (sampleIndex, location) in locations {
+                let range = location.payloadOffset..<(location.payloadOffset + location.payloadLength)
+                payloads[sampleIndex] = data[range]
+            }
+            results[identity] = payloads
         }
-        return TagResultCacheRead(probabilitiesBySampleIndex: results, stats: makeStats())
+        return TagResultCacheRead(probabilitiesByIdentity: results, stats: makeStats())
     }
 
     func remember(_ records: [TagResultMemoryRecord], for identity: TagResultCacheIdentity,

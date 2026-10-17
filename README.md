@@ -692,9 +692,14 @@ Album thumbnails load lazily as you scroll. Analysis and tagging use PhotoKit
 renditions bounded by 512×512 pixels, rather than decoding full-resolution originals.
 Up to four small photo requests overlap with scoring. Ranked results appear and
 reorder in batches during analysis. Photos always uses this ranked view.
-PhotoKit renditions have a bounded memory cache. Persistent analysis and tagging
-results use ordered Photos asset identifiers and revision metadata, so unchanged
-albums reuse results while edits or membership changes invalidate them.
+PhotoKit renditions have a bounded memory cache. Persistent analysis results use
+ordered Photos asset identifiers and revision metadata, so unchanged albums reuse
+results while edits or membership changes invalidate them. Tagging results are
+keyed per photo by its asset identifier, revision, and pixel geometry rather than
+by its position in an album, because PhotoKit does not guarantee the order of an
+album fetch. Reopening an album therefore reuses every cached tag, reordering or
+adding to the album costs nothing, editing one photo re-scores only that photo,
+and a photo already tagged in another album is not tagged again.
 
 The thumbnail-shape icon switches between square crops and full aspect ratios.
 Ranking and tagging share PhotoKit's

@@ -52,6 +52,7 @@ registerMinimalVisualDistanceOrderTests()
 registerCuOptMetalTSPTests()
 registerFrameSelectionTests()
 registerProcessingReviewTests()
+registerTagResultMemoryTests()
 
 // Video.
 registerMediaImportTests()

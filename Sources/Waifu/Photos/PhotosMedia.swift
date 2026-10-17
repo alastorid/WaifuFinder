@@ -65,6 +65,16 @@ final class PhotosMedia: @unchecked Sendable {
         let offset: Double
         var duration: Double { asset.mediaType == .video ? max(asset.duration, 0.001) : 1 }
         var isStill: Bool { asset.mediaType == .image }
+        /// This photo's own cache identity, or nil for album video items, which
+        /// have no per-photo rendition to key.
+        var assetCacheKey: AssetCacheKey? {
+            guard isStill else { return nil }
+            let date = asset.modificationDate ?? asset.creationDate ?? .distantPast
+            return AssetCacheKey(identifier: asset.localIdentifier,
+                                 modifiedMilliseconds: UInt64(max(0, date.timeIntervalSince1970 * 1_000)),
+                                 pixelWidth: UInt32(clamping: asset.pixelWidth),
+                                 pixelHeight: UInt32(clamping: asset.pixelHeight))
+        }
     }
     struct Album: @unchecked Sendable {
         let title: String
@@ -76,6 +86,19 @@ final class PhotosMedia: @unchecked Sendable {
         let fingerprint: String
         var duration: Double { items.last.map { $0.offset + $0.duration } ?? 1 }
     }
+    /// One photo's own cache identity. Photos exposes no file to stat, so the
+    /// asset's identifier, revision and pixel geometry stand in for a path, a
+    /// size and a modification time. Album membership and album order are
+    /// deliberately absent: PhotoKit does not promise the member order of an
+    /// unsorted fetch, so anything derived from album position changes between
+    /// sessions even when no photo did.
+    struct AssetCacheKey: Sendable, Hashable {
+        let identifier: String
+        let modifiedMilliseconds: UInt64
+        let pixelWidth: UInt32
+        let pixelHeight: UInt32
+    }
+
     struct VideoAsset: @unchecked Sendable { let value: AVAsset }
     private let lock = NSLock()
     private var albums: [URL: Album] = [:]
@@ -85,6 +108,14 @@ final class PhotosMedia: @unchecked Sendable {
     static func isPhotos(_ url: URL) -> Bool { url.scheme == "waifu-photos" }
     func album(_ url: URL) -> Album? { lock.withLock { albums[url] } }
     func item(_ url: URL) -> Item? { lock.withLock { items[url] } }
+    /// PhotoKit's identifier fetch is synchronous and may wait on photolibraryd.
+    /// Keep that wait off SwiftUI's main actor when refreshing a favorite badge.
+    func favoriteStatus(_ url: URL) async -> Bool? {
+        guard let identifier = item(url)?.asset.localIdentifier else { return nil }
+        return await Task.detached(priority: .utility) {
+            PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil).firstObject?.isFavorite
+        }.value
+    }
     func photoItemURL(for sourceURL: URL, seconds: Double) -> URL? {
         guard Self.isPhotos(sourceURL) else { return nil }
         let (resolved, _) = resolve(sourceURL, seconds: seconds)
@@ -145,6 +176,16 @@ final class PhotosMedia: @unchecked Sendable {
         return max(0, low - 1)
     }
     func isStill(_ url: URL) -> Bool { item(url)?.isStill == true }
+
+    /// The album photo behind one frame, and its own cache identity. Returns nil
+    /// for a non-Photos source, for an album video item, and for a timestamp
+    /// that no longer falls inside a member — so a caller caching per photo
+    /// stores nothing rather than the wrong photo's results.
+    func photoAssetCacheKey(for sourceURL: URL, seconds: Double) -> AssetCacheKey? {
+        guard Self.isPhotos(sourceURL) else { return nil }
+        let (resolved, _) = resolve(sourceURL, seconds: seconds)
+        return item(resolved)?.assetCacheKey
+    }
 
     func setFavorite(_ url: URL, isFavorite: Bool) async throws {
         guard let item = item(url), item.isStill else {

@@ -539,7 +539,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingQueuedIDs = Set<FrameID>()
     private var pendingTaggedFrames: [FrameID: AnalyzedFrame] = [:]
     private var tagMemoryCancellationFlushPending = false
-    private var taggingCacheIdentity: TagResultCacheIdentity?
+    private var taggingCacheKeys = TagResultCacheKeys.none
     private var taggingVocabularyFingerprint: UInt64?
     private var lastTaggingCandidateKey: TaggingCandidateCacheKey?
     private var restoringTagMemory = false
@@ -687,11 +687,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         rebuildTagFacetIndex(force: true)
         recomputeDisplayedFrames()
 
-        let cacheIdentity = TagResultCacheIdentity(videoURL: video.url, vocabulary: vocabulary,
-                                                   analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode)
-        taggingCacheIdentity = cacheIdentity
+        let cacheKeys = TagResultCacheKeys.make(videoURL: video.url, frames: frames, vocabulary: vocabulary,
+                                                analysisWidth: settings.analysisWidth,
+                                                analysisMode: settings.analysisMode)
+        taggingCacheKeys = cacheKeys
         taggingVocabularyFingerprint = vocabulary.cacheFingerprint
-        if let cacheIdentity {
+        if !cacheKeys.isEmpty {
             restoringTagMemory = true
             let restoreToken = UUID()
             tagMemoryRestoreToken = restoreToken
@@ -699,7 +700,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let snapshot = frames
             let restored = await TagResultMemory.shared.restore(
                 snapshot,
-                identity: cacheIdentity,
+                keys: cacheKeys,
                 vocabulary: vocabulary,
                 threshold: settings.taggerThreshold
             )
@@ -711,7 +712,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 frames = restored.frames
                 rebuildTagFacetIndex(force: true)
                 recomputeDisplayedFrames()
-                await TagResultMemory.shared.remember(identity: cacheIdentity, frames: frames)
+                await TagResultMemory.shared.remember(frames: frames, keys: cacheKeys)
             }
         }
 
@@ -728,13 +729,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingGeneration = UUID()
         taggingProgress = TaggingProgress(isRunning: true, origin: panel,
                                           processed: 0, total: taggingQueue.count, elapsed: 0)
-        launchTaggingTask(config: config, token: taggingGeneration, cacheIdentity: cacheIdentity,
+        launchTaggingTask(config: config, token: taggingGeneration, cacheKeys: cacheKeys,
                           vocabularyFingerprint: vocabulary.cacheFingerprint)
     }
 
     /// Stops the active run. Completed batches stay tagged and can be reused.
     func cancelTagging(keepingCompletedResults: Bool = true) {
-        let identity = taggingCacheIdentity
+        let keys = taggingCacheKeys
         let snapshot = frames + Array(pendingTaggedFrames.values)
         taggingDemandActive = false
         if keepingCompletedResults { publishPendingTaggedFrames() }
@@ -750,36 +751,36 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             taggingProgress.isRunning = false
             if keepingCompletedResults { recomputeDisplayedFrames() }
         }
-        if let identity, let cancelledTask {
+        if let cancelledTask {
             tagMemoryCancellationFlushPending = true
             Task { [weak self] in
                 await cancelledTask.value
                 guard let self else { return }
-                let framesToRemember = self.taggingCacheIdentity == identity
+                let framesToRemember = self.taggingCacheKeys == keys
                     ? self.frames + Array(self.pendingTaggedFrames.values)
                     : snapshot
                 self.tagMemoryCancellationFlushPending = false
-                await TagResultMemory.shared.remember(identity: identity, frames: framesToRemember)
+                await TagResultMemory.shared.remember(frames: framesToRemember, keys: keys)
             }
         } else {
-            scheduleTagMemorySync(identity: identity, frames: snapshot)
+            scheduleTagMemorySync(keys: keys, frames: snapshot)
         }
     }
 
     private func launchTaggingTask(config: WDTaggerConfiguration, token: UUID,
-                                   cacheIdentity: TagResultCacheIdentity?,
+                                   cacheKeys: TagResultCacheKeys,
                                    vocabularyFingerprint: UInt64?) {
         let threshold = settings.taggerThreshold
         taggingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             await self.runTaggingPipeline(config: config, threshold: threshold, token: token,
-                                          cacheIdentity: cacheIdentity,
+                                          cacheKeys: cacheKeys,
                                           vocabularyFingerprint: vocabularyFingerprint)
         }
     }
 
     private nonisolated func runTaggingPipeline(config: WDTaggerConfiguration, threshold: Float,
-                                                token: UUID, cacheIdentity: TagResultCacheIdentity?,
+                                                token: UUID, cacheKeys: TagResultCacheKeys,
                                                 vocabularyFingerprint: UInt64?) async {
         let started = Date()
         var acquired = false
@@ -817,7 +818,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 }
                 let elapsed = Date().timeIntervalSince(started)
                 await self.acceptTaggedFrames(updates, token: token, elapsed: elapsed,
-                                              cacheIdentity: cacheIdentity)
+                                              cacheKeys: cacheKeys)
             })
         } catch {
             let elapsed = Date().timeIntervalSince(started)
@@ -863,14 +864,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingQueueIndex = 0
         taggingQueuedIDs.removeAll()
         recomputeDisplayedFrames()
-        scheduleTagMemorySync(identity: taggingCacheIdentity, frames: frames)
+        scheduleTagMemorySync(keys: taggingCacheKeys, frames: frames)
         return false
     }
 
     private func acceptTaggedFrames(_ updates: [AnalyzedFrame], token: UUID, elapsed: TimeInterval,
-                                    cacheIdentity: TagResultCacheIdentity?) async {
+                                    cacheKeys: TagResultCacheKeys) async {
         guard token == taggingGeneration, taggingProgress.isRunning else {
-            if let cacheIdentity, taggingCacheIdentity == cacheIdentity {
+            if taggingCacheKeys == cacheKeys {
                 for frame in updates { pendingTaggedFrames[frame.id] = frame }
                 publishPendingTaggedFrames()
                 recomputeDisplayedFrames()
@@ -910,7 +911,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingQueuedIDs.removeAll()
         pendingTaggedFrames.removeAll()
         recomputeDisplayedFrames()
-        scheduleTagMemorySync(identity: taggingCacheIdentity, frames: frames)
+        scheduleTagMemorySync(keys: taggingCacheKeys, frames: frames)
         if !(error is CancellationError) { errorMessage = error.localizedDescription }
     }
 
@@ -1033,10 +1034,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                               processed: 0, total: newFrames.count, elapsed: 0)
             taggingGeneration = UUID()
             launchTaggingTask(config: config, token: taggingGeneration,
-                              cacheIdentity: taggingCacheIdentity,
+                              cacheKeys: taggingCacheKeys,
                               vocabularyFingerprint: taggingVocabularyFingerprint)
         }
-        scheduleTagMemorySync(identity: taggingCacheIdentity, frames: frames)
+        scheduleTagMemorySync(keys: taggingCacheKeys, frames: frames)
     }
 
     /// IDs in the same order the user sees, with each group contiguous and
@@ -1320,33 +1321,31 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func completeAnalysis(frames: [AnalyzedFrame], groups: [FrameGroup],
                                   progress: AnalysisProgress, token: UUID) async {
         guard analysisGeneration == token else { return }
-        let cacheIdentity = video.flatMap { source in
-            tagVocabulary.flatMap {
-                TagResultCacheIdentity(videoURL: source.url, vocabulary: $0,
-                                       analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode)
-            }
-        }
+        let cacheKeys = TagResultCacheKeys.make(videoURL: video?.url, frames: frames,
+                                                vocabulary: tagVocabulary,
+                                                analysisWidth: settings.analysisWidth,
+                                                analysisMode: settings.analysisMode)
         var completedFrames = frames
-        if let cacheIdentity, let vocabulary = tagVocabulary,
+        if !cacheKeys.isEmpty, let vocabulary = tagVocabulary,
            TagResultMemory.shared.rememberTaggingResults {
             let restored = await TagResultMemory.shared.restore(
                 frames,
-                identity: cacheIdentity,
+                keys: cacheKeys,
                 vocabulary: vocabulary,
                 threshold: settings.taggerThreshold
             )
             guard analysisGeneration == token else { return }
             completedFrames = restored.frames
         }
-        taggingCacheIdentity = cacheIdentity
+        taggingCacheKeys = cacheKeys
         taggingVocabularyFingerprint = tagVocabulary?.cacheFingerprint
         self.groups = groups
         updateAnalyzedFrames(completedFrames)
         self.progress = progress
         analysisTask = nil
         isRegrouping = false
-        if let cacheIdentity {
-            await TagResultMemory.shared.remember(identity: cacheIdentity, frames: completedFrames)
+        if !cacheKeys.isEmpty {
+            await TagResultMemory.shared.remember(frames: completedFrames, keys: cacheKeys)
         }
     }
     private func failAnalysis(progress: AnalysisProgress, error: Error, token: UUID) {
@@ -1366,7 +1365,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingDemandActive = false
         tagMemoryRestoreToken = UUID()
         restoringTagMemory = false
-        taggingCacheIdentity = nil
+        taggingCacheKeys = .none
         analysisCacheIdentity = nil
         taggingVocabularyFingerprint = nil
         taggingProgress = TaggingProgress()
@@ -1404,11 +1403,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func restoreRememberedTagResults() {
         guard !restoringTagMemory, !taggingProgress.isRunning,
               progress.phase == .complete, !frames.isEmpty,
-              let video, let vocabulary = tagVocabulary,
-              let identity = TagResultCacheIdentity(videoURL: video.url, vocabulary: vocabulary,
-                                                    analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode) else { return }
+              let video, let vocabulary = tagVocabulary else { return }
+        let keys = TagResultCacheKeys.make(videoURL: video.url, frames: frames, vocabulary: vocabulary,
+                                           analysisWidth: settings.analysisWidth,
+                                           analysisMode: settings.analysisMode)
+        guard !keys.isEmpty else { return }
 
-        taggingCacheIdentity = identity
+        taggingCacheKeys = keys
         taggingVocabularyFingerprint = vocabulary.cacheFingerprint
         let requestToken = UUID()
         tagMemoryRestoreToken = requestToken
@@ -1422,7 +1423,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             guard let self else { return }
             let restored = await TagResultMemory.shared.restore(
                 snapshot,
-                identity: identity,
+                keys: keys,
                 vocabulary: vocabulary,
                 threshold: threshold
             )
@@ -1435,7 +1436,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 self.rebuildTagFacetIndex(force: true)
                 self.recomputeDisplayedFrames()
             }
-            await TagResultMemory.shared.remember(identity: identity, frames: restored.frames)
+            await TagResultMemory.shared.remember(frames: restored.frames, keys: keys)
         }
     }
 
@@ -1457,24 +1458,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
-    private func scheduleTagMemorySync(identity: TagResultCacheIdentity?, frames: [AnalyzedFrame]) {
-        guard let identity, !taggingProgress.isRunning, !tagMemoryCancellationFlushPending else { return }
+    private func scheduleTagMemorySync(keys: TagResultCacheKeys, frames: [AnalyzedFrame]) {
+        guard !keys.isEmpty, !taggingProgress.isRunning, !tagMemoryCancellationFlushPending else { return }
         Task {
-            await TagResultMemory.shared.remember(identity: identity, frames: frames)
+            await TagResultMemory.shared.remember(frames: frames, keys: keys)
         }
     }
 
     private func persistTagResultsAtExit() {
-        let identity = taggingCacheIdentity ?? video.flatMap { source in
-            tagVocabulary.flatMap {
-                TagResultCacheIdentity(videoURL: source.url, vocabulary: $0,
-                                       analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode)
-            }
-        }
-        guard let identity else { return }
+        let keys: TagResultCacheKeys = taggingCacheKeys.isEmpty
+            ? TagResultCacheKeys.make(videoURL: video?.url, frames: frames, vocabulary: tagVocabulary,
+                                      analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode)
+            : taggingCacheKeys
+        guard !keys.isEmpty else { return }
         TagResultMemory.shared.flushAtTermination(
-            identity: identity,
-            frames: frames + Array(pendingTaggedFrames.values)
+            frames: frames + Array(pendingTaggedFrames.values),
+            keys: keys
         )
     }
 
