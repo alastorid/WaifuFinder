@@ -15,6 +15,9 @@ struct RootView: View {
     @StateObject private var session = WaifuSession()
     // Only the player panel observes its clock; playback must not refresh the grid.
     @State private var preview = PreviewController()
+    // One per window, shared by the Sort and Filter fraction and the cloud in the
+    // title bar. See ChiaroscuroLink.
+    @StateObject private var link = ChiaroscuroLink()
     @State private var showPhotosWorkspace = false
     @AppStorage("rightPanelExpanded") private var rightPanelExpanded = true
     @AppStorage("photosSquareThumbnails") private var squarePhotoThumbnails = false
@@ -27,7 +30,7 @@ struct RootView: View {
     var body: some View {
         ZStack {
             if showPhotosWorkspace {
-                PhotosWorkspaceView(session: session, trailingControls: { workspaceControls }) {
+                PhotosWorkspaceView(session: session, link: link, trailingControls: { workspaceControls }) {
                     mainContent
                 }
                 .opacity(session.previewFrame == nil ? 1 : 0)
@@ -63,6 +66,12 @@ struct RootView: View {
             if let uncover = session.uncover {
                 UncoverView(session: uncover, close: { session.closeUncover() })
             }
+            // The east egg's light. Mounted for the life of the window rather than
+            // while a beam exists: it costs one empty view until something is drawn,
+            // and it keeps a light that moves sixty times a second out of the
+            // hierarchy that draws the grid. See ChiaroscuroLink.
+            ChiaroscuroWindowLayer(link: link)
+                .frame(width: 0, height: 0)
         }
         .onOpenURL { url in
             if let source = FirefoxIntegration.incomingURL(url) { showPhotosWorkspace = false; session.loadVideo(at: source) }
@@ -170,7 +179,7 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     VideoPreviewPanel(session: session, preview: preview)
                     Divider()
-                    FrameOrderPanel(session: session)
+                    FrameOrderPanel(session: session, link: link)
                 }
                 .frame(width: 340)
                 .frame(maxHeight: .infinity, alignment: .top)

@@ -7,14 +7,18 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
     private let trailingControls: () -> TrailingControls
+    /// Shared with the Sort and Filter fraction; see `ChiaroscuroLink`.
+    private let link: ChiaroscuroLink
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
     @AppStorage("photosSquareThumbnails") private var squareThumbnails = false
     @AppStorage("photosSidebarExpanded") private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: WaifuSession, @ViewBuilder trailingControls: @escaping () -> TrailingControls,
+    init(session: WaifuSession, link: ChiaroscuroLink,
+         @ViewBuilder trailingControls: @escaping () -> TrailingControls,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
         self.session = session
+        self.link = link
         self.rankedContent = rankedContent
         self.trailingControls = trailingControls
     }
@@ -131,6 +135,9 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         }
         .labelStyle(.iconOnly)
         .frame(width: 30)
+        // The light's destination, but only while the cloud is switched off: that
+        // is the icon the fraction in the Sort and Filter panel is linked to.
+        .chiaroscuroDestination(link, isEligible: !downloadFromICloud)
         .accessibilityValue(downloadFromICloud ? "On" : "Off")
         .help(downloadFromICloud ? "Disable iCloud downloads" : "Enable iCloud downloads; currently using only media on this Mac")
 

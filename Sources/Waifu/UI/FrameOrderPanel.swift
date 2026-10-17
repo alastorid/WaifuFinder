@@ -56,6 +56,8 @@ private struct RegroupProgressRing: View {
 /// `NSHostingView.layout()`.
 struct FrameOrderPanel: View {
     @ObservedObject var session: WaifuSession
+    /// Shared with the cloud in the title bar; see `ChiaroscuroLink`.
+    var link: ChiaroscuroLink
     @State private var orderExpanded = true
     @State private var groupingExpanded = true
     @State private var tagsExpanded = true
@@ -83,13 +85,30 @@ struct FrameOrderPanel: View {
 
     private var orderPanel: some View {
         collapsiblePanel(title: "Sort and Filter", isExpanded: $orderExpanded) {
-            Text("\(formattedCount(session.displayedFrames.count))/\(formattedCount(session.frames.count)) shown")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            HStack(spacing: 4) {
+                shownFraction
+                Text("shown")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
         } content: {
             orderSection
         }
+    }
+
+    /// The fraction on its own, because it is the fraction — not the word beside it
+    /// — that starts the east egg: three seconds of stillness on a fraction that is
+    /// hiding frames sends a wave of light to the switched-off cloud in the title
+    /// bar. The padding is only there to give a caption-sized target a resting
+    /// place; it changes nothing about how the panel reads.
+    private var shownFraction: some View {
+        let shown = session.displayedFrames.count
+        let total = session.frames.count
+        return Text("\(formattedCount(shown))/\(formattedCount(total))")
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+            .chiaroscuroSource(link, isLinkable: Chiaroscuro.canLink(shown: shown, total: total))
     }
 
     private var orderSection: some View {
