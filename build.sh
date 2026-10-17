@@ -213,7 +213,6 @@ else
     "${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}" \
     "${SOURCES[@]}" \
     -framework Network \
-    -framework Security \
     -framework AppKit \
     -framework AVFoundation \
     -framework AVKit \

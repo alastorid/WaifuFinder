@@ -240,6 +240,8 @@ struct RemoteSettingsView: View {
             HStack(spacing: 8) {
                 SecureField("Access key", text: $client.manualKey)
                     .textFieldStyle(.roundedBorder)
+                    .textContentType(nil)
+                    .autocorrectionDisabled()
                     .frame(maxWidth: 420)
                 Text("Paste the server’s key, then Connect").font(.caption).foregroundStyle(.secondary)
             }

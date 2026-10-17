@@ -89,7 +89,7 @@ final class RemoteServer: ObservableObject {
         if keyStore.loadKey() == nil { try? keyStore.saveKey(key) }
         currentKey = key
         keyDisplay = RemoteCrypto.displayString(for: key)
-        let url = RemoteDefaultKeyStore.fallbackURL
+        let url = RemoteDefaultKeyStore.serverKeyURL
         keyGeneratedAt = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.creationDate] as? Date
     }
 

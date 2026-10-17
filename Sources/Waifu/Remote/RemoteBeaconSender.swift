@@ -1,12 +1,12 @@
 import Foundation
 import Network
+import Darwin
 
 /// Broadcasts a beacon every second while the service is running.
 ///
-/// Multicast is primary because it does not depend on the subnet mask; the
-/// limited broadcast goes out alongside it for networks that filter multicast.
-/// A client only needs one of the two, so one redundant datagram per second is a
-/// fair price for working on both kinds of network.
+/// Multicast is primary because it does not depend on the subnet mask; a
+/// directed IPv4 broadcast also goes out on each active broadcast interface for
+/// networks that filter multicast.
 final class RemoteBeaconSender: @unchecked Sendable {
     private let port: UInt16
     private let multicastGroup: String
@@ -58,19 +58,19 @@ final class RemoteBeaconSender: @unchecked Sendable {
     }
 }
 
-/// The sending half: one `NWConnectionGroup` for multicast and one datagram
-/// connection for the limited broadcast.
+/// The sending half: one `NWConnectionGroup` for multicast and a BSD UDP socket
+/// for subnet-directed broadcast.
 private final class RemoteBeaconConnection: @unchecked Sendable {
+    private let port: UInt16
     private let multicast: NWConnectionGroup?
-    private let broadcast: NWConnection?
+    private let broadcast = RemoteBeaconBroadcaster()
     private let queue = DispatchQueue(label: "waifu.remote.beacon.send", qos: .utility)
 
     init(multicastGroup: String, port: UInt16) {
+        self.port = port
         let descriptor = try? NWMulticastGroup(for: [RemoteAddress.Endpoint.multicast(group: multicastGroup, port: port)])
         multicast = descriptor.flatMap { NWConnectionGroup(with: $0, using: .udp) }
-        broadcast = NWConnection(to: RemoteAddress.Endpoint.broadcast(port: port), using: .udp)
         multicast?.start(queue: queue)
-        broadcast?.start(queue: queue)
     }
 
     func send(_ beacon: RemoteBeacon) {
@@ -80,12 +80,72 @@ private final class RemoteBeaconConnection: @unchecked Sendable {
         multicast?.send(content: payload, completion: { _ in })
         // Best effort by design: a network that refuses broadcast still gets
         // multicast, and a failure here is not worth surfacing to anyone.
-        broadcast?.send(content: payload, contentContext: .defaultMessage, isComplete: true,
-                        completion: .contentProcessed { _ in })
+        broadcast.send(payload, port: port)
     }
 
     func cancel() {
         multicast?.cancel()
-        broadcast?.cancel()
+        broadcast.cancel()
     }
+}
+
+/// UDP broadcast is not supported by Network.framework. Send the beacon to each
+/// active IPv4 interface's broadcast address with SO_BROADCAST enabled.
+/// The recipient reads the packet source address and combines it with tcpPort.
+private final class RemoteBeaconBroadcaster: @unchecked Sendable {
+    private let lock = NSLock()
+    private var descriptor: Int32 = -1
+
+    init() {
+        descriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard descriptor >= 0 else { return }
+        var enabled: Int32 = 1
+        guard setsockopt(descriptor, SOL_SOCKET, SO_BROADCAST, &enabled,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+            Darwin.close(descriptor)
+            descriptor = -1
+            return
+        }
+    }
+
+    func send(_ payload: Data, port: UInt16) {
+        lock.withLock {
+            guard descriptor >= 0 else { return }
+            var interfaces: UnsafeMutablePointer<ifaddrs>?
+            guard getifaddrs(&interfaces) == 0, let first = interfaces else { return }
+            defer { freeifaddrs(first) }
+
+            var cursor: UnsafeMutablePointer<ifaddrs>? = first
+            while let pointer = cursor {
+                let entry = pointer.pointee
+                cursor = entry.ifa_next
+                guard Int32(entry.ifa_flags) & IFF_UP != 0,
+                      Int32(entry.ifa_flags) & IFF_LOOPBACK == 0,
+                      Int32(entry.ifa_flags) & IFF_BROADCAST != 0,
+                      let local = entry.ifa_addr, local.pointee.sa_family == UInt8(AF_INET),
+                      let broadcast = entry.ifa_dstaddr else { continue }
+
+                var destination = broadcast.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                destination.sin_port = in_port_t(port).bigEndian
+                _ = withUnsafePointer(to: &destination) { address in
+                    address.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                        payload.withUnsafeBytes { bytes in
+                            sendto(descriptor, bytes.baseAddress, payload.count, 0,
+                                   socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func cancel() {
+        lock.withLock {
+            guard descriptor >= 0 else { return }
+            Darwin.close(descriptor)
+            descriptor = -1
+        }
+    }
+
+    deinit { cancel() }
 }

@@ -15,12 +15,6 @@ enum RemoteAddress {
         func networkEndpoint() -> NWEndpoint {
             .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port) ?? .any)
         }
-        /// The port as the beacon port, so a beacon sender can reuse the
-        /// endpoint construction rather than repeating it.
-        static func broadcast(port: UInt16) -> NWEndpoint {
-            .hostPort(host: NWEndpoint.Host("255.255.255.255"),
-                      port: NWEndpoint.Port(rawValue: port) ?? .any)
-        }
         static func multicast(group: String, port: UInt16) -> NWEndpoint {
             .hostPort(host: NWEndpoint.Host(group),
                       port: NWEndpoint.Port(rawValue: port) ?? .any)

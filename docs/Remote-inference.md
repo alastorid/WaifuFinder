@@ -29,9 +29,11 @@ with a tooltip naming the server. Vision always runs locally.
 
 The listener uses TCP port **47410** by default. Manual addresses accept a hostname,
 IPv4 address or bracketed IPv6 address with an optional port. Discovery uses a small
-UDP beacon every second on **239.255.42.99:42888**, plus best-effort broadcast to
-**255.255.255.255:42888**. Entries expire after three missed beats. The source IP of
-the datagram is the address to dial; its advertised name is display data only.
+UDP beacon every second on **239.255.42.99:42888**, plus best-effort IPv4 subnet
+broadcast on each active network interface. Broadcast uses a UDP socket because
+Network.framework does not support UDP broadcast. Entries expire after three missed
+beats. The source IP of the datagram is the address to dial; its advertised name is
+display data only.
 
 A beacon contains version, actual TCP port, process instance, capability flags, name,
 app version, and an eight-byte `keyID`. It contains no access key. Beacon claims are
@@ -43,12 +45,13 @@ hex characters, then a four-character checksum. The checksum catches typing erro
 `keyID` is the first eight bytes of SHA256(`"WF1/keyid"` + key); the check group is the
 first two bytes of SHA256(`"WF1/check"` + key).
 
-Server and client keys use separate Keychain accounts. Client accounts are keyed by
-normalized server address. A private `0600` file is used if Keychain storage fails.
-Tests inject file stores and never need login Keychain access. Rotation replaces the
-server key and disconnects the current session. Kick disconnects the client without
-changing the key. Refused keys and explicit server disconnections require user action;
-transient network errors use reconnect backoff from one to thirty seconds.
+Server and client keys are stored in separate files under the app's Application
+Support directory with `0600` permissions. Client files are keyed by normalized server
+address. The app does not access Keychain; any existing Keychain entries are left
+untouched and are not imported. Rotation replaces the server key and disconnects the
+current session. Kick disconnects the client without changing the key. Refused keys and
+explicit server disconnections require user action; transient network errors use
+reconnect backoff from one to thirty seconds.
 
 ## Authenticated transport
 

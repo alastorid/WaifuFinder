@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import Darwin
 
 /// The once-per-second advertisement a serving WaifuFinder broadcasts.
 ///
@@ -152,60 +153,149 @@ actor RemoteBeaconCache {
 
 /// Receives beacons on the beacon port and reports them with their source host.
 ///
-/// One `NWConnectionGroup` joined to the multicast group, which also sees
-/// unicast probes and broadcast datagrams on the same port, so one listener
-/// covers all three discovery paths.
+/// A UDP socket receives subnet broadcasts on the beacon port and joins the
+/// multicast group on every active IPv4 interface.
 final class RemoteBeaconReceiver: @unchecked Sendable {
-    private let group: NWMulticastGroup?
-    private var connection: NWConnectionGroup?
+    private let port: UInt16
+    private let multicastGroup: String
     private let onBeacon: @Sendable (RemoteBeacon, String) -> Void
     private let lock = NSLock()
     private var running = false
+    private var descriptor: Int32 = -1
+    private var readSource: DispatchSourceRead?
+    private let queue = DispatchQueue(label: "waifu.remote.beacon.receive", qos: .utility)
 
     init(port: UInt16 = RemoteLimits.beaconPort,
          multicastGroup: String = RemoteLimits.beaconGroup,
          onBeacon: @escaping @Sendable (RemoteBeacon, String) -> Void) {
-        let endpoint = RemoteAddress.Endpoint.multicast(group: multicastGroup, port: port)
-        group = try? NWMulticastGroup(for: [endpoint])
+        self.port = port
+        self.multicastGroup = multicastGroup
         self.onBeacon = onBeacon
     }
 
     func start() {
-        lock.withLock {
-            guard !running, let group else { return }
+        let socketFD = lock.withLock { () -> Int32 in
+            guard !running else { return -1 }
+            let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+            guard fd >= 0 else { return -1 }
+
+            var reuse: Int32 = 1
+            guard setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse,
+                             socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+                Darwin.close(fd)
+                return -1
+            }
+            let flags = fcntl(fd, F_GETFL, 0)
+            guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else {
+                Darwin.close(fd)
+                return -1
+            }
+
+            var local = sockaddr_in()
+            local.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            local.sin_family = sa_family_t(AF_INET)
+            local.sin_port = in_port_t(port).bigEndian
+            local.sin_addr = in_addr(s_addr: in_addr_t(0))
+            let bindStatus = withUnsafePointer(to: &local) { address in
+                address.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            guard bindStatus == 0 else {
+                Darwin.close(fd)
+                return -1
+            }
+
+            joinMulticast(on: fd)
+            descriptor = fd
             running = true
-            let connection = NWConnectionGroup(with: group, using: .udp)
-            self.connection = connection
-            connection.stateUpdateHandler = { [weak self] state in
-                guard let self else { return }
-                if case .failed = state { self.lock.withLock { self.running = false } }
-                if case .cancelled = state { self.lock.withLock { self.running = false } }
-            }
-            connection.setReceiveHandler { [weak self] message, data, _ in
-                guard let self, let data, let beacon = RemoteBeacon.decode([UInt8](data)) else { return }
-                guard let source = Self.sourceHost(of: message) else { return }
-                self.onBeacon(beacon, source)
-            }
-            connection.start(queue: .global(qos: .utility))
+            return fd
         }
+
+        guard socketFD >= 0 else { return }
+        let source = DispatchSource.makeReadSource(fileDescriptor: socketFD, queue: queue)
+        source.setEventHandler { [weak self] in self?.receiveAvailable(from: socketFD) }
+        source.setCancelHandler { Darwin.close(socketFD) }
+        lock.withLock { readSource = source }
+        source.resume()
     }
 
     func stop() {
-        let pending = lock.withLock { () -> NWConnectionGroup? in
+        let pending = lock.withLock { () -> DispatchSourceRead? in
             running = false
-            defer { connection = nil }
-            return connection
+            descriptor = -1
+            defer { readSource = nil }
+            return readSource
         }
         pending?.cancel()
     }
 
-    /// The sender's address, which is what the client should dial.
-    ///
-    /// Taken from the datagram's own metadata rather than the payload's name: a
-    /// `.local` name can resolve differently on two machines, and a beacon is
-    /// unauthenticated, so its self-description is not worth trusting.
-    private static func sourceHost(of message: NWConnectionGroup.Message) -> String? {
-        guard case .hostPort(let host, _) = message.remoteEndpoint else { return nil }
-        return host.debugDescription
+    private func joinMulticast(on fd: Int32) {
+        var groupAddress = in_addr()
+        guard multicastGroup.withCString({ inet_pton(AF_INET, $0, &groupAddress) }) == 1 else { return }
+
+        // Join on every active IPv4 interface. This covers Wi-Fi and Ethernet
+        // when both are up, and leaves broadcast reception on the same socket.
+        var interfaces: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&interfaces) == 0, let first = interfaces else { return }
+        defer { freeifaddrs(first) }
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        var joinedAny = false
+        while let pointer = cursor {
+            let entry = pointer.pointee
+            cursor = entry.ifa_next
+            guard Int32(entry.ifa_flags) & IFF_UP != 0,
+                  Int32(entry.ifa_flags) & IFF_LOOPBACK == 0,
+                  let address = entry.ifa_addr, address.pointee.sa_family == UInt8(AF_INET) else { continue }
+            var membership = ip_mreq()
+            membership.imr_multiaddr = groupAddress
+            membership.imr_interface = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+            if setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership,
+                          socklen_t(MemoryLayout<ip_mreq>.size)) == 0 {
+                joinedAny = true
+            }
+        }
+        if !joinedAny {
+            var membership = ip_mreq()
+            membership.imr_multiaddr = groupAddress
+            membership.imr_interface = in_addr(s_addr: in_addr_t(0))
+            _ = setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership,
+                           socklen_t(MemoryLayout<ip_mreq>.size))
+        }
+    }
+
+    private func receiveAvailable(from fd: Int32) {
+        while lock.withLock({ running && descriptor == fd }) {
+            var bytes = [UInt8](repeating: 0, count: 512)
+            var sender = sockaddr_in()
+            var senderLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+            let count = bytes.withUnsafeMutableBytes { buffer in
+                withUnsafeMutablePointer(to: &sender) { address in
+                    address.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                        recvfrom(fd, buffer.baseAddress, buffer.count, 0, socketAddress, &senderLength)
+                    }
+                }
+            }
+            guard count >= 0 else {
+                if errno == EAGAIN || errno == EWOULDBLOCK { return }
+                return
+            }
+            let data = Array(bytes.prefix(count))
+            guard let beacon = RemoteBeacon.decode(data), let source = Self.numericHost(sender) else { continue }
+            onBeacon(beacon, source)
+        }
+    }
+
+    private static func numericHost(_ address: sockaddr_in) -> String? {
+        var address = address
+        var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        let result = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getnameinfo($0, socklen_t(MemoryLayout<sockaddr_in>.size), &host,
+                            socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+            }
+        }
+        guard result == 0 else { return nil }
+        return String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 }
