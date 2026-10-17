@@ -11,6 +11,10 @@ struct PhotosFilmstripFrame: Identifiable, @unchecked Sendable {
 /// An animated PhotoKit image kept in memory. Frames are decoded on demand and
 /// thumbnails are bounded so a long GIF cannot pin every full-size frame.
 final class PhotosAnimatedImage: @unchecked Sendable {
+    private final class SharedImageContext: @unchecked Sendable {
+        let value = CIContext(options: [.cacheIntermediates: false])
+    }
+
     private final class CachedFrame: NSObject {
         let image: CGImage
         init(_ image: CGImage) { self.image = image }
@@ -21,7 +25,9 @@ final class PhotosAnimatedImage: @unchecked Sendable {
     private let source: CGImageSource
     private let orientation: CGImagePropertyOrientation
     private let lock = NSLock()
-    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
+    // Core Image contexts support concurrent use, but older SDKs do not declare
+    // CIContext as Sendable. Keep that framework guarantee at this boundary.
+    private static let imageContext = SharedImageContext()
     private let cache: NSCache<NSString, CachedFrame> = {
         let cache = NSCache<NSString, CachedFrame>()
         cache.totalCostLimit = 96 * 1024 * 1024
@@ -79,7 +85,7 @@ final class PhotosAnimatedImage: @unchecked Sendable {
         let image: CGImage
         if orientation != .up {
             let oriented = CIImage(cgImage: decoded).oriented(orientation)
-            guard let result = Self.imageContext.createCGImage(oriented, from: oriented.extent) else { return nil }
+            guard let result = Self.imageContext.value.createCGImage(oriented, from: oriented.extent) else { return nil }
             image = result
         } else {
             image = decoded
