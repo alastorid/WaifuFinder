@@ -72,6 +72,8 @@ echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $T
     "${SOURCES[@]}" \
     "${TESTS[@]}" \
     -o "$BUILD/waifu-tests" \
+    -framework Network \
+    -framework Security \
     -framework AppKit \
     -framework AVFoundation \
     -framework AVKit \

@@ -25,6 +25,15 @@ because it is an implementation detail (`FrameExporter.uniqueDestinationURL`, `R
 is internal and documented as a test seam; nothing here re-implements the logic it is
 testing.
 
+## Remote inference
+
+Run `./run-tests.sh --only remote` from the repository root. The suite uses real
+loopback TCP connections with generated vocabulary, image fixtures and injected model
+backends. It needs no downloaded weights and does not read or write the login Keychain.
+Network discovery is tested as encoded datagrams and an expiring cache; the loopback
+listener does not need to advertise on the LAN. Hardware model execution and interactive
+Settings layout are separate checks.
+
 ## Interactive UI tests
 
 Save interactive checks as executable scripts and launch each invocation through
@@ -80,6 +89,7 @@ samples for transport-stream and HLS tests. No external media executable is need
 | `FrameGrouperTests.swift` | single-linkage clustering, the time window, the threshold's effect, oversized-group splitting, ordering |
 | `FrameRankerTests.swift` | `RankMap` ties, and how the face weight moves the ranking |
 | `FrameExporterTests.swift` | export naming, the overwrite suffix, and a real PNG/JPEG round trip |
+| `RemoteProtocolTests.swift` | bounded binary framing, encryption and replay rejection, keys, discovery expiry, vocabulary integrity, real TCP handshake/tagging/reconstruction with injected models, cancellation/model-reference cleanup, busy rejection, kick and reconnect |
 | `UncoverTests.swift` | snapped ROI/letterboxing/rotation, large selections at every scale, degradation, known-value compositing, consecutive PTS, variable-timing audio/video export, cancellation, algorithm cache/preparation reuse, unsupported-factor preservation, failure retention, and opt-in real native inference |
 
 ## WD Tagger

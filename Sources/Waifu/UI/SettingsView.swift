@@ -7,6 +7,7 @@ struct WaifuSettingsView: View {
         TabView(selection: $selection) {
             GeneralSettingsView().tag("general").tabItem { Label("General", systemImage: "gearshape") }
             ModelSettingsView().tag("models").tabItem { Label("Models", systemImage: "internaldrive") }
+            RemoteSettingsView().tag("remote").tabItem { Label("Remote", systemImage: "arrow.left.arrow.right") }
             FirefoxSettingsView().tag("firefox").tabItem { Label("Firefox", systemImage: "network") }
         }
         .padding(16)

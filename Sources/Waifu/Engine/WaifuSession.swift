@@ -272,9 +272,31 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let info = VideoInfo(url: source, durationSeconds: item.duration, width: item.asset.pixelWidth,
                                  height: item.asset.pixelHeight, frameRate: item.isStill ? 1 : 30,
                                  estimatedFrameCount: item.isStill ? 1 : Int(item.duration * 30))
-            uncover = UncoverSession(video: info, seconds: time)
+            uncover = UncoverSession(video: info, seconds: time, backendFactory: remoteBackendFactory)
         } else {
-            uncover = UncoverSession(video: video, seconds: seconds)
+            uncover = UncoverSession(video: video, seconds: seconds, backendFactory: remoteBackendFactory)
+        }
+    }
+
+    /// Returns a remote backend for algorithms the connected server offers, and
+    /// the local one for everything else.
+    ///
+    /// A per-algorithm choice rather than an all-or-nothing one, so switching to
+    /// an algorithm the server does not have simply runs locally instead of
+    /// failing. That is also why the Reconstruct button's ᴿ mark can appear and
+    /// disappear as the user changes the picker.
+    private var remoteBackendFactory: (@Sendable (UncoverAlgorithm) -> any TemporalVideoUpscaler)? {
+        let client = RemoteClient.shared
+        guard client.status.isConnected else { return nil }
+        // Resolved here, on the main actor, and captured as an immutable set:
+        // the factory itself runs off-actor and must not reach back into
+        // main-actor state to ask what the server offers.
+        let available = Set((client.capabilities?.uncover ?? [])
+            .filter(\.available).map(\.algorithm))
+        return { algorithm in
+            available.contains(algorithm.rawValue)
+                ? RemoteUncoverBackend(algorithm: algorithm, client: client)
+                : algorithm.makeBackend()
         }
     }
 
@@ -523,6 +545,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     // MARK: Private
 
+    private var remoteVocabularyChanges: AnyCancellable?
     private var modelChanges: AnyCancellable?
     private var tagMemorySettingChanges: AnyCancellable?
     private var analysisMemorySettingChanges: AnyCancellable?
@@ -562,13 +585,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.settingsURL = file
         loadSettings()
-        tagVocabulary = TagVocabulary.loadAvailable()
+        tagVocabulary = RemoteClient.shared.remoteVocabulary ?? TagVocabulary.loadAvailable()
+        remoteVocabularyChanges = RemoteClient.shared.$remoteVocabulary
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] vocabulary in
+                MainActor.assumeIsolated {
+                    guard let self, !self.taggingProgress.isRunning else { return }
+                    guard let updated = vocabulary ?? TagVocabulary.loadAvailable() else { return }
+                    self.tagVocabulary = updated
+                    self.clearTagResultsNotMatching(updated.cacheFingerprint)
+                    self.rebuildTagFacetIndex(force: true)
+                    self.recomputeDisplayedFrames()
+                    self.restoreRememberedTagResults()
+                }
+            }
         modelChanges = NotificationCenter.default.publisher(for: .waifuModelsChanged)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     let previousFingerprint = self?.tagVocabulary?.cacheFingerprint
-                    let updatedVocabulary = TagVocabulary.loadAvailable()
+                    let updatedVocabulary = RemoteClient.shared.remoteVocabulary ?? TagVocabulary.loadAvailable()
                     self?.tagVocabulary = updatedVocabulary
                     if let updatedVocabulary,
                        previousFingerprint != updatedVocabulary.cacheFingerprint {
@@ -671,18 +708,28 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func startTagging(from panel: TaggingPanel) async {
         guard !taggingProgress.isRunning, !restoringTagMemory,
               !tagMemoryCancellationFlushPending, let video else { return }
-        guard let config = WDTaggerConfiguration.load() else {
-            errorMessage = "Install WD Tagger in Settings before starting tagging."
+        // A connected server supplies both the weights and the labels, so neither
+        // a local installation nor a local vocabulary is required. This gate used
+        // to be the only way in, and it would otherwise make a remote tagger
+        // unreachable from a machine that has no model of its own.
+        let remote = RemoteClient.shared
+        let configuration = WDTaggerConfiguration.load()
+        let localVocabulary = configuration.flatMap { try? TagVocabulary.load(from: $0.labelsURL) }
+        let remoteVocabulary = await remote.loadVocabularyIfNeeded()
+        guard configuration != nil || remoteVocabulary != nil else {
+            errorMessage = "Install WD Tagger in Settings, or connect to a server that has it."
             return
         }
         let vocabulary: TagVocabulary
-        do {
-            vocabulary = try TagVocabulary.load(from: config.labelsURL)
-            tagVocabulary = vocabulary
-        } catch {
-            errorMessage = error.localizedDescription
+        if remote.offersRemoteTagging, let remoteVocabulary {
+            vocabulary = remoteVocabulary
+        } else if let localVocabulary {
+            vocabulary = localVocabulary
+        } else {
+            errorMessage = "No tag vocabulary is available. Reconnect to the server."
             return
         }
+        tagVocabulary = vocabulary
         clearTagResultsNotMatching(vocabulary.cacheFingerprint)
         rebuildTagFacetIndex(force: true)
         recomputeDisplayedFrames()
@@ -729,7 +776,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingGeneration = UUID()
         taggingProgress = TaggingProgress(isRunning: true, origin: panel,
                                           processed: 0, total: taggingQueue.count, elapsed: 0)
-        launchTaggingTask(config: config, token: taggingGeneration, cacheKeys: cacheKeys,
+        launchTaggingTask(config: configuration, remote: remoteVocabulary != nil ? remote : nil,
+                          token: taggingGeneration, cacheKeys: cacheKeys,
                           vocabularyFingerprint: vocabulary.cacheFingerprint)
     }
 
@@ -767,28 +815,47 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
-    private func launchTaggingTask(config: WDTaggerConfiguration, token: UUID,
+    /// Chooses the backend for a tagging run.
+    ///
+    /// A remote server wins when one is connected and can tag, because its GPU is
+    /// the one the user asked to borrow; otherwise the local model runs. This is
+    /// the single place remoteness enters the tagging pipeline — everything below
+    /// it is written against `TaggerBackend`.
+    private func launchTaggingTask(config: WDTaggerConfiguration?, remote: RemoteClient?, token: UUID,
                                    cacheKeys: TagResultCacheKeys,
                                    vocabularyFingerprint: UInt64?) {
         let threshold = settings.taggerThreshold
+        let useRemote = remote != nil && RemoteClient.shared.offersRemoteTagging
         taggingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            await self.runTaggingPipeline(config: config, threshold: threshold, token: token,
+            await self.runTaggingPipeline(config: config, remote: useRemote ? remote : nil,
+                                          threshold: threshold, token: token,
                                           cacheKeys: cacheKeys,
                                           vocabularyFingerprint: vocabularyFingerprint)
         }
     }
 
-    private nonisolated func runTaggingPipeline(config: WDTaggerConfiguration, threshold: Float,
-                                                token: UUID, cacheKeys: TagResultCacheKeys,
+    private nonisolated func runTaggingPipeline(config: WDTaggerConfiguration?, remote: RemoteClient?,
+                                                threshold: Float, token: UUID,
+                                                cacheKeys: TagResultCacheKeys,
                                                 vocabularyFingerprint: UInt64?) async {
         let started = Date()
         var acquired = false
         do {
-            await ModelLibrary.shared.acquireTagger()
-            acquired = true
-            let tagger = try WDTaggerBackend(directory: config.directory,
-                                             generalThreshold: threshold)
+            let tagger: any TaggerBackend
+            if let remote {
+                // The model lives on the other machine, so this Mac holds no
+                // reference to acquire: the *server* counts its own.
+                tagger = RemoteTaggerBackend(client: remote, threshold: threshold,
+                                             vocabularyFingerprint: vocabularyFingerprint)
+            } else {
+                guard let config = config else {
+                    throw ModelInstaller.fail("WD Tagger is not set up on this Mac.")
+                }
+                await ModelLibrary.shared.acquireTagger()
+                acquired = true
+                tagger = try WDTaggerBackend(directory: config.directory, generalThreshold: threshold)
+            }
             try await TaggingBatchPipeline.run(next: { () async throws -> [PreparedTagFrame]? in
                 guard let batch = try await self.nextTaggingBatch(token: token) else { return nil }
                 let images = try await TaggingImageLoader.load(batch.map(\.source))
@@ -1029,11 +1096,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingQueue.append(contentsOf: newFrames.map(\.id))
         if taggingProgress.isRunning {
             taggingProgress.total += newFrames.count
-        } else if taggingDemandActive, let config = WDTaggerConfiguration.load() {
+        } else if taggingDemandActive {
+            // Follow-up batches for frames that arrived mid-run. The backend is
+            // chosen the same way the first run chose it, including the remote
+            // case, so a run does not silently switch machines halfway through.
+            let config = WDTaggerConfiguration.load()
+            let remote = RemoteClient.shared.offersRemoteTagging ? RemoteClient.shared : nil
+            guard config != nil || remote != nil else { return }
             taggingProgress = TaggingProgress(isRunning: true, origin: lastTaggingOrigin,
                                               processed: 0, total: newFrames.count, elapsed: 0)
             taggingGeneration = UUID()
-            launchTaggingTask(config: config, token: taggingGeneration,
+            launchTaggingTask(config: config, remote: remote, token: taggingGeneration,
                               cacheKeys: taggingCacheKeys,
                               vocabularyFingerprint: taggingVocabularyFingerprint)
         }

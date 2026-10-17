@@ -19,6 +19,19 @@ carry exact decoded presentation timestamps.
 Reference case: `sample-video.mp4` — 1920×1080, 29.97 fps, 84,067
 frames, 46.75 min, 2.86 GB. Every frame is decoded, scored and grouped.
 
+## Remote inference
+
+`RemoteTaggerBackend` and `RemoteUncoverBackend` implement the existing inference
+interfaces. Settings → Remote controls the independent listener and client; capability
+snapshots drive the raised R marks and backend selection. A client receives the tag
+vocabulary and applies its own threshold to full Float32 rows. Reconstruction uploads
+only degraded frames; compositing and export use the client's originals.
+
+The transport uses Apple Network, CryptoKit, Compression and Security frameworks.
+Keys are stored separately for the server and each client address, with a private file
+fallback. The real-socket regression suite injects model catalogs rather than downloading
+weights. See `docs/Remote-inference.md` and `Tests/RemoteProtocolTests.swift`.
+
 ## Commands
 
 ```sh

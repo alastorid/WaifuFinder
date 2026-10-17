@@ -86,6 +86,7 @@ registerModelLibraryTests()
 registerDiagTests()
 registerPreviewKeyRoutingTests()
 registerChiaroscuroLinkTests()
+registerRemoteProtocolTests()
 
 if listOnly {
     print("\(Registry.shared.count) cases registered")

@@ -213,8 +213,18 @@ struct FramePreviewView: View {
                 traitLine
             }
             Spacer(minLength: 6)
-            Button("Uncover Waifu") { session.openUncover(at: frame.timeSeconds) }
+            Button { session.openUncover(at: frame.timeSeconds) } label: {
+                // Marks the *workspace*, not a specific algorithm: it says the
+                // server can do something here. `Reconstruct` marks per
+                // algorithm, so the two together say which is which.
+                Text("Uncover Waifu")
+                    .remoteMark(RemoteClient.shared.offersAnyRemoteUncover,
+                                serverName: RemoteClient.shared.capabilities?.serverName)
+            }
                 .disabled(displayedFrameID != frame.id || reading)
+                .help(RemoteClient.shared.offersAnyRemoteUncover
+                      ? "Open Uncover — reconstruction can run on \(RemoteClient.shared.capabilities?.serverName ?? "the server")"
+                      : "Open Uncover")
             Text(reading ? "preview · loading original" : (note == nil ? "original frame" : "preview"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)

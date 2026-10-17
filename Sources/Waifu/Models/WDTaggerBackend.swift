@@ -86,6 +86,16 @@ actor WDTaggerBackend: TaggerBackend {
     }
 
     func tag(batch: [CGImage]) async throws -> [TagResult] {
+        let rows = try await probabilityRows(batch: batch)
+        return try rows.map { try vocabulary.result(probabilities: $0, threshold: generalThreshold) }
+    }
+
+    /// The raw `Float32[10_861]` output rows, before any threshold is applied.
+    ///
+    /// The primitive `tag(batch:)` is written in terms of, so the remote path
+    /// runs the identical preprocessing and padding code rather than a
+    /// reimplementation of it.
+    func probabilityRows(batch: [CGImage]) async throws -> [[Float]] {
         if batch.isEmpty { return [] }
         guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
         return try await withTaskCancellationHandler {
@@ -107,7 +117,7 @@ actor WDTaggerBackend: TaggerBackend {
             }
             let rows = try worker.predict(count: batch.count)
             try Task.checkCancellation()
-            return try rows.map { try vocabulary.result(probabilities: $0, threshold: generalThreshold) }
+            return rows
           }
         } onCancel: { worker.cancel() }
     }

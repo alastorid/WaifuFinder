@@ -9,6 +9,9 @@ struct UncoverView: View {
     @State private var keyMonitor: Any?
     @State private var modelsChangedWhileBusy = false
     @State private var arrows = PreviewArrowNavigation()
+    /// Observed so the Reconstruct button's ᴿ mark follows the selected
+    /// algorithm and the connection live.
+    @ObservedObject private var remote = RemoteClient.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,6 +107,10 @@ struct UncoverView: View {
                 HStack(spacing: 12) {
                     Text("Algorithm").font(.caption)
                     Picker("Algorithm", selection: $session.algorithm) {
+                        // The list stays as the licences and local setup decide it.
+                        // Narrowing it to a server's models would make an algorithm
+                        // unreachable the moment the server went away, and the
+                        // Reconstruct mark already says which choice runs where.
                         ForEach(session.availableAlgorithms, id: \.self) { Text($0.label).tag($0) }
                     }.labelsHidden().pickerStyle(.segmented).controlSize(.small).frame(width: 390)
                     if session.capabilities?.available != true {
@@ -146,7 +153,16 @@ struct UncoverView: View {
                         ProgressView().controlSize(.small)
                         Button("Cancel") { session.cancel() }
                     } else {
-                        Button("Reconstruct") { session.reconstruct() }.disabled(!session.canReconstruct)
+                        // Marked per algorithm, not per connection: switching to
+                        // one the server does not have makes the mark vanish and
+                        // the button run locally, which is the correct behaviour
+                        // and needs no second label.
+                        Button { session.reconstruct() } label: {
+                            Text("Reconstruct")
+                                .remoteMark(remote.offersRemote(session.algorithm, scale: session.scale),
+                                            serverName: remote.capabilities?.serverName)
+                        }
+                        .disabled(!session.canReconstruct)
                         Button("Export…") { save() }.disabled(!session.hasCurrentResult)
                     }
                 }

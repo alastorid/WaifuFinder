@@ -43,6 +43,24 @@ The reference case is a 46.75-minute 1080p clip — 84,067 frames at 29.97 fps �
 frame of which is processed in Full mode. While processing, the grid is replaced by
 a progress screen; results appear after grouping finishes.
 
+## Remote inference
+
+Use **Settings → Remote** to share one Mac’s installed models with another Mac.
+On the server, enable **Serve inference from this Mac**, then copy its address and
+access key. On the other Mac, enable **Use an inference server**, enter that address,
+paste the key, and connect. Nearby servers also appear automatically when the network
+allows discovery. Allow local-network access when macOS asks.
+
+A raised **R** beside tagging or reconstruction means that operation will run on the
+connected server. The server must have the corresponding model installed; the client
+can tag without downloading the model. Tag thresholds, Apple Vision analysis,
+grouping, compositing and export remain on the client. Only model inputs are sent,
+with authenticated encryption after connection setup. Each server accepts one client.
+Use **Kick** to disconnect it, or **Rotate…** to replace its access key.
+
+See [the protocol and implementation design](docs/Remote-inference.md) for limits,
+key storage and the client/server boundary.
+
 ## WD Tagger performance matrix
 
 **Optimizing WD Tagger? Start with the [latest pipeline gain](docs/WDTagger-native-pipeline.md)**,

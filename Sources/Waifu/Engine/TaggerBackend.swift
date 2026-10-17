@@ -11,6 +11,23 @@ protocol TaggerBackend: Sendable {
     /// Accepts 1...8 images. The implementation pads a tail to its fixed batch,
     /// then returns one result per input, preserving input order.
     func tag(batch: [CGImage]) async throws -> [TagResult]
+
+    /// The raw `Float32[10_861]` rows, before any threshold is applied.
+    ///
+    /// A remote server ships these rather than `TagResult`, because the threshold
+    /// is a *client* preference: applying it on the serving machine would bake one
+    /// machine's setting into another machine's results.
+    ///
+    /// The default recovers the rows from `tag`, whose results already carry
+    /// them, so a backend that only implements `tag` still works over the wire —
+    /// it just cannot avoid its own threshold having been applied first.
+    func probabilityRows(batch: [CGImage]) async throws -> [[Float]]
+}
+
+extension TaggerBackend {
+    func probabilityRows(batch: [CGImage]) async throws -> [[Float]] {
+        try await tag(batch: batch).map(\.probabilities)
+    }
 }
 
 struct TagResult: Sendable {

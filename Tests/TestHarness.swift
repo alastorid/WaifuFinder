@@ -70,6 +70,12 @@ enum Harness {
 
     static func record(_ message: String) {
         lock.withLock { failures.append(message) }
+        // Printed as it happens, not only in the closing report: a case that
+        // crashes the process takes the report with it, and the failure that
+        // came before the crash is usually the one that explains it.
+        if ProcessInfo.processInfo.environment["WAIFU_TEST_TRACE_FAILURES"] == "1" {
+            FileHandle.standardError.write(Data("      \(message)\n".utf8))
+        }
     }
 
     static func reset() {

@@ -6,6 +6,8 @@ struct TaggingPanelStatus: View {
     @Environment(\.openSettings) private var openSettings
     @AppStorage("settingsTab") private var settingsTab = "general"
     @AppStorage("settingsModelFocus") private var settingsModelFocus = ""
+    /// Observed so the ᴿ mark appears and disappears as the connection changes.
+    @ObservedObject private var remote = RemoteClient.shared
 
     var body: some View {
         Group {
@@ -37,8 +39,11 @@ struct TaggingPanelStatus: View {
                     .multilineTextAlignment(.center)
             } else {
                 VStack(spacing: 6) {
-                    Button("Start tagging") {
+                    Button {
                         Task { await session.startTagging(from: panel) }
+                    } label: {
+                        Text("Start tagging")
+                            .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
                     }
                     .buttonStyle(.borderedProminent)
                     Text(session.photosAlbumURL == nil
@@ -99,23 +104,27 @@ struct TaggingStartButton: View {
     @Environment(\.openSettings) private var openSettings
     @AppStorage("settingsTab") private var settingsTab = "general"
     @AppStorage("settingsModelFocus") private var settingsModelFocus = ""
+    @ObservedObject private var remote = RemoteClient.shared
 
     var body: some View {
         HStack {
             Spacer(minLength: 0)
-            Button("Start tagging") {
-                if session.tagVocabulary == nil {
+            Button {
+                if session.tagVocabulary == nil && remote.remoteVocabulary == nil {
                     settingsModelFocus = ManagedModel.tagger.rawValue
                     settingsTab = "models"
                     openSettings()
                 } else {
                     Task { await session.startTagging(from: panel) }
                 }
+            } label: {
+                Text("Start tagging")
+                    .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
             }
             .buttonStyle(.borderless)
             .disabled(session.tagVocabulary != nil && session.untaggedFrameCountForTagging == 0)
-            .help(session.tagVocabulary == nil
-                  ? "Open Settings to download and set up WD Tagger."
+            .help(session.tagVocabulary == nil && remote.remoteVocabulary == nil
+                  ? "Open Settings to download and set up WD Tagger, or connect to a server that has it."
                   : session.photosAlbumURL == nil
                     ? "Tag the additional frames admitted by the current filters."
                     : "Tag every untagged photo in this album using thumbnails.")
