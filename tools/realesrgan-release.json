@@ -1,0 +1,12 @@
+{
+  "repository": "alastorid/RealESRGAN-x2plus-Optimized-CoreML",
+  "revision": "56fcfbbe315b0ea17ba55c4169736b0f53a5fe16",
+  "manifestSHA256": "13ea4badf82225b8922e9832c019344a02efc93b7d775dc440be124903b8ddf0",
+  "supportFilesSHA256": {
+    "LICENSE": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2",
+    "NOTICE": "36f342bddf99b0cab3b2f4e75d4d56623b24fa466de6cfe0ed9474bfa02cb5d3",
+    "README.md": "c0dd8db8d5f7b136f33962aa3263236de2b3ef02b256f1f62ba267f010296957",
+    "validation.json": "2829102cd14ef7f17e3c71b48b3257a320a2ed196f6644393b9d15cf84512c34",
+    "BasicSR-LICENSE": "5447872f21ddc29dc0dc060d5c885513c01c904e9da9931bba69898a6fb4d415"
+  }
+}

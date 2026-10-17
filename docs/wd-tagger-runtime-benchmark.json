@@ -1,0 +1,115 @@
+{
+  "correctedBoxedDecoderBaseline": {
+    "batch": 8,
+    "batchSeconds": [
+      0.6785290241241455,
+      0.6837120056152344,
+      0.6874200105667114,
+      0.6702380180358887,
+      0.667512059211731,
+      0.6762419939041138,
+      0.6792939901351929
+    ],
+    "finalPhysicalFootprintBytes": 920552552,
+    "framesPerSecond": 11.790210463475027,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 0.8964200019836426,
+    "medianBatchSeconds": 0.6785290241241455,
+    "peakPhysicalFootprintBytes": 972391528,
+    "probabilityChecksum": 8.512902930919708,
+    "repeats": 7,
+    "thermalState": 0
+  },
+  "optimizedGPU": {
+    "batch": 8,
+    "batchSeconds": [
+      0.6754570007324219,
+      0.6782170534133911,
+      0.6873800754547119,
+      0.6867560148239136,
+      0.6907930374145508,
+      0.6946510076522827,
+      0.6689720153808594
+    ],
+    "cacheIntermediates": true,
+    "finalPhysicalFootprintBytes": 920224872,
+    "framesPerSecond": 11.64896968838522,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 0.9641870260238647,
+    "medianBatchSeconds": 0.6867560148239136,
+    "peakPhysicalFootprintBytes": 973636712,
+    "probabilityChecksum": 8.512902930919708,
+    "referenceMaximumAbsoluteError": 0.008654594421386719,
+    "referenceTop15Overlap": 15,
+    "repeats": 7,
+    "thermalState": 0,
+    "units": "cpuAndGPU"
+  },
+  "neuralEngineEligible": {
+    "batch": 8,
+    "batchSeconds": [
+      0.6030789613723755,
+      0.867095947265625,
+      0.7347370386123657,
+      0.7701910734176636,
+      0.6103140115737915,
+      0.6815940141677856,
+      0.717574954032898
+    ],
+    "cacheIntermediates": true,
+    "finalPhysicalFootprintBytes": 3682895312,
+    "framesPerSecond": 11.148661132943099,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 71.46071600914001,
+    "medianBatchSeconds": 0.717574954032898,
+    "peakPhysicalFootprintBytes": 3992765904,
+    "probabilityChecksum": 8.220947265625,
+    "referenceMaximumAbsoluteError": 0.15370887517929077,
+    "referenceTop15Overlap": 13,
+    "repeats": 7,
+    "thermalState": 0,
+    "units": "all"
+  },
+  "disabledIntermediateCache": {
+    "batch": 8,
+    "batchSeconds": [
+      0.7405260801315308,
+      0.7968939542770386,
+      0.7678840160369873,
+      0.7830209732055664,
+      0.796995997428894,
+      0.7826250791549683,
+      0.770156979560852
+    ],
+    "cacheIntermediates": false,
+    "finalPhysicalFootprintBytes": 965952616,
+    "framesPerSecond": 10.222008229838382,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 1.0589179992675781,
+    "medianBatchSeconds": 0.7826250791549683,
+    "peakPhysicalFootprintBytes": 992052352,
+    "probabilityChecksum": 8.512902930919708,
+    "repeats": 7,
+    "thermalState": 0,
+    "units": "cpuAndGPU"
+  },
+  "notes": [
+    "Benchmarked batch8 with a 1920x1080 color-gradient CGImage, seven warm repeats per process; measurements are hardware-specific and not a controlled sustained-load comparison.",
+    "Original physical-stride NSNumber decoder crashed on full native batches. Baseline uses corrected logical NSNumber indexing.",
+    "Optimized GPU probability checksum is identical to corrected baseline; no material end-to-end speed or peak-memory improvement is established by these runs.",
+    "Neural Engine eligible execution is rejected: higher memory and independent reference max error 0.1537, top15 overlap 13/15. CPU and GPU remain the production default.",
+    "The no-intermediate-cache probe is not a demonstrated improvement; production retains caching."
+  ]
+}

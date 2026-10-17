@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141714" />
+    <meta
+      name="description"
+      content="Find, tag, compare and restore video frames on your Mac. WaifuFinder combines frame-by-frame analysis with an optimized WD Tagger and local AI restoration."
+    />
+    <meta
+      property="og:title"
+      content="WaifuFinder — A whole video. Your exact frame."
+    />
+    <meta
+      property="og:description"
+      content="Frame-by-frame analysis. An optimized WD Tagger. Local restoration. Built for Apple silicon."
+    />
+    <meta
+      property="og:image"
+      content="https://alastorid.github.io/WaifuFinder/assets/WaifuFinder.png"
+    />
+    <title>WaifuFinder — A whole video. Your exact frame.</title>
+    <link rel="icon" type="image/png" href="assets/WaifuFinder.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#top">Skip to content</a>
+    <header class="topbar">
+      <a class="brand" href="#top"
+        ><img src="assets/WaifuFinder.png" alt="" width="36" height="36" /><span
+          >WaifuFinder</span
+        ></a
+      >
+      <nav aria-label="Main navigation">
+        <a href="#workflow">Frame finder</a><a href="#sequence">Photo ordering</a><a href="#tagger">WD Tagger</a><a href="#credits">Credits</a
+        ><a href="https://github.com/alastorid/WaifuFinder">Source ↗</a
+        ><a class="nav-download" href="#download">Get the app ↓</a>
+      </nav>
+    </header>
+    <main id="top">
+      <section class="hero wrap">
+        <div class="eyebrow">
+          <span class="status-dot"></span> Native macOS / Apple silicon / Local
+          processing
+        </div>
+        <div class="hero-heading">
+          <h1>A whole video.<br /><em>Your exact frame.</em></h1>
+          <div class="hero-aside">
+            <span class="viewfinder" aria-hidden="true">＋</span>
+            <p>Find it. Refine it.<br />Keep it.</p>
+          </div>
+        </div>
+        <div class="hero-bottom">
+          <p class="hero-text">
+            Go from a long timeline to the frames you came for. Analyze every
+            frame, filter by what’s in it, compare the details, and restore a
+            selected region—all on your Mac.
+          </p>
+          <div class="hero-actions">
+            <a
+              class="button button-lime"
+              href="https://github.com/alastorid/WaifuFinder/releases"
+              data-release-link
+              ><span data-download-label>Get WaifuFinder</span
+              ><span aria-hidden="true">↗</span></a
+            >
+            <p class="requirements">
+              Free download · macOS 15+<br />Public release: non-commercial use
+            </p>
+          </div>
+        </div>
+        <div
+          class="signal-board"
+          aria-label="Synthetic illustration of the frame selection workflow; no real video or frames shown"
+        >
+          <div class="board-top">
+            <span
+              ><span class="status-dot"></span> FROM TIMELINE TO SELECTION</span
+            ><span>WORKFLOW ILLUSTRATION / NOT APP UI</span>
+          </div>
+          <div class="timeline" aria-hidden="true">
+            <span>00:00</span>
+            <div class="timeline-track"></div>
+            <span>18:24</span>
+          </div>
+          <div class="board-content">
+            <div class="frame-field" aria-hidden="true">
+              <div class="scene scene-one">
+                <span>01 / SCAN</span>
+                <div class="landscape"></div>
+                <b>00:02:18</b>
+              </div>
+              <div class="scene scene-two">
+                <span>02 / GROUP</span>
+                <div class="landscape"></div>
+                <b>00:07:42</b>
+              </div>
+              <div class="scene scene-three">
+                <span>03 / SELECT</span>
+                <div class="landscape"></div>
+                <b>00:16:09 <i>↗</i></b>
+              </div>
+            </div>
+            <div class="board-signals">
+              <p class="micro">A CLOSER LOOK</p>
+              <div><span>Face quality</span><i style="--value: 78%"></i></div>
+              <div>
+                <span>Face definition</span><i style="--value: 91%"></i>
+              </div>
+              <div><span>Aesthetics</span><i style="--value: 67%"></i></div>
+              <p class="board-note">
+                Different signals.<br />Your choice of what matters.
+              </p>
+            </div>
+          </div>
+          <div class="board-footer">
+            <span>SCAN → GROUP → FILTER → COMPARE → EXPORT</span
+            ><span>Original pixels on export ↗</span>
+          </div>
+        </div>
+        <div class="hero-footnote">
+          <span>EVERY FRAME HAS A CHANCE.</span
+          ><span>VISION + CORE ML + SWIFT / MLX</span>
+        </div>
+      </section>
+      <section class="workflow light-section" id="workflow">
+        <div class="wrap">
+          <div class="section-label">
+            <span>01 / THE WORKFLOW</span
+            ><span>LESS SCRUBBING. MORE CHOOSING.</span>
+          </div>
+          <div class="section-heading">
+            <h2>Look through the video.<br /><em>Then look closer.</em></h2>
+            <p>
+              A good frame is more than a score. WaifuFinder brings the
+              candidates together and gives you the controls to make the call.
+            </p>
+          </div>
+          <div class="features">
+            <article>
+              <span class="feature-index">01 — FIND</span>
+              <h3>Give every frame <br />a fair look.</h3>
+              <p>
+                Full mode scores every frame. Quick mode scores once a second.
+                Similar frames gather into shots, with the strongest candidates
+                up front.
+              </p>
+              <span class="feature-detail"
+                >Optional shot grouping starts off</span
+              >
+            </article>
+            <article>
+              <span class="feature-index">02 — REFINE</span>
+              <h3>Choose what <br />stands out.</h3>
+              <p>
+                Sort and filter by time, face quality, face definition and
+                aesthetics. Add WD traits and rating ranges to narrow the
+                selection further.
+              </p>
+              <span class="feature-detail"
+                >Independent signals and score ranges</span
+              >
+            </article>
+            <article>
+              <span class="feature-index">03 — KEEP</span>
+              <h3>Inspect the pixels. <br />Keep the original detail.</h3>
+              <p>
+                Compare at source resolution. Zoom, pan and step between frames
+                while keeping your view. Export selected stills as PNG or JPEG.
+              </p>
+              <span class="feature-detail"
+                >Re-extracted from the source video</span
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="tagger wrap" id="tagger">
+        <div class="section-label">
+          <span>02 / WD TAGGER</span
+          ><span class="lime">OPTIONAL MODEL. SERIOUSLY TUNED.</span>
+        </div>
+        <div class="tagger-grid">
+          <div>
+            <p class="eyebrow">Find by trait. Filter with intent.</p>
+            <h2>WD Tagger.<br /><em>Tuned for your Mac.</em></h2>
+            <p class="section-copy">
+              Require the traits you want. Exclude the ones you don’t. Sort by a
+              tag’s score or narrow each rating probability independently. Start
+              tagging after analysis, on the frames your active filters admit.
+            </p>
+            <p class="section-copy muted">
+              WD’s pretrained model, optimized for Core ML with fused attention,
+              packed projections and a reused input buffer. Eight frames per
+              batch. No Python runtime in the app.
+            </p>
+            <a
+              class="text-link"
+              href="https://github.com/alastorid/WaifuFinder/blob/main/docs/WDTagger-optimization.md"
+              >Read the measurements <span>↗</span></a
+            >
+          </div>
+          <div class="tag-demo">
+            <div class="demo-header">
+              <span class="micro">TRY THE FILTER LOGIC</span
+              ><span class="sample-badge">SAMPLE DATA</span>
+            </div>
+            <h3>What’s in your frame?</h3>
+            <p>Choose a trait to require. Toggle “text” to exclude it.</p>
+            <div class="tag-controls" role="group" aria-label="Required traits">
+              <button type="button" data-trait="outdoors" aria-pressed="false">
+                + outdoors</button
+              ><button type="button" data-trait="sky" aria-pressed="false">
+                + sky</button
+              ><button type="button" data-trait="solo" aria-pressed="false">
+                + solo
+              </button>
+            </div>
+            <button
+              class="exclude-control"
+              type="button"
+              id="exclude-text"
+              aria-pressed="false"
+            >
+              − Exclude text
+            </button>
+            <div class="sample-results">
+              <div data-tags="outdoors sky solo">
+                <span class="sample-icon sample-a" aria-hidden="true"></span>
+                <div>
+                  <strong>Frame A</strong><span>outdoors · sky · solo</span>
+                </div>
+                <b aria-hidden="true">↗</b>
+              </div>
+              <div data-tags="outdoors sky text">
+                <span class="sample-icon sample-b" aria-hidden="true"></span>
+                <div>
+                  <strong>Frame B</strong><span>outdoors · sky · text</span>
+                </div>
+                <b aria-hidden="true">↗</b>
+              </div>
+              <div data-tags="solo">
+                <span class="sample-icon sample-c" aria-hidden="true"></span>
+                <div><strong>Frame C</strong><span>solo · indoors</span></div>
+                <b aria-hidden="true">↗</b>
+              </div>
+            </div>
+            <div class="demo-footer" aria-live="polite" id="filter-count">
+              3 of 3 sample frames match
+            </div>
+            <p class="demo-note">
+              Illustrates filtering with fixed tags; no model runs on this page.
+            </p>
+          </div>
+        </div>
+        <div class="metrics">
+          <div>
+            <strong>~22<span>%</span></strong>
+            <p>higher tagging throughput</p>
+          </div>
+          <div>
+            <strong>~23<span>%</span></strong>
+            <p>less peak process memory</p>
+          </div>
+          <div>
+            <strong>8<span> frames</span></strong>
+            <p>per inference batch in the app</p>
+          </div>
+        </div>
+        <p class="measurement-note">
+          Measured attention optimization against the earlier Core ML conversion
+          on an Apple M3, 16 GB. Fixed batch of 8, synthetic 1080p input, 15
+          warm repeats per process. These are local benchmark results, not
+          full-video speed guarantees.
+          <a
+            href="https://github.com/alastorid/WaifuFinder/blob/main/docs/wd-tagger-sdpa-experiment.json"
+            >Paired results ↗</a
+          >
+        </p>
+        <details class="lab-note">
+          <summary>
+            <span
+              ><span class="lab-label">IN THE LAB</span> Native Swift + Metal
+              tagger</span
+            ><span class="details-plus" aria-hidden="true">+</span>
+          </summary>
+          <div>
+            <p>
+              A separate experimental backend uses specialized Metal kernels and
+              native MLX. All 28 kernel checks passed. One cooled comparison
+              reached 14.73 prediction frames/s versus Core ML’s 14.02, with
+              substantially higher memory use at batch 8.
+            </p>
+            <p>
+              The app keeps Core ML as its default. The native candidate still
+              has numerical differences, and a repeatable speed advantage has
+              not been established.
+              <a
+                href="https://github.com/alastorid/WaifuFinder/blob/main/docs/WDTagger-native-optimization.md"
+                >Implementation, checks and tradeoffs ↗</a
+              >
+            </p>
+          </div>
+        </details>
+      </section>
+      <section class="restoration light-section" id="restore">
+        <div class="wrap">
+          <div class="section-label">
+            <span>03 / UNCOVER WAIFU</span><span>LOCAL AI RESTORATION</span>
+          </div>
+          <div class="restoration-grid">
+            <div
+              class="roi-art"
+              role="img"
+              aria-label="Diagram of a selected region passing through restoration"
+            >
+              <div class="roi-source">
+                <div class="roi-box"><span>SELECT A REGION</span></div>
+                <span class="roi-corner">SOURCE</span>
+              </div>
+              <div class="roi-flow">
+                <span>REGION + SHORT INTERVAL</span><span>→</span
+                ><span>COMPARE + EXPORT</span>
+              </div>
+            </div>
+            <div>
+              <h2>Work on the part<br /><em>you care about.</em></h2>
+              <p class="section-copy">
+                Draw a region in the native-resolution preview, choose a short
+                interval, and reconstruct it locally. Compare the result with a
+                wipe, side by side, or an instant toggle.
+              </p>
+              <div class="model-list">
+                <span>SeedVR2 <small>3B / 7B</small></span
+                ><span>FlashVSR <small>1.1</small></span
+                ><span>RealESRGAN</span
+                ><span>PGTFormer <small>NON-COMMERCIAL</small></span>
+              </div>
+              <p class="restoration-note">
+                Download models in Settings. Export a new MOV with the processed
+                region and source audio. AI restoration can invent detail;
+                compare it with the original before keeping it.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="local wrap">
+        <div class="section-label">
+          <span>04 / BUILT TO STAY LOCAL</span
+          ><span>YOUR MAC DOES THE WORK.</span>
+        </div>
+        <div class="local-grid">
+          <h2>Your footage.<br /><em>Your machine.</em></h2>
+          <div>
+            <article>
+              <h3>No video uploads.</h3>
+              <p>
+                Analysis, tagging and restoration run on your Mac. No account,
+                analytics or telemetry.
+              </p>
+            </article>
+            <article>
+              <h3>Keep the work you’ve done.</h3>
+              <p>
+                Remember analysis and tagging results across sessions. Set
+                retention and manage caches in Settings.
+              </p>
+            </article>
+            <article>
+              <h3>Models on your terms.</h3>
+              <p>
+                Download optional models in the app, choose an external drive,
+                or connect a supported model folder you already have.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="sequence wrap" id="sequence" aria-labelledby="sequence-heading">
+        <div class="section-label"><span>05 / OPTIONAL PHOTO ORDERING</span><span>CUOPT ROUTING SEARCH, PORTED TO METAL</span></div>
+        <div class="section-heading">
+          <h2 id="sequence-heading">Add a visual<br /><em>sequence.</em></h2>
+          <p>For photo collections, Minimal Visual Distance places similar-looking images beside one another. It approximates a shortest open path through the photos shown; reverse follows that same path backward. This optional sorting feature adds a new way to browse after WaifuFinder has helped you find the frames you want.</p>
+        </div>
+        <figure class="sequence-drawing" data-sequence-demo>
+          <div class="sequence-demo-header">
+            <span class="micro">ONE SET OF DRAWINGS / THREE WAYS TO BROWSE</span>
+            <div class="sequence-controls" role="group" aria-label="Illustration order">
+              <button type="button" data-sequence-mode="mixed" aria-pressed="false">Mixed</button>
+              <button type="button" data-sequence-mode="sorted" aria-pressed="true">Visual sequence</button>
+              <button type="button" data-sequence-mode="reverse" aria-pressed="false">Reverse ↔</button>
+            </div>
+          </div>
+          <svg class="sequence-map" viewBox="0 0 820 200" role="img" aria-labelledby="sequence-map-title sequence-map-desc">
+            <title id="sequence-map-title">A route through visual similarity</title>
+            <desc id="sequence-map-desc">Eight colored nodes represent synthetic scenes. A line connects them in their displayed order. This is an illustrative feature map, not real photo data.</desc>
+            <defs><pattern id="sequence-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#ffffff14" /></pattern></defs>
+            <rect width="820" height="200" fill="url(#sequence-grid)" />
+            <path class="sequence-route-shadow" d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
+            <path class="sequence-route" data-sequence-route d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
+            <g class="sequence-nodes" text-anchor="middle">
+              <g transform="translate(55 150)"><circle r="20" fill="#df9d65" /><text y="4">A</text></g>
+              <g transform="translate(155 130)"><circle r="20" fill="#c6aa65" /><text y="4">B</text></g>
+              <g transform="translate(255 140)"><circle r="20" fill="#a8b773" /><text y="4">C</text></g>
+              <g transform="translate(355 95)"><circle r="20" fill="#81b895" /><text y="4">D</text></g>
+              <g transform="translate(455 115)"><circle r="20" fill="#73b1b2" /><text y="4">E</text></g>
+              <g transform="translate(555 65)"><circle r="20" fill="#74a2c4" /><text y="4">F</text></g>
+              <g transform="translate(655 80)"><circle r="20" fill="#8c95c9" /><text y="4">G</text></g>
+              <g transform="translate(765 45)"><circle r="20" fill="#a58fbc" /><text y="4">H</text></g>
+            </g>
+          </svg>
+          <ol class="sequence-strip" data-sequence-strip aria-label="Synthetic scene sequence">
+            <li data-scene="0" style="--scene:#df9d65;--ridge:#8c5945"><span class="scene-art"><i></i></span><span>A · Amber</span></li>
+            <li data-scene="1" style="--scene:#c6aa65;--ridge:#786a46"><span class="scene-art"><i></i></span><span>B · Ochre</span></li>
+            <li data-scene="2" style="--scene:#a8b773;--ridge:#526a48"><span class="scene-art"><i></i></span><span>C · Meadow</span></li>
+            <li data-scene="3" style="--scene:#81b895;--ridge:#3e6a59"><span class="scene-art"><i></i></span><span>D · Grove</span></li>
+            <li data-scene="4" style="--scene:#73b1b2;--ridge:#39646b"><span class="scene-art"><i></i></span><span>E · Lagoon</span></li>
+            <li data-scene="5" style="--scene:#74a2c4;--ridge:#3d567c"><span class="scene-art"><i></i></span><span>F · Coast</span></li>
+            <li data-scene="6" style="--scene:#8c95c9;--ridge:#4f4977"><span class="scene-art"><i></i></span><span>G · Dusk</span></li>
+            <li data-scene="7" style="--scene:#a58fbc;--ridge:#64466f"><span class="scene-art"><i></i></span><span>H · Twilight</span></li>
+          </ol>
+          <figcaption><span data-sequence-caption aria-live="polite">A continuous visual sequence, from amber to twilight.</span>
+            <span>All scenes are drawn illustrations. No personal photos or video samples.</span></figcaption>
+        </figure>
+        <div class="sequence-process">
+          <article><span class="feature-index">01 / SEE</span><h3>Describe each image.</h3><p>Apple Vision supplies a visual fingerprint. Distances describe how different two images look.</p></article>
+          <article><span class="feature-index">02 / SEARCH</span><h3>Find a smoother route.</h3><p>Our Swift/Metal port of cuOpt’s 2-opt routing search tries several paths and evaluates improvements in parallel.</p></article>
+          <article><span class="feature-index">03 / BROWSE</span><h3>Follow the sequence.</h3><p>Every shown photo appears once. Reverse retraces the same path. Grouping is off by default and remains optional.</p></article>
+        </div>
+        <div class="sequence-finding">
+          <div><span class="micro">MEASURED ON APPLE M3</span><strong>4×<span>solver speedup</span></strong><p>About 75% less time in the measured 1,024-item workload.</p></div>
+          <div class="sequence-benchmark"><div><span>CPU</span><i style="--bar:100%"></i><b>116.296 ms</b></div><div><span>Metal</span><i style="--bar:25%"></i><b>29.068 ms</b></div>
+            <p>Optimized code · 768-dimensional synthetic vectors · four starting paths · 16 search iterations · includes distance-matrix construction. Excludes photo analysis and first shader compilation. M4 has not been measured.</p></div>
+        </div>
+        <details class="sequence-details"><summary>What came from NVIDIA—and what we built for Mac</summary>
+          <p>NVIDIA publishes cuOpt’s routing source under Apache 2.0. We adapted its 2-opt candidate search, ranked reductions and snapshot move execution into Swift and Metal. Apple Vision, Accelerate and Metal provide the native feature and execution pipeline. This is a specialized port of the routing search, with upstream attribution; the full CUDA solver is not running on macOS.</p>
+          <p>The objective is to reduce the total visual distance between neighboring photos, with no return edge from the end to the beginning. It is an approximate solution to an open-path traveling salesperson problem, rather than a guarantee of the global minimum. CPU and GPU distances are checked against Vision, including its squared-distance convention.</p>
+          <p>Videos can contain 200,000+ frames, but the 4× result is a solver measurement at 1,024 items. We have not benchmarked 200,000-item sequencing. The 16,384-item GPU cutoff is an implementation resource guard, not a collection limit: larger sets use the CPU fallback. A full distance matrix for 200,000 items would need about 149 GiB, so the implementation avoids allocating one. Analysis, filtering and sequencing have separate costs.</p>
+          <p><a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/CuOptMetal.md">Source audit, limits and reproducible benchmark ↗</a> · <a href="https://github.com/NVIDIA/cuopt">NVIDIA cuOpt ↗</a></p>
+        </details>
+      </section>
+      <section class="credits light-section" id="credits" aria-labelledby="credits-heading">
+        <div class="wrap">
+          <div class="section-label"><span>06 / SHARED WORK</span><span>CREDIT WHERE IT BELONGS.</span></div>
+          <div class="section-heading"><h2 id="credits-heading">Built on<br /><em>good open work.</em></h2><p>Our native Mac integration builds on the work of these projects and their contributors. Thank you for sharing the source, models and tools.</p></div>
+          <div class="credit-grid">
+            <article><h3><a href="https://github.com/NVIDIA/cuopt">NVIDIA · cuOpt ↗</a></h3><p>Routing search adapted for Metal. Apache 2.0.</p><span>#NVIDIA #cuOpt #TSP</span></article>
+            <article><h3><a href="https://github.com/ml-explore/mlx-swift">Apple · MLX & MLX Swift ↗</a></h3><p>The native machine-learning foundation. MIT.</p><span>#MLX #MLXSwift #AppleSilicon</span></article>
+            <article><h3><a href="https://github.com/ByteDance-Seed/SeedVR">ByteDance Seed · SeedVR2 ↗</a></h3><p>Video restoration; thanks also to xocialize, mlx-gen, AbstractFramework and the MLX community for their ports, references and conversions. Apache 2.0 / MIT.</p><span>#SeedVR2 #ByteDanceSeed #MLXCommunity #MLXGen</span></article>
+            <article><h3><a href="https://github.com/OpenImagingLab/FlashVSR">OpenImagingLab · FlashVSR ↗</a></h3><p>Streaming video restoration and Junhao Zhuang’s published model. Apache 2.0.</p><span>#FlashVSR #OpenImagingLab</span></article>
+            <article><h3><a href="https://github.com/xinntao/Real-ESRGAN">Real-ESRGAN & BasicSR ↗</a></h3><p>Image restoration and reference architectures. BSD 3-Clause / Apache 2.0.</p><span>#RealESRGAN #BasicSR</span></article>
+            <article><h3><a href="https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3">SmilingWolf · WD Tagger ↗</a></h3><p>Image tags and rating probabilities. Apache 2.0.</p><span>#SmilingWolf #WDTagger</span></article>
+            <article><h3><a href="https://github.com/belisoful/InferKit">Belisoful · InferKit ↗</a></h3><p>Reference formulas used in face restoration. MIT.</p><span>#InferKit #Belisoful</span></article>
+            <article><h3>Small foundations, big help.</h3><p>MLX C, Swift Numerics, nlohmann/json, fmt and Metal-cpp; ds_store and mac_alias for packaging. MIT / Apache 2.0.</p><span>#SwiftNumerics #nlohmannJSON #fmt #MetalCpp</span></article>
+          </div>
+          <p class="credit-note"><strong>PGTFormer — credited separately.</strong> “Beyond Alignment: Blind Video Face Restoration via Parsing-Guided Temporal-Coherent Transformer,” by Kepeng Xu, Li Xu, Gang He, Wenxin Yu and Yunsong Li (IJCAI 2024). Thanks to the authors for their work. <a href="https://github.com/kepengxu/PGTFormer">Project ↗</a> · <a href="https://www.ijcai.org/proceedings/2024/165">IJCAI paper ↗</a>. The network is restricted to non-commercial use; the weights have no declared licence. See <a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Licensing.md">licensing notes ↗</a>. <span class="credit-hashtags">#PGTFormer #KepengXu #LiXu #GangHe #WenxinYu #YunsongLi #IJCAI2024</span></p>
+          <p class="credit-note">Offline conversion and validation also use PyTorch, TorchVision, NumPy, Core ML Tools, Hugging Face Hub, Transformers, Tokenizers, Diffusers, timm, Safetensors, Einops and Pillow. <a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Credits.md">Full credits and individual licenses ↗</a></p>
+          <p class="credit-note">Apple’s Metal, Vision, Core ML, AVFoundation and SwiftUI make the native Mac pipeline possible. Optional PGTFormer restoration has separate non-commercial terms; see <a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Licensing.md">model licensing ↗</a>.</p>
+          <p class="credit-hashtags">#OpenSource #NVIDIA #cuOpt #Metal #AppleSilicon #Swift #MLX #SeedVR2 #FlashVSR #RealESRGAN #WDTagger #PyTorch #HuggingFace</p>
+        </div>
+      </section>
+      <section class="download" id="download">
+        <div class="wrap">
+          <div class="download-top">
+            <img
+              src="assets/WaifuFinder.png"
+              alt="WaifuFinder icon"
+              width="72"
+              height="72"
+            /><span class="micro"
+              >BUILT FOR APPLE SILICON.<br />READY FOR YOUR NEXT VIDEO.</span
+            >
+          </div>
+          <div class="download-row">
+            <h2>Find your frame.</h2>
+            <a
+              class="button button-dark"
+              href="https://github.com/alastorid/WaifuFinder/releases"
+              data-release-link
+              ><span data-download-label>Get WaifuFinder</span
+              ><span aria-hidden="true">↗</span></a
+            >
+          </div>
+          <div class="download-meta">
+            <span data-release-version>Latest version on GitHub</span
+            ><span>macOS 15+ · Apple silicon · Free download</span>
+          </div>
+          <p class="license-note">
+            Public releases include PGTFormer and are for non-commercial use.
+            App code is MIT; models have separate terms.
+            <a
+              href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Licensing.md"
+              >Licensing & commercial build ↗</a
+            >
+          </p>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <a class="brand" href="#top"
+        ><img src="assets/WaifuFinder.png" alt="" width="28" height="28" /><span
+          >WaifuFinder</span
+        ></a
+      >
+      <p>A closer look, frame by frame.</p>
+      <div>
+        <a href="privacy.html">Privacy</a
+        ><a href="https://github.com/alastorid/WaifuFinder">Source ↗</a
+        ><a href="https://github.com/alastorid/WaifuFinder/releases"
+          >Releases ↗</a
+        >
+      </div>
+    </footer>
+  </body>
+</html>

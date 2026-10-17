@@ -1,0 +1,11 @@
+{
+  "repository": "alastorid/PGTFormer-Swift-CoreML",
+  "revision": "4a00721a89bae267cab60c4c2969a54d645d8402",
+  "manifestSHA256": "189491dcfe1441f51cde2f8a9ee7074fa749dfd14e6d823f8f46b2c2227d51af",
+  "supportFilesSHA256": {
+    "LICENSE": "ee22939638676a11463b06884aba334302562a8d3b5185b924d4f2443f353576",
+    "NOTICE": "27a9ee281ae796658ccf2a09725b5c09f436ed2ca3c78cd3d6197716827447b0",
+    "README.md": "60ad23e5346b74f5b3b8cb5e9beb13ca546fefee33aaa9c566235fa1ef04e0d1",
+    "validation.json": "b3e1e895c7e429b6103805dbbbcc49d87773bd213efa7a8a7f7220dcf9731f28"
+  }
+}

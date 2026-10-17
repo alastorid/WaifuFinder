@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "name": "WaifuFinder Media Links",
+  "version": "0.1.0",
+  "description": "Optionally send matching direct media links to WaifuFinder.",
+  "browser_specific_settings": { "gecko": { "id": "firefox@waifufinder.local", "strict_min_version": "91.0" } },
+  "permissions": ["nativeMessaging", "webRequest", "webRequestBlocking", "http://*/*", "https://*/*", "alarms", "menus"],
+  "background": { "scripts": ["background.js"] },
+  "browser_action": { "default_title": "WaifuFinder", "default_popup": "popup.html" }
+}

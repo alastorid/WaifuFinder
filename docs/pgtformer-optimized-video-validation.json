@@ -1,0 +1,95 @@
+{
+  "model": "pgtformer",
+  "scope": "Actual product video inputs, preprocessing and native graph versus original pretrained network",
+  "passed": true,
+  "frames": [
+    {
+      "frame": 0,
+      "window": [
+        0,
+        0,
+        1
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.015554428100585938,
+      "meanAbsoluteError": 0.00012159326433902606
+    },
+    {
+      "frame": 1,
+      "window": [
+        0,
+        1,
+        2
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.011262118816375732,
+      "meanAbsoluteError": 0.00012234540190547705
+    },
+    {
+      "frame": 2,
+      "window": [
+        1,
+        2,
+        3
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.010440587997436523,
+      "meanAbsoluteError": 0.00012457629782147706
+    },
+    {
+      "frame": 3,
+      "window": [
+        2,
+        3,
+        4
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.011850237846374512,
+      "meanAbsoluteError": 0.00012316856009420007
+    },
+    {
+      "frame": 4,
+      "window": [
+        3,
+        4,
+        5
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.014480173587799072,
+      "meanAbsoluteError": 0.00021808540623169392
+    },
+    {
+      "frame": 5,
+      "window": [
+        4,
+        5,
+        6
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.016591444611549377,
+      "meanAbsoluteError": 0.00020610193314496428
+    },
+    {
+      "frame": 6,
+      "window": [
+        5,
+        6,
+        7
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.013616204261779785,
+      "meanAbsoluteError": 0.00013178664084989578
+    },
+    {
+      "frame": 7,
+      "window": [
+        6,
+        7,
+        7
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.013627409934997559,
+      "meanAbsoluteError": 0.00021502883464563638
+    }
+  ]
+}

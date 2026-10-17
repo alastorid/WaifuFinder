@@ -1,0 +1,240 @@
+{
+  "release": {
+    "repository": "alastorid/PGTFormer-Swift-CoreML",
+    "revision": "4a00721a89bae267cab60c4c2969a54d645d8402",
+    "manifestSHA256": "189491dcfe1441f51cde2f8a9ee7074fa749dfd14e6d823f8f46b2c2227d51af",
+    "supportFilesSHA256": {
+      "LICENSE": "ee22939638676a11463b06884aba334302562a8d3b5185b924d4f2443f353576",
+      "NOTICE": "27a9ee281ae796658ccf2a09725b5c09f436ed2ca3c78cd3d6197716827447b0",
+      "README.md": "60ad23e5346b74f5b3b8cb5e9beb13ca546fefee33aaa9c566235fa1ef04e0d1",
+      "validation.json": "b3e1e895c7e429b6103805dbbbcc49d87773bd213efa7a8a7f7220dcf9731f28"
+    }
+  },
+  "cleanDownloadVerified": true,
+  "appCatalogMatchesPublishedRelease": true,
+  "nativeOriginalReferenceValidation": {
+    "backend": "native Swift Core ML",
+    "decoderUnits": "gpu",
+    "encoderUnits": "gpu",
+    "loadSeconds": 1.9867149591445923,
+    "maximumAbsoluteError": 0.01537981629371643,
+    "meanAbsoluteError": 0.00014974610047203637,
+    "measurements": [
+      {
+        "decoderSeconds": 1.3795109987258911,
+        "encoderSeconds": 0.7699630260467529,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.013160884380340576,
+        "meanAbsoluteError": 8.180398304042859e-05,
+        "passed": true,
+        "reference": "000000.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2244969606399536,
+        "encoderSeconds": 0.6159451007843018,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.01537981629371643,
+        "meanAbsoluteError": 8.93268901504928e-05,
+        "passed": true,
+        "reference": "000001.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2794150114059448,
+        "encoderSeconds": 0.6014879941940308,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.013586729764938354,
+        "meanAbsoluteError": 0.00011335056096090178,
+        "passed": true,
+        "reference": "000002.safetensors"
+      },
+      {
+        "decoderSeconds": 1.233323097229004,
+        "encoderSeconds": 0.6062378883361816,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014907270669937134,
+        "meanAbsoluteError": 9.071585954940839e-05,
+        "passed": true,
+        "reference": "000003.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2682870626449585,
+        "encoderSeconds": 0.6069639921188354,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.012558221817016602,
+        "meanAbsoluteError": 9.717844423500631e-05,
+        "passed": true,
+        "reference": "000004.safetensors"
+      },
+      {
+        "decoderSeconds": 1.223572015762329,
+        "encoderSeconds": 0.6179879903793335,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.009725838899612427,
+        "meanAbsoluteError": 8.610969884778243e-05,
+        "passed": true,
+        "reference": "000005.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2589360475540161,
+        "encoderSeconds": 0.5989420413970947,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.015181079506874084,
+        "meanAbsoluteError": 0.00012718189698826012,
+        "passed": true,
+        "reference": "000006.safetensors"
+      },
+      {
+        "decoderSeconds": 1.233159065246582,
+        "encoderSeconds": 0.630795955657959,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014310456812381744,
+        "meanAbsoluteError": 0.00014974610047203637,
+        "passed": true,
+        "reference": "000007.safetensors"
+      }
+    ],
+    "passed": true,
+    "peakPhysicalFootprintBytes": 2056209920
+  },
+  "installerRegression": {
+    "passed": 8,
+    "failed": 0,
+    "publishedDownloadActivationPassed": true,
+    "oldInstallationPreserved": true,
+    "repeatedSetupReusedRelease": true
+  },
+  "uncoverRegression": {
+    "passed": 21,
+    "failed": 0,
+    "unrelatedFixtureSkips": 3
+  },
+  "publishedProductReports": {
+    "1": {
+      "backend": "native Swift Core ML / Apple GPU",
+      "centerFrame": 1,
+      "compiledModelCache": true,
+      "decoderSeconds": 2.633936882019043,
+      "decoderUnits": "gpu",
+      "encoderSeconds": 1.3975870609283447,
+      "encoderUnits": "gpu",
+      "executionPolicy": "gpu-encoder-decoder-v2",
+      "frames": 2,
+      "inferenceSeconds": 4.03152596950531,
+      "loadSeconds": 2.4598339796066284,
+      "memoryBudgetBytes": 6000000000,
+      "model": "pgtformer",
+      "modelInputShape": [
+        3,
+        3,
+        512,
+        512
+      ],
+      "optimizations": {
+        "centerTail": true,
+        "decoderPrecision": "float16",
+        "fusedCodeAttention": true,
+        "fusedDecoderNorm": true,
+        "fusedEncoderNorm": false,
+        "preservesBatchNormOrdering": true
+      },
+      "peakPhysicalFootprintBytes": 2066843088,
+      "pythonRuntime": false,
+      "scale": 1,
+      "seconds": 6.542106986045837,
+      "sourceDownsampling": 1,
+      "temporalWindows": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0
+    },
+    "2": {
+      "backend": "native Swift Core ML / Apple GPU",
+      "centerFrame": 1,
+      "compiledModelCache": true,
+      "decoderSeconds": 10.181734919548035,
+      "decoderUnits": "gpu",
+      "encoderSeconds": 5.050158143043518,
+      "encoderUnits": "gpu",
+      "executionPolicy": "gpu-encoder-decoder-v2",
+      "frames": 8,
+      "inferenceSeconds": 15.23189902305603,
+      "loadSeconds": 0.19981598854064941,
+      "memoryBudgetBytes": 6000000000,
+      "model": "pgtformer",
+      "modelInputShape": [
+        3,
+        3,
+        512,
+        512
+      ],
+      "optimizations": {
+        "centerTail": true,
+        "decoderPrecision": "float16",
+        "fusedCodeAttention": true,
+        "fusedDecoderNorm": true,
+        "fusedEncoderNorm": false,
+        "preservesBatchNormOrdering": true
+      },
+      "peakPhysicalFootprintBytes": 2053686760,
+      "pythonRuntime": false,
+      "scale": 2,
+      "seconds": 15.565258026123047,
+      "sourceDownsampling": 2,
+      "temporalWindows": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          4
+        ],
+        [
+          3,
+          4,
+          5
+        ],
+        [
+          4,
+          5,
+          6
+        ],
+        [
+          5,
+          6,
+          7
+        ],
+        [
+          6,
+          7,
+          7
+        ]
+      ],
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0
+    }
+  },
+  "setupWaitFix": "Removed redundant Foundation waitUntilExit after isRunning became false; the original setup test hung after successful worker exit, and the corrected fresh/repeated setup test passed."
+}

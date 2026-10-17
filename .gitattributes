@@ -1,0 +1,2 @@
+# Unified diffs intentionally contain blank context lines prefixed with spaces.
+docs/development-archive/**/adapter-snapshot.patch -whitespace

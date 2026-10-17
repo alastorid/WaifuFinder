@@ -1,0 +1,675 @@
+{
+  "backend": "Native Swift MLX Metal FlashVSR 1.1 Tiny Streaming",
+  "checks": [
+    "149 tests passed, zero failed, including opt-in real five-frame odd-ROI FlashVSR inference/export",
+    "30-frame native moving clip crosses three streaming chunks; exact frame count/PTS/audio/export assertions passed",
+    "Official BF16 CPU projection/DiT and PyTorch MPS decoder graph output parity passed on all five and thirty visible frames",
+    "Captured Q/K block masks matched official global top-k/locality functions exactly",
+    "Warm loaded-model repeats produced bit-identical outputs after resetting clip state",
+    "SeedVR2 five preserved reconstructed PNGs remained byte-identical after shared native IO extraction",
+    "Algorithm switching reuses preparation/cached results, preserves settings and rejects stale/cancelled results",
+    "Unsupported 2x/8x FlashVSR experiments remain selected and cannot run",
+    "Packaged worker rejects concurrent model residency and insufficient budget; real cancellation completed in 0.025 seconds",
+    "Packaged FlashVSR performed real 30-frame inference after final loader validation and formatting changes",
+    "Actual offscreen Uncover view inspected with configured FlashVSR and degraded ROI preview",
+    "Official/native frame 22 visually inspected side by side",
+    "Swift 6 app build with warnings as errors and deep strict app signature verification passed"
+  ],
+  "date": "2026-10-10",
+  "hashedNativeFiles": 34,
+  "limitations": [
+    "Reference uses official source definitions and BF16 converted official parameters with equivalent masked SDPA, not a measured CUDA kernel run.",
+    "Per-frame correlation/MAE tolerances do not imply pixelwise identity; recorded maximum absolute errors include local differences.",
+    "Benchmarks are small SDR ROI sequences, not full-frame speed claims; model-repeat times include native PNG IO but exclude source decoding/compositing/export.",
+    "GPU utilization was not measured. Model unloading is process exit, not a persistent in-app model pool.",
+    "No scene-cut quality, HDR, non-square-pixel, long-clip or whole-frame FlashVSR validation.",
+    "Physical footprint monitoring samples every 20 ms; MLX allocator limits are advisory, not an instantaneous process hard cap.",
+    "System swap caused by other processes is not controlled. Physical footprint, RSS and MLX allocations overlap and are not summed.",
+    "Production supports only native 4x, whole-region LCSA and memory-preflight-compatible padded geometry. No spatial DiT tiles or low-bit quantization."
+  ],
+  "mlxCore": "0.31.1",
+  "mlxSwift": "0.31.2",
+  "modelRevision": "27561b186ded3402d7c975f4fd722e2885b6135f",
+  "nativeReports": [
+    {
+      "algorithm": "FlashVSR 1.1 Tiny Streaming",
+      "attention": "LCSA Metal sparse online softmax",
+      "backend": "Native Swift MLX FlashVSR 1.1",
+      "colorCorrection": "ADAIN",
+      "firstFrameSeconds": 4.856234908103943,
+      "inputFrames": 5,
+      "inputHeight": 32,
+      "inputWidth": 32,
+      "kvWindows": 3,
+      "localRange": 11,
+      "lookaheadFrames": 4,
+      "memoryBudgetBytes": 6000000000,
+      "mlxPeakBytes": 3753423521,
+      "mlxSwiftVersion": "0.31.2",
+      "modelLoadSeconds": 3.390365958213806,
+      "modelRevision": "27561b186ded3402d7c975f4fd722e2885b6135f",
+      "outputFrames": 5,
+      "outputHeight": 128,
+      "outputWidth": 128,
+      "paddedHeight": 128,
+      "paddedWidth": 128,
+      "peakPhysicalFootprintBytes": 3845983472,
+      "peakRSSBytes": 2564636672,
+      "precision": "bfloat16",
+      "proof": "preserved-five",
+      "pythonRuntime": false,
+      "scale": 4,
+      "seconds": 5.201869964599609,
+      "temporalChunks": 1,
+      "temporalPaddedFrames": 25
+    },
+    {
+      "algorithm": "FlashVSR 1.1 Tiny Streaming",
+      "attention": "LCSA Metal sparse online softmax",
+      "backend": "Native Swift MLX FlashVSR 1.1",
+      "benchmarkInferenceSeconds": [
+        2.7709670066833496
+      ],
+      "benchmarkRepeats": 1,
+      "colorCorrection": "ADAIN",
+      "firstFrameSeconds": 4.044511079788208,
+      "inputFrames": 30,
+      "inputHeight": 32,
+      "inputWidth": 32,
+      "kvWindows": 3,
+      "localRange": 11,
+      "lookaheadFrames": 4,
+      "memoryBudgetBytes": 6000000000,
+      "mlxPeakBytes": 3753456289,
+      "mlxSwiftVersion": "0.31.2",
+      "modelLoadSeconds": 2.7366020679473877,
+      "modelRevision": "27561b186ded3402d7c975f4fd722e2885b6135f",
+      "outputFrames": 30,
+      "outputHeight": 128,
+      "outputWidth": 128,
+      "paddedHeight": 128,
+      "paddedWidth": 128,
+      "peakPhysicalFootprintBytes": 3837512872,
+      "peakRSSBytes": 2844000256,
+      "precision": "bfloat16",
+      "proof": "moving-30-packaged",
+      "pythonRuntime": false,
+      "scale": 4,
+      "seconds": 5.509645104408264,
+      "temporalChunks": 3,
+      "temporalPaddedFrames": 41
+    },
+    {
+      "algorithm": "FlashVSR 1.1 Tiny Streaming",
+      "attention": "LCSA Metal sparse online softmax",
+      "backend": "Native Swift MLX FlashVSR 1.1",
+      "benchmarkInferenceSeconds": [
+        6.192215085029602
+      ],
+      "benchmarkRepeats": 1,
+      "colorCorrection": "ADAIN",
+      "firstFrameSeconds": 8.263345003128052,
+      "inputFrames": 5,
+      "inputHeight": 64,
+      "inputWidth": 40,
+      "kvWindows": 3,
+      "localRange": 11,
+      "lookaheadFrames": 4,
+      "memoryBudgetBytes": 6000000000,
+      "mlxPeakBytes": 4204409520,
+      "mlxSwiftVersion": "0.31.2",
+      "modelLoadSeconds": 3.1530600786209106,
+      "modelRevision": "27561b186ded3402d7c975f4fd722e2885b6135f",
+      "outputFrames": 5,
+      "outputHeight": 253,
+      "outputWidth": 159,
+      "paddedHeight": 256,
+      "paddedWidth": 256,
+      "peakPhysicalFootprintBytes": 4304702632,
+      "peakRSSBytes": 2193211392,
+      "precision": "bfloat16",
+      "proof": "odd-159x253",
+      "pythonRuntime": false,
+      "scale": 4,
+      "seconds": 9.349289059638977,
+      "temporalChunks": 1,
+      "temporalPaddedFrames": 25
+    },
+    {
+      "algorithm": "FlashVSR 1.1 Tiny Streaming",
+      "attention": "LCSA Metal sparse online softmax",
+      "backend": "Native Swift MLX FlashVSR 1.1",
+      "benchmarkInferenceSeconds": [
+        3.1312739849090576,
+        2.646030068397522
+      ],
+      "benchmarkRepeats": 2,
+      "colorCorrection": "ADAIN",
+      "firstFrameSeconds": 4.605633020401001,
+      "inputFrames": 30,
+      "inputHeight": 32,
+      "inputWidth": 32,
+      "kvWindows": 3,
+      "localRange": 11,
+      "lookaheadFrames": 4,
+      "memoryBudgetBytes": 6000000000,
+      "mlxPeakBytes": 3753456289,
+      "mlxSwiftVersion": "0.31.2",
+      "modelLoadSeconds": 3.1442240476608276,
+      "modelRevision": "27561b186ded3402d7c975f4fd722e2885b6135f",
+      "outputFrames": 30,
+      "outputHeight": 128,
+      "outputWidth": 128,
+      "paddedHeight": 128,
+      "paddedWidth": 128,
+      "peakPhysicalFootprintBytes": 3834514672,
+      "peakRSSBytes": 2925723648,
+      "precision": "bfloat16",
+      "proof": "loaded-model-repeat",
+      "pythonRuntime": false,
+      "scale": 4,
+      "seconds": 8.962561964988708,
+      "temporalChunks": 3,
+      "temporalPaddedFrames": 41
+    }
+  ],
+  "officialCapturedBlockSelection": {
+    "entries": 48,
+    "mismatches": 0,
+    "passed": true,
+    "referenceRevision": "cf910c61a60733e610e9c6e8b607f80c3a6c202b"
+  },
+  "officialReferenceComparisons": [
+    {
+      "comparisons": [
+        {
+          "correlation": 0.9999940008406561,
+          "maximumAbsoluteError": 0.25,
+          "meanAbsoluteError": 0.0012741336831822991,
+          "stage": "block_0"
+        },
+        {
+          "correlation": 0.9946876391226168,
+          "maximumAbsoluteError": 2.4453125,
+          "meanAbsoluteError": 0.13619409501552582,
+          "stage": "block_29"
+        },
+        {
+          "correlation": 1.0,
+          "maximumAbsoluteError": 0.0,
+          "meanAbsoluteError": 0.0,
+          "stage": "conditioning"
+        },
+        {
+          "correlation": 0.9943373158666505,
+          "maximumAbsoluteError": 0.91015625,
+          "meanAbsoluteError": 0.07493877410888672,
+          "stage": "latent_0"
+        },
+        {
+          "correlation": 0.9927903766801428,
+          "maximumAbsoluteError": 0.2619458734989166,
+          "meanAbsoluteError": 0.015839949250221252,
+          "stage": "output-000000"
+        },
+        {
+          "correlation": 0.9933965273747529,
+          "maximumAbsoluteError": 0.18484735488891602,
+          "meanAbsoluteError": 0.015376261435449123,
+          "stage": "output-000001"
+        },
+        {
+          "correlation": 0.99156524106724,
+          "maximumAbsoluteError": 0.26482653617858887,
+          "meanAbsoluteError": 0.0158521831035614,
+          "stage": "output-000002"
+        },
+        {
+          "correlation": 0.994015799744428,
+          "maximumAbsoluteError": 0.2449808120727539,
+          "meanAbsoluteError": 0.014253626577556133,
+          "stage": "output-000003"
+        },
+        {
+          "correlation": 0.9950311844638849,
+          "maximumAbsoluteError": 0.21649771928787231,
+          "meanAbsoluteError": 0.01377193909138441,
+          "stage": "output-000004"
+        },
+        {
+          "correlation": 0.9971677567185051,
+          "maximumAbsoluteError": 0.91015625,
+          "meanAbsoluteError": 0.07495936006307602,
+          "stage": "predicted"
+        },
+        {
+          "correlation": 0.9999932959676606,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.0001646165910642594,
+          "stage": "projection_0"
+        },
+        {
+          "correlation": 0.9999968083818993,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.0003918600268661976,
+          "stage": "projection_conv1_0"
+        },
+        {
+          "correlation": 0.9999965501272836,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.00037084874929860234,
+          "stage": "projection_conv1_1"
+        },
+        {
+          "correlation": 0.9999972200744879,
+          "maximumAbsoluteError": 0.0625,
+          "meanAbsoluteError": 0.0020028152503073215,
+          "stage": "projection_conv2"
+        },
+        {
+          "correlation": 0.9999907308694013,
+          "maximumAbsoluteError": 0.25,
+          "meanAbsoluteError": 0.0006516466964967549,
+          "stage": "projection_norm1_0"
+        },
+        {
+          "correlation": 0.9999898185370643,
+          "maximumAbsoluteError": 0.25,
+          "meanAbsoluteError": 0.0006200799834914505,
+          "stage": "projection_norm1_1"
+        },
+        {
+          "correlation": 0.9999881029825439,
+          "maximumAbsoluteError": 0.0625,
+          "meanAbsoluteError": 0.0005687632947228849,
+          "stage": "projection_norm2"
+        },
+        {
+          "correlation": 0.9999917108307923,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.0002208542573498562,
+          "stage": "time"
+        },
+        {
+          "correlation": 0.999996139229338,
+          "maximumAbsoluteError": 0.015625,
+          "meanAbsoluteError": 0.0003892721433658153,
+          "stage": "time_modulation"
+        }
+      ],
+      "fixture": "small",
+      "inputFrames": 5,
+      "maximumOutputAbsoluteError": 0.26482653617858887,
+      "minimumOutputCorrelation": 0.99156524106724,
+      "outputFrames": 5,
+      "passed": true,
+      "reference": "Official BF16 graph, CPU projection/DiT, mps decoder, masked SDPA equivalent to sparse dispatch",
+      "referenceRevision": "cf910c61a60733e610e9c6e8b607f80c3a6c202b",
+      "secondsExcludingLoad": 96.18332481384277,
+      "tolerances": {
+        "minimumOutputCorrelation": 0.99,
+        "outputMeanAbsoluteError": 0.025
+      },
+      "worstOutputMeanAbsoluteError": 0.0158521831035614
+    },
+    {
+      "comparisons": [
+        {
+          "correlation": 0.9999999997602317,
+          "maximumAbsoluteError": 0.00787353515625,
+          "meanAbsoluteError": 5.0427711784095663e-08,
+          "stage": "conditioning"
+        },
+        {
+          "correlation": 0.9999917108307923,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.0002208542573498562,
+          "stage": "time"
+        },
+        {
+          "correlation": 0.999996139229338,
+          "maximumAbsoluteError": 0.015625,
+          "meanAbsoluteError": 0.0003892721433658153,
+          "stage": "time_modulation"
+        },
+        {
+          "correlation": 0.9999970491676222,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.0007464847294613719,
+          "stage": "projection_conv1_0"
+        },
+        {
+          "correlation": 0.999995524215391,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.00040036984137259424,
+          "stage": "projection_norm1_0"
+        },
+        {
+          "correlation": 0.9999970491676222,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.0007464847294613719,
+          "stage": "projection_conv1_1"
+        },
+        {
+          "correlation": 0.999995524215391,
+          "maximumAbsoluteError": 0.125,
+          "meanAbsoluteError": 0.00040036984137259424,
+          "stage": "projection_norm1_1"
+        },
+        {
+          "correlation": 0.9999958700968594,
+          "maximumAbsoluteError": 0.0625,
+          "meanAbsoluteError": 0.0016869542887434363,
+          "stage": "projection_conv2"
+        },
+        {
+          "correlation": 0.9999882407484749,
+          "maximumAbsoluteError": 0.0625,
+          "meanAbsoluteError": 0.0006443868041969836,
+          "stage": "projection_norm2"
+        },
+        {
+          "correlation": 0.9999934855715777,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.00025433648261241615,
+          "stage": "projection_0"
+        },
+        {
+          "correlation": 0.9993635445528732,
+          "maximumAbsoluteError": 0.5234375,
+          "meanAbsoluteError": 0.04433400556445122,
+          "stage": "latent_0"
+        },
+        {
+          "correlation": 0.9999658664514048,
+          "maximumAbsoluteError": 0.12474387884140015,
+          "meanAbsoluteError": 0.003044388024136424,
+          "stage": "output-000000"
+        },
+        {
+          "correlation": 0.9999200314033471,
+          "maximumAbsoluteError": 0.21672606468200684,
+          "meanAbsoluteError": 0.004018167033791542,
+          "stage": "output-000001"
+        },
+        {
+          "correlation": 0.999907197168521,
+          "maximumAbsoluteError": 0.23573100566864014,
+          "meanAbsoluteError": 0.004288293421268463,
+          "stage": "output-000002"
+        },
+        {
+          "correlation": 0.9998681147327046,
+          "maximumAbsoluteError": 0.3235727548599243,
+          "meanAbsoluteError": 0.005295803304761648,
+          "stage": "output-000003"
+        },
+        {
+          "correlation": 0.9998742136387468,
+          "maximumAbsoluteError": 0.32076311111450195,
+          "meanAbsoluteError": 0.00485650822520256,
+          "stage": "output-000004"
+        },
+        {
+          "correlation": 0.9998536350969229,
+          "maximumAbsoluteError": 0.3415405750274658,
+          "meanAbsoluteError": 0.005234751850366592,
+          "stage": "output-000005"
+        },
+        {
+          "correlation": 0.9998563154837206,
+          "maximumAbsoluteError": 0.33875733613967896,
+          "meanAbsoluteError": 0.005192178767174482,
+          "stage": "output-000006"
+        },
+        {
+          "correlation": 0.9997926186163064,
+          "maximumAbsoluteError": 0.47328776121139526,
+          "meanAbsoluteError": 0.006021782290190458,
+          "stage": "output-000007"
+        },
+        {
+          "correlation": 0.9997979470009758,
+          "maximumAbsoluteError": 0.49012893438339233,
+          "meanAbsoluteError": 0.005841519217938185,
+          "stage": "output-000008"
+        },
+        {
+          "correlation": 0.999848491017124,
+          "maximumAbsoluteError": 0.4457250237464905,
+          "meanAbsoluteError": 0.005409834440797567,
+          "stage": "output-000009"
+        },
+        {
+          "correlation": 0.9998687108852624,
+          "maximumAbsoluteError": 0.43659186363220215,
+          "meanAbsoluteError": 0.005119530018419027,
+          "stage": "output-000010"
+        },
+        {
+          "correlation": 0.9998027208124104,
+          "maximumAbsoluteError": 0.4195132255554199,
+          "meanAbsoluteError": 0.005951987113803625,
+          "stage": "output-000011"
+        },
+        {
+          "correlation": 0.999822614197496,
+          "maximumAbsoluteError": 0.39223408699035645,
+          "meanAbsoluteError": 0.005625986028462648,
+          "stage": "output-000012"
+        },
+        {
+          "correlation": 0.9996166401441882,
+          "maximumAbsoluteError": 0.45187854766845703,
+          "meanAbsoluteError": 0.007295382674783468,
+          "stage": "output-000013"
+        },
+        {
+          "correlation": 0.9998822832381312,
+          "maximumAbsoluteError": 0.28332948684692383,
+          "meanAbsoluteError": 0.00533889839425683,
+          "stage": "output-000014"
+        },
+        {
+          "correlation": 0.9995154755962802,
+          "maximumAbsoluteError": 0.5190237760543823,
+          "meanAbsoluteError": 0.012022634036839008,
+          "stage": "output-000015"
+        },
+        {
+          "correlation": 0.9986486410968644,
+          "maximumAbsoluteError": 0.8942117691040039,
+          "meanAbsoluteError": 0.016604634001851082,
+          "stage": "output-000016"
+        },
+        {
+          "correlation": 0.9983782331977379,
+          "maximumAbsoluteError": 0.7309672832489014,
+          "meanAbsoluteError": 0.01903618685901165,
+          "stage": "output-000017"
+        },
+        {
+          "correlation": 0.9985394585995402,
+          "maximumAbsoluteError": 0.8058512210845947,
+          "meanAbsoluteError": 0.021909913048148155,
+          "stage": "output-000018"
+        },
+        {
+          "correlation": 0.9984118753065889,
+          "maximumAbsoluteError": 0.8349265456199646,
+          "meanAbsoluteError": 0.020417608320713043,
+          "stage": "output-000019"
+        },
+        {
+          "correlation": 0.9986131929909551,
+          "maximumAbsoluteError": 0.71244215965271,
+          "meanAbsoluteError": 0.02059284783899784,
+          "stage": "output-000020"
+        },
+        {
+          "correlation": 0.9999934294278567,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.00024335843045264482,
+          "stage": "projection_1"
+        },
+        {
+          "correlation": 0.9992210669381478,
+          "maximumAbsoluteError": 0.7109375,
+          "meanAbsoluteError": 0.05732906982302666,
+          "stage": "latent_1"
+        },
+        {
+          "correlation": 0.9985317527491188,
+          "maximumAbsoluteError": 0.5938962697982788,
+          "meanAbsoluteError": 0.018149113282561302,
+          "stage": "output-000021"
+        },
+        {
+          "correlation": 0.9972668656509329,
+          "maximumAbsoluteError": 0.9864406585693359,
+          "meanAbsoluteError": 0.02335125207901001,
+          "stage": "output-000022"
+        },
+        {
+          "correlation": 0.9992757227453444,
+          "maximumAbsoluteError": 0.8301393985748291,
+          "meanAbsoluteError": 0.011583746410906315,
+          "stage": "output-000023"
+        },
+        {
+          "correlation": 0.9998687501070095,
+          "maximumAbsoluteError": 0.24996459484100342,
+          "meanAbsoluteError": 0.00653800368309021,
+          "stage": "output-000024"
+        },
+        {
+          "correlation": 0.9998996755909935,
+          "maximumAbsoluteError": 0.23797178268432617,
+          "meanAbsoluteError": 0.0056608691811561584,
+          "stage": "output-000025"
+        },
+        {
+          "correlation": 0.9999088046711895,
+          "maximumAbsoluteError": 0.26182955503463745,
+          "meanAbsoluteError": 0.00523986155167222,
+          "stage": "output-000026"
+        },
+        {
+          "correlation": 0.9998959986799368,
+          "maximumAbsoluteError": 0.25459766387939453,
+          "meanAbsoluteError": 0.005605184938758612,
+          "stage": "output-000027"
+        },
+        {
+          "correlation": 0.9999001402542951,
+          "maximumAbsoluteError": 0.26022982597351074,
+          "meanAbsoluteError": 0.005514717195183039,
+          "stage": "output-000028"
+        },
+        {
+          "correlation": 0.9999935903102656,
+          "maximumAbsoluteError": 0.00390625,
+          "meanAbsoluteError": 0.00024898932315409184,
+          "stage": "projection_2"
+        },
+        {
+          "correlation": 0.9999936025583517,
+          "maximumAbsoluteError": 0.25,
+          "meanAbsoluteError": 0.0013679865514859557,
+          "stage": "block_0"
+        },
+        {
+          "correlation": 0.9992003347491472,
+          "maximumAbsoluteError": 0.875,
+          "meanAbsoluteError": 0.05206049978733063,
+          "stage": "block_29"
+        },
+        {
+          "correlation": 0.9997353757182819,
+          "maximumAbsoluteError": 0.3984375,
+          "meanAbsoluteError": 0.040718451142311096,
+          "stage": "predicted"
+        },
+        {
+          "correlation": 0.9996944965951761,
+          "maximumAbsoluteError": 0.3984375,
+          "meanAbsoluteError": 0.040756382048130035,
+          "stage": "latent_2"
+        },
+        {
+          "correlation": 0.9998373817225784,
+          "maximumAbsoluteError": 0.31049054861068726,
+          "meanAbsoluteError": 0.006294285878539085,
+          "stage": "output-000029"
+        }
+      ],
+      "fixture": "moving",
+      "inputFrames": 30,
+      "maximumOutputAbsoluteError": 0.9864406585693359,
+      "minimumOutputCorrelation": 0.9972668656509329,
+      "outputFrames": 30,
+      "passed": true,
+      "reference": "Official BF16 graph, CPU projection/DiT, mps decoder, masked SDPA equivalent to sparse dispatch",
+      "referenceRevision": "cf910c61a60733e610e9c6e8b607f80c3a6c202b",
+      "secondsExcludingLoad": 153.99166321754456,
+      "tolerances": {
+        "minimumOutputCorrelation": 0.99,
+        "outputMeanAbsoluteError": 0.025
+      },
+      "worstOutputMeanAbsoluteError": 0.02335125207901001
+    }
+  ],
+  "parameters": 899,
+  "platform": "macOS arm64, 16 GB unified memory",
+  "precision": "bfloat16",
+  "publishedRelease": {
+    "checks": [
+      "All 34 remote LFS object checksums match the local converted model.",
+      "Hosted pinned manifest, prompt and supporting files downloaded; 33 previously verified weight shards reused.",
+      "Completed partial download recovered without a network request.",
+      "Invalid downloaded checksum rejected; prior file preserved and invalid partial removed.",
+      "Normal setup downloaded/reused converted files, built native workers and configured FlashVSR successfully.",
+      "Five native reconstructed PNGs remained byte-identical after adding Safetensors attribution metadata.",
+      "148 default tests passed, one explicit real-inference skip; app build and strict signature verification passed."
+    ],
+    "convertedWeightBytes": 3508653606,
+    "manifestSHA256": "d8056d0b99fa7c79947406d6a3dbfc15c7a16060f38201e0fb4a6497a0fd2318",
+    "metadataTensorPayloadsUnchanged": 34,
+    "originalCheckpointsDownloadedByDefault": false,
+    "pythonRequiredForSetup": false,
+    "repository": "alastorid/FlashVSR-v1.1-Tiny-Swift-MLX-BF16",
+    "revision": "40fdf9f9e6366315de2144e072ae6b41799675f9",
+    "supportFilesSHA256": {
+      "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "NOTICE": "5cfe95727b34354b25e02a2afc604a2e20aa956d5ff237a8edc37983e2edc532",
+      "README.md": "d3fd600d7dfffb1a7e9fbf4e20628b13d0e1a9b1abf411d6bdb601564aa71c99",
+      "validation.json": "eb32c1b7fbe3d4f9e60f77e77f1547c97f6f568eac9234e87c39feb1f78c0e62"
+    }
+  },
+  "sourceRevision": "cf910c61a60733e610e9c6e8b607f80c3a6c202b",
+  "sparseKernelReference": {
+    "bfloat16MaximumAbsoluteError": 0.0009765625,
+    "description": "height/width/current temporal windows/key temporal windows; geometry changes on one attention instance",
+    "float32MaximumAbsoluteError": 1.3709068e-06,
+    "geometries": [
+      [
+        1,
+        2,
+        3,
+        3
+      ],
+      [
+        2,
+        1,
+        1,
+        4
+      ],
+      [
+        2,
+        2,
+        1,
+        4
+      ]
+    ]
+  }
+}

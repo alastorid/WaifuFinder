@@ -1,0 +1,11 @@
+{
+  "repository": "alastorid/WD-SwinV2-Tagger-v3-CoreML",
+  "revision": "95615611e0cb63e081b6c9904ee9d4047c90e7d3",
+  "manifestSHA256": "2d55b852d9531da0bf6f3e83cffab7e7ed7888833720350d7d1f9442e5daf1b0",
+  "supportFilesSHA256": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "60cc7513971e11ccaf4ed8a3fbb595fbef95f9c7631c3666805b2ae42fd4f5da",
+    "README.md": "6d31a9a8710872c24d8a75fb6b88d615fcbe60372227d56952cbcc074e4b7556",
+    "validation.json": "d6178cceb90a7fa8f640b0bc6695517c2bdbbed814ade4f930d8afd21f8fbc6e"
+  }
+}

@@ -1,0 +1,798 @@
+{
+  "hardware": {
+    "chip": "Apple M3",
+    "GPUCores": 8,
+    "unifiedMemoryGB": 16
+  },
+  "architecture": {
+    "algorithm": "realesrgan-x2plus",
+    "blocks": 23,
+    "features": 64,
+    "growth": 32,
+    "scale": 2,
+    "weightsSHA256": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb",
+    "architectureSHA256": "6aa8eb3f77e918b90eeff4ebfaf8745abe0c40eb8fcc03abbc1928693d70ab58",
+    "basicsrRevision": "8d56e3a045f9fb3e1d8872f92ee4a4f07f886b0a",
+    "firstConvFusion": true,
+    "inputSizes": [
+      256,
+      384,
+      522
+    ],
+    "adaptiveContextMinimum": 160
+  },
+  "f32AlgebraicFusionChecks": [
+    {
+      "name": "face48-522",
+      "size": 522,
+      "width": 48,
+      "height": 48,
+      "fusionMaximumError": 2.8908252716064453e-06,
+      "fusionMeanError": 2.480328191722947e-07
+    },
+    {
+      "name": "face48-256",
+      "size": 256,
+      "width": 48,
+      "height": 48,
+      "fusionMaximumError": 2.682209014892578e-06,
+      "fusionMeanError": 2.4335980697287596e-07
+    },
+    {
+      "name": "face96-522",
+      "size": 522,
+      "width": 96,
+      "height": 96,
+      "fusionMaximumError": 2.4139881134033203e-06,
+      "fusionMeanError": 2.1461875121531193e-07
+    },
+    {
+      "name": "face96-256",
+      "size": 256,
+      "width": 96,
+      "height": 96,
+      "fusionMaximumError": 2.5033950805664062e-06,
+      "fusionMeanError": 2.1421864460080542e-07
+    },
+    {
+      "name": "edge33-522",
+      "size": 522,
+      "width": 33,
+      "height": 19,
+      "fusionMaximumError": 3.039836883544922e-06,
+      "fusionMeanError": 5.088912757855724e-07
+    },
+    {
+      "name": "edge33-256",
+      "size": 256,
+      "width": 33,
+      "height": 19,
+      "fusionMaximumError": 2.9206275939941406e-06,
+      "fusionMeanError": 5.049125206824101e-07
+    },
+    {
+      "name": "texture224-522",
+      "size": 522,
+      "width": 224,
+      "height": 167,
+      "fusionMaximumError": 8.344650268554688e-06,
+      "fusionMeanError": 7.148956910896231e-07
+    },
+    {
+      "name": "texture224-384",
+      "size": 384,
+      "width": 224,
+      "height": 167,
+      "fusionMaximumError": 9.804964065551758e-06,
+      "fusionMeanError": 7.217369102363591e-07
+    }
+  ],
+  "contextChecks": [
+    {
+      "name": "face48",
+      "size": 256,
+      "maximumAbsoluteError": 4.00543212890625e-05,
+      "meanAbsoluteError": 2.171963842556579e-06
+    },
+    {
+      "name": "face96",
+      "size": 256,
+      "maximumAbsoluteError": 0.0007748603820800781,
+      "meanAbsoluteError": 2.0570882043102756e-05
+    },
+    {
+      "name": "edge33",
+      "size": 256,
+      "maximumAbsoluteError": 2.1576881408691406e-05,
+      "meanAbsoluteError": 1.8246862509840867e-06
+    },
+    {
+      "name": "texture224",
+      "size": 384,
+      "maximumAbsoluteError": 0.0018247365951538086,
+      "meanAbsoluteError": 2.1278896383591928e-05
+    }
+  ],
+  "rejected160PixelContext": {
+    "maximumAbsoluteError": 0.0048264265060424805,
+    "meanAbsoluteError": 0.0002025048015639186,
+    "gate": [
+      0.002,
+      0.0002
+    ]
+  },
+  "nativeOriginalModelChecks": {
+    "previous": {
+      "loadSeconds": 2.7526400089263916,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0021944642066955566,
+          "meanAbsoluteError": 0.0002783815238753159,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 0.17374193668365479,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004576981067657471,
+          "meanAbsoluteError": 0.0002645799325811968,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 0.1685999631881714,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0038352608680725098,
+          "meanAbsoluteError": 0.0004266473578050503,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 0.16966593265533447,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00668102502822876,
+          "meanAbsoluteError": 0.00047618807855966154,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 0.16941702365875244,
+          "size": 522
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 76989064,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1025,
+          "unknown": 2766
+        }
+      },
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "all"
+    },
+    "GPU": {
+      "loadSeconds": 0.7356719970703125,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.002096235752105713,
+          "meanAbsoluteError": 0.00019855283196158603,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 1.2581199407577515,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0018474459648132324,
+          "meanAbsoluteError": 0.00019774417474776945,
+          "name": "face48-256",
+          "passed": true,
+          "seconds": 0.4369699954986572,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0021891146898269653,
+          "meanAbsoluteError": 0.00018135056670155644,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 1.151811957359314,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0019216537475585938,
+          "meanAbsoluteError": 0.00018246393744506909,
+          "name": "face96-256",
+          "passed": true,
+          "seconds": 0.42760002613067627,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0018963217735290527,
+          "meanAbsoluteError": 0.0003419771180515401,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 1.192965030670166,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0018770098686218262,
+          "meanAbsoluteError": 0.000333055145820679,
+          "name": "edge33-256",
+          "passed": true,
+          "seconds": 0.4074610471725464,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006647944450378418,
+          "meanAbsoluteError": 0.0005955265553250281,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 1.1567039489746094,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0075716376304626465,
+          "meanAbsoluteError": 0.0005843207291772896,
+          "name": "texture224-384",
+          "passed": true,
+          "seconds": 0.6753689050674438,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 515703648,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "gpu": 1024,
+          "unknown": 2765
+        }
+      },
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "gpu"
+    },
+    "ANE": {
+      "loadSeconds": 0.10446703433990479,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0021944642066955566,
+          "meanAbsoluteError": 0.0002783815238753159,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 0.17560791969299316,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0021944642066955566,
+          "meanAbsoluteError": 0.0002783815238753159,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 0.16761994361877441,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003055870532989502,
+          "meanAbsoluteError": 0.00028002674377321284,
+          "name": "face48-256",
+          "passed": true,
+          "seconds": 0.08003497123718262,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003055870532989502,
+          "meanAbsoluteError": 0.00028002674377321284,
+          "name": "face48-256",
+          "passed": true,
+          "seconds": 0.04110407829284668,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004576981067657471,
+          "meanAbsoluteError": 0.0002645799325811968,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 0.2167060375213623,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.004576981067657471,
+          "meanAbsoluteError": 0.0002645799325811968,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 0.16805803775787354,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0029477179050445557,
+          "meanAbsoluteError": 0.000265068670820648,
+          "name": "face96-256",
+          "passed": true,
+          "seconds": 0.10328304767608643,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0029477179050445557,
+          "meanAbsoluteError": 0.000265068670820648,
+          "name": "face96-256",
+          "passed": true,
+          "seconds": 0.04146707057952881,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0038352608680725098,
+          "meanAbsoluteError": 0.0004266473578050503,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 0.22254693508148193,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0038352608680725098,
+          "meanAbsoluteError": 0.0004266473578050503,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 0.16512000560760498,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0033462047576904297,
+          "meanAbsoluteError": 0.00042569128413234603,
+          "name": "edge33-256",
+          "passed": true,
+          "seconds": 0.1156010627746582,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0033462047576904297,
+          "meanAbsoluteError": 0.00042569128413234603,
+          "name": "edge33-256",
+          "passed": true,
+          "seconds": 0.04026901721954346,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00668102502822876,
+          "meanAbsoluteError": 0.00047618807855966154,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 0.2337939739227295,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00668102502822876,
+          "meanAbsoluteError": 0.00047618807855966154,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 0.17451798915863037,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006815433502197266,
+          "meanAbsoluteError": 0.00048685786295553395,
+          "name": "texture224-384",
+          "passed": true,
+          "seconds": 0.1444849967956543,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006815433502197266,
+          "meanAbsoluteError": 0.00048685786295553395,
+          "name": "texture224-384",
+          "passed": true,
+          "seconds": 0.09445405006408691,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 53822064,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1024,
+          "unknown": 2765
+        }
+      },
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "ane"
+    },
+    "automatic": {
+      "loadSeconds": 6.234876990318298,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0021944642066955566,
+          "meanAbsoluteError": 0.0002783815238753159,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 0.17321908473968506,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0021944642066955566,
+          "meanAbsoluteError": 0.0002783815238753159,
+          "name": "face48-522",
+          "passed": true,
+          "seconds": 0.16553306579589844,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003055870532989502,
+          "meanAbsoluteError": 0.00028002674377321284,
+          "name": "face48-256",
+          "passed": true,
+          "seconds": 0.09531795978546143,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003055870532989502,
+          "meanAbsoluteError": 0.00028002674377321284,
+          "name": "face48-256",
+          "passed": true,
+          "seconds": 0.04058504104614258,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004576981067657471,
+          "meanAbsoluteError": 0.0002645799325811968,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 0.23144400119781494,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.004576981067657471,
+          "meanAbsoluteError": 0.0002645799325811968,
+          "name": "face96-522",
+          "passed": true,
+          "seconds": 0.17217397689819336,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0029477179050445557,
+          "meanAbsoluteError": 0.000265068670820648,
+          "name": "face96-256",
+          "passed": true,
+          "seconds": 0.11030101776123047,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0029477179050445557,
+          "meanAbsoluteError": 0.000265068670820648,
+          "name": "face96-256",
+          "passed": true,
+          "seconds": 0.04122304916381836,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0038352608680725098,
+          "meanAbsoluteError": 0.0004266473578050503,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 0.2315129041671753,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0038352608680725098,
+          "meanAbsoluteError": 0.0004266473578050503,
+          "name": "edge33-522",
+          "passed": true,
+          "seconds": 0.16815698146820068,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0033462047576904297,
+          "meanAbsoluteError": 0.00042569128413234603,
+          "name": "edge33-256",
+          "passed": true,
+          "seconds": 0.11911606788635254,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0033462047576904297,
+          "meanAbsoluteError": 0.00042569128413234603,
+          "name": "edge33-256",
+          "passed": true,
+          "seconds": 0.040802955627441406,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00668102502822876,
+          "meanAbsoluteError": 0.00047618807855966154,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 0.2438809871673584,
+          "size": 522
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00668102502822876,
+          "meanAbsoluteError": 0.00047618807855966154,
+          "name": "texture224-522",
+          "passed": true,
+          "seconds": 0.17585992813110352,
+          "size": 522
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006815433502197266,
+          "meanAbsoluteError": 0.00048685786295553395,
+          "name": "texture224-384",
+          "passed": true,
+          "seconds": 0.1328589916229248,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006815433502197266,
+          "meanAbsoluteError": 0.00048685786295553395,
+          "name": "texture224-384",
+          "passed": true,
+          "seconds": 0.09376001358032227,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 81003144,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1024,
+          "unknown": 2765
+        }
+      },
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "all"
+    }
+  },
+  "ANEHardwareEvidence": {
+    "samples": 30,
+    "maximumANEPowerWatts": 12.295618057250977,
+    "maximumGPUPowerWatts": 0.4145999550819397,
+    "scope": "Native ANE predictions overlapping power-counter sampling; automatic configuration also prefers ANE for all 1024 model operations"
+  },
+  "nativeImageBenchmark": {
+    "original": {
+      "geometry": [
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192"
+      ],
+      "loadSeconds": 0.09122204780578613,
+      "passed": true,
+      "peakPhysicalFootprintBytes": 34603560,
+      "secondsPerImage": [
+        0.18905508518218994,
+        0.17750096321105957,
+        0.17441201210021973,
+        0.17168307304382324,
+        0.1734539270401001,
+        0.1752469539642334,
+        0.1750020980834961,
+        0.17427706718444824
+      ],
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "all"
+    },
+    "optimized": {
+      "geometry": [
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192",
+        "192x192"
+      ],
+      "loadSeconds": 0.0954359769821167,
+      "passed": true,
+      "peakPhysicalFootprintBytes": 38158912,
+      "secondsPerImage": [
+        0.0821380615234375,
+        0.05066406726837158,
+        0.0490570068359375,
+        0.049021005630493164,
+        0.04930400848388672,
+        0.05016791820526123,
+        0.04987895488739014,
+        0.049877047538757324
+      ],
+      "thermalStateAtEnd": 0,
+      "thermalStateAtStart": 0,
+      "units": "all"
+    },
+    "medianSpeedup": 3.5026875745386667,
+    "inputTensorBytesBefore": 3269808,
+    "inputTensorBytesAfter": 393216
+  },
+  "nativePixelCheck": {
+    "passed": true,
+    "reference": "Original pretrained FP32 RRDBNet, canonical 522 input",
+    "repeatPixelsIdentical": true,
+    "errors": {
+      "before": {
+        "maximumAbsoluteError": 0.004520326852798462,
+        "meanAbsoluteError": 0.000994599424302578
+      },
+      "after": {
+        "maximumAbsoluteError": 0.004520326852798462,
+        "meanAbsoluteError": 0.0009949258528649807
+      }
+    }
+  },
+  "partialTileCheck": {
+    "passed": true,
+    "geometry": [
+      1090,
+      38
+    ],
+    "maximumByteDifference": 1,
+    "meanByteDifference": 0.0045871559633027525,
+    "scope": "Native overlap/blending and odd partial tiles versus previous implementation"
+  },
+  "productOriginalModelCheck": {
+    "passed": true,
+    "scope": "Actual native 2x video PNGs versus original FP32 checkpoint with canonical 522 reflection padding",
+    "weightsSHA256": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb",
+    "frames": [
+      {
+        "frame": 0,
+        "maximumAbsoluteError": 0.0034214258193969727,
+        "meanAbsoluteError": 0.0010005399817600846
+      },
+      {
+        "frame": 1,
+        "maximumAbsoluteError": 0.0037658214569091797,
+        "meanAbsoluteError": 0.0009972506668418646
+      },
+      {
+        "frame": 2,
+        "maximumAbsoluteError": 0.0032511353492736816,
+        "meanAbsoluteError": 0.0010040774941444397
+      },
+      {
+        "frame": 3,
+        "maximumAbsoluteError": 0.003156222403049469,
+        "meanAbsoluteError": 0.0010005950462073088
+      },
+      {
+        "frame": 4,
+        "maximumAbsoluteError": 0.0034334659576416016,
+        "meanAbsoluteError": 0.0010053260484710336
+      },
+      {
+        "frame": 5,
+        "maximumAbsoluteError": 0.003657594323158264,
+        "meanAbsoluteError": 0.0010041787754744291
+      },
+      {
+        "frame": 6,
+        "maximumAbsoluteError": 0.0038900673389434814,
+        "meanAbsoluteError": 0.001005176454782486
+      },
+      {
+        "frame": 7,
+        "maximumAbsoluteError": 0.003665834665298462,
+        "meanAbsoluteError": 0.0010054343147203326
+      }
+    ]
+  },
+  "productTests": {
+    "passed": 21,
+    "failed": 0,
+    "skippedOtherModelFixtures": 3,
+    "scales": {
+      "1": {
+        "backend": "native Swift Core ML",
+        "computeUnits": "all",
+        "frames": 2,
+        "inferenceSeconds": 0.12606394290924072,
+        "loadSeconds": 0.08899903297424316,
+        "memoryBudgetBytes": 6000000000,
+        "memoryScope": "whole application process; sampled every 20 ms; checked between predictions",
+        "model": "realesrgan-x2plus",
+        "peakPhysicalFootprintBytes": 77300576,
+        "predictionSizes": [
+          256,
+          256
+        ],
+        "pythonRuntime": false,
+        "reusedInputBuffers": true,
+        "scale": 1,
+        "seconds": 0.36799097061157227,
+        "singleTileBlendBypass": true,
+        "sourceDownsampling": 1,
+        "stagesPerFrame": 1
+      },
+      "2": {
+        "backend": "native Swift Core ML",
+        "computeUnits": "all",
+        "frames": 8,
+        "inferenceSeconds": 0.38128209114074707,
+        "loadSeconds": 0.08235108852386475,
+        "memoryBudgetBytes": 6000000000,
+        "memoryScope": "whole application process; sampled every 20 ms; checked between predictions",
+        "model": "realesrgan-x2plus",
+        "peakPhysicalFootprintBytes": 88114016,
+        "predictionSizes": [
+          256,
+          256,
+          256,
+          256,
+          256,
+          256,
+          256,
+          256
+        ],
+        "pythonRuntime": false,
+        "reusedInputBuffers": true,
+        "scale": 2,
+        "seconds": 0.8323550224304199,
+        "singleTileBlendBypass": true,
+        "sourceDownsampling": 2,
+        "stagesPerFrame": 1
+      }
+    }
+  },
+  "coldCompilationObservation": {
+    "seconds": 6.407866954803467,
+    "peakPhysicalFootprintBytes": 79954592,
+    "scope": "First Core ML load of the newly sealed flexible model; subsequent loads reuse the compiled backend cache"
+  },
+  "limitations": [
+    "Measurements apply to these SDR ROI fixtures on this machine.",
+    "ANE driver/workspace memory is not fully represented by process footprint. Standalone process footprint stayed roughly 35\u201338 MB; no overall memory reduction is claimed.",
+    "Adaptive context is a measured approximation of canonical 522 padding: stricter .002 maximum/.0002 mean context gates passed on the recorded fixtures.",
+    "Large tiles retain the existing 522 path. RealESRGAN remains frame-by-frame restoration.",
+    "Production app memory is sampled every 20 ms and checked between predictions, rather than terminating the UI process mid-prediction."
+  ]
+}

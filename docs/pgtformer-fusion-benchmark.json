@@ -1,0 +1,1079 @@
+{
+  "hardware": "Apple M3 / 16 GB",
+  "accepted": "Nine native scaled-dot-product attention blocks in the FP32 code-prediction transformer; decoder unchanged.",
+  "defaultEncoderNormFusion": false,
+  "summary": {
+    "baseline": {
+      "wallSeconds": 19.185629937499996,
+      "cpuSeconds": 2.405257999999999,
+      "inferenceSeconds": 16.832070648670197,
+      "encoderSeconds": 5.952198624610901,
+      "decoderSeconds": 10.879868388175964,
+      "peakPhysicalFootprintBytes": 2187224624
+    },
+    "norm": {
+      "wallSeconds": 18.507835,
+      "cpuSeconds": 2.1664035000000004,
+      "inferenceSeconds": 16.639364063739777,
+      "encoderSeconds": 5.9536720514297485,
+      "decoderSeconds": 10.685688495635986,
+      "peakPhysicalFootprintBytes": 2202732128,
+      "reductionPercent": {
+        "wallSeconds": 3.5328260771630315,
+        "inferenceSeconds": 1.1448774720158705,
+        "encoderSeconds": -0.024754328808107573,
+        "peakPhysicalFootprintBytes": -0.709003722335555
+      }
+    },
+    "attention": {
+      "wallSeconds": 17.0293313335,
+      "cpuSeconds": 1.8463729999999998,
+      "inferenceSeconds": 15.770417392253876,
+      "encoderSeconds": 5.165894567966461,
+      "decoderSeconds": 10.604519486427307,
+      "peakPhysicalFootprintBytes": 2063476272,
+      "reductionPercent": {
+        "wallSeconds": 11.239133721563766,
+        "inferenceSeconds": 6.3073241467186625,
+        "encoderSeconds": 13.210312797581425,
+        "peakPhysicalFootprintBytes": 5.657779756232295
+      }
+    }
+  },
+  "measurements": [
+    {
+      "pair": 0,
+      "variant": "baseline",
+      "wallSeconds": 19.266577124999998,
+      "cpuSeconds": 2.503933,
+      "pngByteParityWithBaseline": true,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 10.474938869476318,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 5.879798054695129,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 16.354741096496582,
+        "loadSeconds": 2.3399150371551514,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedDecoderNorm": true,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2171405872,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 19.019976019859314,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0
+      }
+    },
+    {
+      "pair": 0,
+      "variant": "norm",
+      "wallSeconds": 17.590159416000002,
+      "cpuSeconds": 2.1660500000000003,
+      "pngByteParityWithBaseline": false,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 10.094687938690186,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 5.5853201150894165,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 15.680013179779053,
+        "loadSeconds": 1.3422569036483765,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": true,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2202240608,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 17.34317398071289,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0
+      }
+    },
+    {
+      "pair": 0,
+      "variant": "attention",
+      "wallSeconds": 18.036012041999996,
+      "cpuSeconds": 2.0608000000000004,
+      "pngByteParityWithBaseline": true,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 10.87925910949707,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 5.322363972663879,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 16.2016259431839,
+        "loadSeconds": 1.3784769773483276,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedCodeAttention": true,
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": false,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2077869640,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 17.82434093952179,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0
+      }
+    },
+    {
+      "pair": 1,
+      "variant": "attention",
+      "wallSeconds": 16.022650625000004,
+      "cpuSeconds": 1.6319459999999992,
+      "pngByteParityWithBaseline": true,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 10.329779863357544,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 5.009425163269043,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 15.339208841323853,
+        "loadSeconds": 0.19483697414398193,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedCodeAttention": true,
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": false,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2049082904,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 15.808948993682861,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 0
+      }
+    },
+    {
+      "pair": 1,
+      "variant": "norm",
+      "wallSeconds": 19.425510583999994,
+      "cpuSeconds": 2.1667570000000005,
+      "pngByteParityWithBaseline": false,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 11.276689052581787,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 6.322023987770081,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 17.5987149477005,
+        "loadSeconds": 1.3740719556808472,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": true,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2203223648,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 19.19998598098755,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 1
+      }
+    },
+    {
+      "pair": 1,
+      "variant": "baseline",
+      "wallSeconds": 19.104682749999995,
+      "cpuSeconds": 2.306582999999998,
+      "pngByteParityWithBaseline": true,
+      "report": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 11.28479790687561,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 6.024599194526672,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 17.30940020084381,
+        "loadSeconds": 1.288451075553894,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedDecoderNorm": true,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2203043376,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 18.87854504585266,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 1
+      }
+    }
+  ],
+  "graphStats": {
+    "pgtformer": {
+      "total": 2811,
+      "operations": {
+        "const": 1752,
+        "sub": 19,
+        "mul": 24,
+        "conv": 62,
+        "batch_norm": 46,
+        "relu": 27,
+        "max_pool": 1,
+        "add": 92,
+        "avg_pool": 4,
+        "upsample_nearest_neighbor": 3,
+        "sigmoid": 3,
+        "concat": 3,
+        "upsample_bilinear": 2,
+        "reshape": 248,
+        "transpose": 172,
+        "reduce_mean": 36,
+        "square": 17,
+        "sqrt": 17,
+        "real_div": 16,
+        "silu": 15,
+        "pad": 4,
+        "layer_norm": 35,
+        "linear": 96,
+        "slice_by_index": 24,
+        "matmul": 34,
+        "softmax": 17,
+        "gelu": 17,
+        "gather": 17,
+        "reduce_argmax": 1,
+        "greater_equal": 1,
+        "select": 1,
+        "reduce_sum": 1,
+        "tile": 4
+      }
+    },
+    "pgt-fusion-norm": {
+      "total": 2676,
+      "operations": {
+        "const": 1707,
+        "sub": 4,
+        "mul": 24,
+        "conv": 62,
+        "batch_norm": 46,
+        "relu": 27,
+        "max_pool": 1,
+        "add": 77,
+        "avg_pool": 4,
+        "upsample_nearest_neighbor": 3,
+        "sigmoid": 3,
+        "concat": 3,
+        "upsample_bilinear": 2,
+        "reshape": 248,
+        "transpose": 172,
+        "layer_norm": 50,
+        "silu": 15,
+        "pad": 4,
+        "linear": 96,
+        "slice_by_index": 24,
+        "matmul": 34,
+        "softmax": 17,
+        "gelu": 17,
+        "gather": 17,
+        "reduce_argmax": 1,
+        "greater_equal": 1,
+        "select": 1,
+        "reduce_sum": 1,
+        "reduce_mean": 6,
+        "square": 2,
+        "sqrt": 2,
+        "tile": 4,
+        "real_div": 1
+      }
+    },
+    "pgt-fusion-attention": {
+      "total": 2784,
+      "operations": {
+        "const": 1725,
+        "sub": 19,
+        "mul": 15,
+        "conv": 62,
+        "batch_norm": 46,
+        "relu": 27,
+        "max_pool": 1,
+        "add": 92,
+        "avg_pool": 4,
+        "upsample_nearest_neighbor": 3,
+        "sigmoid": 3,
+        "concat": 3,
+        "upsample_bilinear": 2,
+        "reshape": 275,
+        "transpose": 172,
+        "reduce_mean": 36,
+        "square": 17,
+        "sqrt": 17,
+        "real_div": 16,
+        "silu": 15,
+        "pad": 4,
+        "layer_norm": 35,
+        "linear": 96,
+        "slice_by_index": 24,
+        "matmul": 16,
+        "softmax": 8,
+        "gelu": 17,
+        "gather": 17,
+        "scaled_dot_product_attention": 9,
+        "reduce_argmax": 1,
+        "greater_equal": 1,
+        "select": 1,
+        "reduce_sum": 1,
+        "tile": 4
+      }
+    }
+  },
+  "originalNetworkReferenceGeneration": {
+    "model": "pgtformer",
+    "scope": "Actual product video inputs, preprocessing and native graph versus original pretrained network",
+    "passed": true,
+    "frames": [
+      {
+        "frame": 0,
+        "window": [
+          0,
+          0,
+          1
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.013160884380340576,
+        "meanAbsoluteError": 8.180399163393304e-05
+      },
+      {
+        "frame": 1,
+        "window": [
+          0,
+          1,
+          2
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.01537981629371643,
+        "meanAbsoluteError": 8.932689524954185e-05
+      },
+      {
+        "frame": 2,
+        "window": [
+          1,
+          2,
+          3
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.013586729764938354,
+        "meanAbsoluteError": 0.00011335056478856131
+      },
+      {
+        "frame": 3,
+        "window": [
+          2,
+          3,
+          4
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.014907270669937134,
+        "meanAbsoluteError": 9.071586100617424e-05
+      },
+      {
+        "frame": 4,
+        "window": [
+          3,
+          4,
+          5
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.012558221817016602,
+        "meanAbsoluteError": 9.717844659462571e-05
+      },
+      {
+        "frame": 5,
+        "window": [
+          4,
+          5,
+          6
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.009725838899612427,
+        "meanAbsoluteError": 8.610969962319359e-05
+      },
+      {
+        "frame": 6,
+        "window": [
+          5,
+          6,
+          7
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.015181079506874084,
+        "meanAbsoluteError": 0.00012718189100269228
+      },
+      {
+        "frame": 7,
+        "window": [
+          6,
+          7,
+          7
+        ],
+        "inputMaximumError": 0.0,
+        "maximumAbsoluteError": 0.014310456812381744,
+        "meanAbsoluteError": 0.00014974609075579792
+      }
+    ]
+  },
+  "encoderNormValidation": {
+    "backend": "native Swift Core ML",
+    "decoderUnits": "gpu",
+    "encoderUnits": "gpu",
+    "loadSeconds": 2.8730820417404175,
+    "maximumAbsoluteError": 0.016909509897232056,
+    "meanAbsoluteError": 0.00015762679654482992,
+    "measurements": [
+      {
+        "decoderSeconds": 1.48848295211792,
+        "encoderSeconds": 0.8714809417724609,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.012677013874053955,
+        "meanAbsoluteError": 8.39920463995569e-05,
+        "passed": true,
+        "reference": "000000.safetensors"
+      },
+      {
+        "decoderSeconds": 1.3886889219284058,
+        "encoderSeconds": 0.9401990175247192,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014373481273651123,
+        "meanAbsoluteError": 9.247053679046771e-05,
+        "passed": true,
+        "reference": "000001.safetensors"
+      },
+      {
+        "decoderSeconds": 1.565735936164856,
+        "encoderSeconds": 0.9051710367202759,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.01339605450630188,
+        "meanAbsoluteError": 0.0001274039177631183,
+        "passed": true,
+        "reference": "000002.safetensors"
+      },
+      {
+        "decoderSeconds": 1.5463720560073853,
+        "encoderSeconds": 0.8498330116271973,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.011530846357345581,
+        "meanAbsoluteError": 0.0001002705472701159,
+        "passed": true,
+        "reference": "000003.safetensors"
+      },
+      {
+        "decoderSeconds": 1.4075289964675903,
+        "encoderSeconds": 0.7971700429916382,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.016909509897232056,
+        "meanAbsoluteError": 0.00010848505156604289,
+        "passed": true,
+        "reference": "000004.safetensors"
+      },
+      {
+        "decoderSeconds": 1.5271708965301514,
+        "encoderSeconds": 1.4246550798416138,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014797002077102661,
+        "meanAbsoluteError": 9.283579105300297e-05,
+        "passed": true,
+        "reference": "000005.safetensors"
+      },
+      {
+        "decoderSeconds": 1.4414219856262207,
+        "encoderSeconds": 0.82452392578125,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.01603156328201294,
+        "meanAbsoluteError": 0.00011911896752330754,
+        "passed": true,
+        "reference": "000006.safetensors"
+      },
+      {
+        "decoderSeconds": 1.3687210083007812,
+        "encoderSeconds": 0.8771669864654541,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.012937672436237335,
+        "meanAbsoluteError": 0.00015762679654482992,
+        "passed": true,
+        "reference": "000007.safetensors"
+      }
+    ],
+    "passed": true,
+    "peakPhysicalFootprintBytes": 2204124696
+  },
+  "fusedAttentionValidation": {
+    "backend": "native Swift Core ML",
+    "decoderUnits": "gpu",
+    "encoderUnits": "gpu",
+    "loadSeconds": 4.362862944602966,
+    "maximumAbsoluteError": 0.01537981629371643,
+    "meanAbsoluteError": 0.00014974610047203637,
+    "measurements": [
+      {
+        "decoderSeconds": 1.4304579496383667,
+        "encoderSeconds": 0.7125070095062256,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.013160884380340576,
+        "meanAbsoluteError": 8.180398304042859e-05,
+        "passed": true,
+        "reference": "000000.safetensors"
+      },
+      {
+        "decoderSeconds": 1.3408229351043701,
+        "encoderSeconds": 0.6830980777740479,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.01537981629371643,
+        "meanAbsoluteError": 8.93268901504928e-05,
+        "passed": true,
+        "reference": "000001.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2520500421524048,
+        "encoderSeconds": 0.6845479011535645,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.013586729764938354,
+        "meanAbsoluteError": 0.00011335056096090178,
+        "passed": true,
+        "reference": "000002.safetensors"
+      },
+      {
+        "decoderSeconds": 1.3508729934692383,
+        "encoderSeconds": 0.6919339895248413,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014907270669937134,
+        "meanAbsoluteError": 9.071585954940839e-05,
+        "passed": true,
+        "reference": "000003.safetensors"
+      },
+      {
+        "decoderSeconds": 1.222872018814087,
+        "encoderSeconds": 0.6258350610733032,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.012558221817016602,
+        "meanAbsoluteError": 9.717844423500631e-05,
+        "passed": true,
+        "reference": "000004.safetensors"
+      },
+      {
+        "decoderSeconds": 1.2699329853057861,
+        "encoderSeconds": 0.597944974899292,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.009725838899612427,
+        "meanAbsoluteError": 8.610969884778243e-05,
+        "passed": true,
+        "reference": "000005.safetensors"
+      },
+      {
+        "decoderSeconds": 1.4274159669876099,
+        "encoderSeconds": 0.6805440187454224,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.015181079506874084,
+        "meanAbsoluteError": 0.00012718189698826012,
+        "passed": true,
+        "reference": "000006.safetensors"
+      },
+      {
+        "decoderSeconds": 1.415895938873291,
+        "encoderSeconds": 0.6880509853363037,
+        "iteration": 0,
+        "maximumAbsoluteError": 0.014310456812381744,
+        "meanAbsoluteError": 0.00014974610047203637,
+        "passed": true,
+        "reference": "000007.safetensors"
+      }
+    ],
+    "passed": true,
+    "peakPhysicalFootprintBytes": 2055177752
+  },
+  "acceptance": {
+    "maximumAbsoluteError": 0.02,
+    "meanAbsoluteError": 0.002
+  },
+  "torchPreconversionMaximumAbsoluteError": 0.0,
+  "fusedAttentionPNGByteParityWithBaseline": true,
+  "timingContext": "Six serial eight-frame jobs in baseline/norm/attention then attention/norm/baseline order. No conversion, build or reference inference overlapped the timed jobs. Thermal state progressed from nominal to fair; per-job states are retained. Prefer inference and encoder time to wall time because model compilation/loading differs. Small gains should not be treated as hardware-independent guarantees.",
+  "reproduction": "Use convert-pgtformer-split.py with --encoder-only and the existing decoder. Default code attention is fused; --no-fuse-code-attention reproduces baseline. For the normalization-only trial use --fuse-encoder-norm --no-fuse-code-attention. Independent reference tensors can be saved using validate-pgtformer-video.py --reference-dir and checked with waifu-pgtformer --verify-split. Defaults retain original Conv/BatchNorm arithmetic ordering.",
+  "productValidation": {
+    "passed": true,
+    "casesPassed": 1,
+    "casesFailed": 0,
+    "scope": "Product preview, 1x and 2x reconstruction, source timestamps, export with audio, and cancellation using the configured fused package",
+    "scales": {
+      "1": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 2.650662064552307,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 1.414147973060608,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 2,
+        "inferenceSeconds": 4.0648109912872314,
+        "loadSeconds": 1.7018150091171265,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedCodeAttention": true,
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": false,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2094253592,
+        "pythonRuntime": false,
+        "scale": 1,
+        "seconds": 5.810317039489746,
+        "sourceDownsampling": 1,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 1
+      },
+      "2": {
+        "backend": "native Swift Core ML / Apple GPU",
+        "centerFrame": 1,
+        "compiledModelCache": true,
+        "decoderSeconds": 10.581934928894043,
+        "decoderUnits": "gpu",
+        "encoderSeconds": 5.071166038513184,
+        "encoderUnits": "gpu",
+        "executionPolicy": "gpu-encoder-decoder-v2",
+        "frames": 8,
+        "inferenceSeconds": 15.653102993965149,
+        "loadSeconds": 0.1875300407409668,
+        "memoryBudgetBytes": 6000000000,
+        "model": "pgtformer",
+        "modelInputShape": [
+          3,
+          3,
+          512,
+          512
+        ],
+        "optimizations": {
+          "centerTail": true,
+          "decoderPrecision": "float16",
+          "fusedCodeAttention": true,
+          "fusedDecoderNorm": true,
+          "fusedEncoderNorm": false,
+          "preservesBatchNormOrdering": true
+        },
+        "peakPhysicalFootprintBytes": 2053948880,
+        "pythonRuntime": false,
+        "scale": 2,
+        "seconds": 15.96576702594757,
+        "sourceDownsampling": 2,
+        "temporalWindows": [
+          [
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            3,
+            4
+          ],
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            5,
+            6,
+            7
+          ],
+          [
+            6,
+            7,
+            7
+          ]
+        ],
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 1
+      }
+    }
+  },
+  "validatedPackageSHA256": {
+    "PGTEncoder.mlpackage/Manifest.json": "8bb5d5b7afc3995c464c3d216012147cc87fbfd2c2d39bfc830b49b40b7e75c8",
+    "PGTEncoder.mlpackage/Data/com.apple.CoreML/model.mlmodel": "2848ef8a8f21df7f6ad2a76149fbe0bd284bb71701bf00c405ec7775284739d2",
+    "PGTEncoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin": "0de003e90039114b9b12f3df3b980ec41135b50e6f5dfeaec53d9963b30fc1b9",
+    "PGTDecoder.mlpackage/Manifest.json": "367b3e06871404f5cfcfae3068df6b1f161ada54955b8ffa90484b7f296dbe59",
+    "PGTDecoder.mlpackage/Data/com.apple.CoreML/model.mlmodel": "aabcb5ec6daadaefebc0c133a8ab6085e82affe0590127233acd28cd305eeaec",
+    "PGTDecoder.mlpackage/Data/com.apple.CoreML/weights/weight.bin": "a551812f9df33db60b07e743b2097bf805c62aac4ad0b6e5bd9317a50be3b3e5"
+  }
+}

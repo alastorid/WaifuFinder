@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141714" />
+    <meta
+      name="description"
+      content="How WaifuFinder handles video, model downloads and website requests."
+    />
+    <title>Privacy — WaifuFinder</title>
+    <link rel="icon" type="image/png" href="assets/WaifuFinder.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="WaifuFinder home">
+        <img src="assets/WaifuFinder.png" alt="" width="42" height="42" />
+        <span>WaifuFinder</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="index.html#workflow">The workflow</a>
+        <a href="https://github.com/alastorid/WaifuFinder">Source</a>
+        <a
+          class="nav-download"
+          href="https://github.com/alastorid/WaifuFinder/releases"
+          >Get the app <span aria-hidden="true">↗</span></a
+        >
+      </nav>
+    </header>
+
+    <main class="policy">
+      <p class="eyebrow">
+        <span class="eyebrow-dot"></span> A clear account of what connects
+      </p>
+      <h1>Privacy, plainly.</h1>
+      <p class="policy-lede">
+        WaifuFinder analyzes video on your Mac. It does not send your videos,
+        frames, tags or exports to us.
+      </p>
+
+      <section>
+        <h2>Your videos and results</h2>
+        <p>
+          Video analysis, tagging, previews and exports run locally in the app.
+          WaifuFinder has no account system, analytics or telemetry. Your source
+          video is not uploaded for processing; files you export stay where you
+          save them.
+        </p>
+      </section>
+
+      <section>
+        <h2>Model downloads</h2>
+        <p>
+          If you choose to install a model, the app downloads its files from a
+          pinned Hugging Face repository and checks their hashes. That download
+          sends ordinary connection information, such as your IP address, to
+          Hugging Face and its file-delivery services. The app does not send
+          them your video or analysis results. See
+          <a href="https://huggingface.co/privacy"
+            >Hugging Face's privacy policy</a
+          >.
+        </p>
+      </section>
+
+      <section>
+        <h2>This website</h2>
+        <p>
+          When the home page loads, a small script requests the latest release
+          details from GitHub so the download button can show the current
+          version. The request goes to GitHub's API. The site does not add
+          analytics, advertising trackers or tracking cookies. GitHub hosts the
+          site and API and handles connection data under its
+          <a
+            href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement"
+            >privacy statement</a
+          >.
+        </p>
+        <p>
+          Following a GitHub or Hugging Face link takes you to that service,
+          where its own privacy terms apply.
+        </p>
+      </section>
+
+      <section>
+        <h2>Model licenses</h2>
+        <p>
+          Models have separate licenses from the app. PGTFormer has a
+          non-commercial restriction, and its upstream weight files do not
+          include a clear standalone license grant. Read the
+          <a
+            href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Licensing.md"
+            >licensing record</a
+          >
+          before using or redistributing model files.
+        </p>
+      </section>
+
+      <p class="policy-date">Last updated October 13, 2026</p>
+    </main>
+
+    <footer class="footer">
+      <a class="brand" href="index.html"
+        ><img src="assets/WaifuFinder.png" alt="" width="32" height="32" /><span
+          >WaifuFinder</span
+        ></a
+      >
+      <p>A closer look, frame by frame.</p>
+      <div>
+        <a href="index.html">Home</a
+        ><a
+          href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Licensing.md"
+          >Licensing</a
+        ><a href="https://github.com/alastorid/WaifuFinder/releases"
+          >Releases</a
+        >
+      </div>
+    </footer>
+  </body>
+</html>

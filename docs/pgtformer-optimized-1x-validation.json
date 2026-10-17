@@ -1,0 +1,29 @@
+{
+  "model": "pgtformer",
+  "scope": "Actual product video inputs, preprocessing and native graph versus original pretrained network",
+  "passed": true,
+  "frames": [
+    {
+      "frame": 0,
+      "window": [
+        0,
+        0,
+        1
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.016280651092529297,
+      "meanAbsoluteError": 0.0001483570522395894
+    },
+    {
+      "frame": 1,
+      "window": [
+        0,
+        1,
+        1
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 0.01627647876739502,
+      "meanAbsoluteError": 0.00017514836508780718
+    }
+  ]
+}

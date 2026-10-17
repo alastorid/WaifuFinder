@@ -1,0 +1,2741 @@
+{
+  "date": "2026-10-16",
+  "applicationSourceCommit": "2e2f2bb",
+  "baselineCommit": "0cde233",
+  "hardware": {
+    "chip": "Apple M4",
+    "model": "Mac16,10",
+    "memoryGiB": 16,
+    "os": "macOS 26.4.1 (25E253)",
+    "machine": "Mac mini"
+  },
+  "selected": {
+    "batch": 8,
+    "gemmTile": "32x64x32",
+    "fusedQKV": true,
+    "compactBias": false,
+    "memoryMiB": 448,
+    "cacheMiB": 64,
+    "fetchAheadBatches": 1,
+    "persistentSharedMLXInput": false,
+    "bulkProbabilityDecoding": true
+  },
+  "summary": {
+    "regeneratedThumbnailSpeedGainRangePercent": [
+      39.2780449724663,
+      42.79993022059288
+    ],
+    "controlFPS": [
+      14.361889603960934,
+      14.378708232723048
+    ],
+    "prefetchFPS": [
+      20.02638371883172,
+      20.508768332814796
+    ],
+    "controlCombinedPeakMB": [
+      726.828544,
+      727.582256
+    ],
+    "prefetchCombinedPeakMB": [
+      729.400904,
+      732.972496
+    ],
+    "cachedThroughputGainEstablished": false
+  },
+  "appExperiments": [
+    {
+      "configuration": {
+        "name": "serial-copy-a",
+        "copy": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 14.361889603960934,
+      "batch": 8,
+      "fetchSeconds": [
+        1.594897165428847,
+        1.5805645831860602,
+        1.6319934576749802
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 653771592,
+        "peakParentBytes": 87048912,
+        "peakSimultaneousCombinedBytes": 726828544
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": false,
+      "rounds": 3,
+      "sweepSeconds": [
+        4.456238124985248,
+        4.45485679153353,
+        4.496095791459084
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.662004828453064,
+        "ane_power": 0.7238080501556396,
+        "cpu_power": 0.8698930740356445,
+        "ecpu_usage": [
+          2822,
+          0.3470918834209442
+        ],
+        "gpu_power": 0.06830371916294098,
+        "gpu_ram_power": 0.000968992302659899,
+        "gpu_usage": [
+          833,
+          0.029095059260725975
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11892391936,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1789,
+          0.014692709781229496
+        ],
+        "ram_power": 0.6039687991142273,
+        "sys_power": 17.609315872192383,
+        "temp": {
+          "cpu_temp_avg": 57.09800720214844,
+          "gpu_temp_avg": 51.26463317871094
+        },
+        "timestamp": "2026-10-16T16:49:12.295325+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.6405386924743652,
+        "ane_power": 0.010623382404446602,
+        "cpu_power": 1.5616021156311035,
+        "ecpu_usage": [
+          2861,
+          0.5287051200866699
+        ],
+        "gpu_power": 0.06831321865320206,
+        "gpu_ram_power": 0.0019083969527855515,
+        "gpu_usage": [
+          830,
+          0.035956524312496185
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11651432448,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2373,
+          0.028864499181509018
+        ],
+        "ram_power": 0.473560631275177,
+        "sys_power": 12.843171119689941,
+        "temp": {
+          "cpu_temp_avg": 64.00888061523438,
+          "gpu_temp_avg": 57.86376953125
+        },
+        "timestamp": "2026-10-16T16:49:29.606464+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "serial-shared-a"
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 14.166139134019833,
+      "batch": 8,
+      "fetchSeconds": [
+        1.5459306249395013,
+        1.5711484588682652,
+        1.5717544588260353
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 647349016,
+        "peakParentBytes": 85869264,
+        "peakSimultaneousCombinedBytes": 721946088
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": false,
+      "rounds": 3,
+      "sweepSeconds": [
+        4.500473124906421,
+        4.5178152914159,
+        4.586545125115663
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.3814433813095093,
+        "ane_power": 0.028019241988658905,
+        "cpu_power": 1.1088255643844604,
+        "ecpu_usage": [
+          2892,
+          0.3666507303714752
+        ],
+        "gpu_power": 0.2445986121892929,
+        "gpu_ram_power": 0.007707673124969006,
+        "gpu_usage": [
+          952,
+          0.06999112665653229
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12042993664,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1572,
+          0.014530313201248646
+        ],
+        "ram_power": 0.4776407778263092,
+        "sys_power": 12.854216575622559,
+        "temp": {
+          "cpu_temp_avg": 58.883056640625,
+          "gpu_temp_avg": 53.02609634399414
+        },
+        "timestamp": "2026-10-16T16:50:10.305662+00:00"
+      },
+      "systemAfter": {
+        "all_power": 2.277491807937622,
+        "ane_power": 0.6124759912490845,
+        "cpu_power": 1.2878434658050537,
+        "ecpu_usage": [
+          2876,
+          0.511788010597229
+        ],
+        "gpu_power": 0.3771723806858063,
+        "gpu_ram_power": 0.01719801500439644,
+        "gpu_usage": [
+          768,
+          0.13619586825370789
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11743789056,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1635,
+          0.02489416114985943
+        ],
+        "ram_power": 0.8229902982711792,
+        "sys_power": 27.23539161682129,
+        "temp": {
+          "cpu_temp_avg": 67.4996109008789,
+          "gpu_temp_avg": 61.18741226196289
+        },
+        "timestamp": "2026-10-16T16:50:27.320206+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "prefetch-shared-a",
+        "prefetch": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 19.933542142354757,
+      "batch": 8,
+      "fetchSeconds": [
+        1.5031217490322888,
+        1.5271080420352519,
+        1.4867983339354396
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 647562104,
+        "peakParentBytes": 87687864,
+        "peakSimultaneousCombinedBytes": 725108272
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.2106687081977725,
+        3.2242774586193264,
+        3.140533708501607
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.7423739433288574,
+        "ane_power": 0.6501205563545227,
+        "cpu_power": 1.0447510480880737,
+        "ecpu_usage": [
+          2838,
+          0.36343884468078613
+        ],
+        "gpu_power": 0.04750239849090576,
+        "gpu_ram_power": 0.0028921831399202347,
+        "gpu_usage": [
+          567,
+          0.027033252641558647
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11696521216,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2263,
+          0.02040693908929825
+        ],
+        "ram_power": 0.6428790092468262,
+        "sys_power": 18.16400146484375,
+        "temp": {
+          "cpu_temp_avg": 62.411136627197266,
+          "gpu_temp_avg": 54.32084655761719
+        },
+        "timestamp": "2026-10-16T16:51:20.657140+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.4740240573883057,
+        "ane_power": 0.31912297010421753,
+        "cpu_power": 1.081830620765686,
+        "ecpu_usage": [
+          2816,
+          0.4715181887149811
+        ],
+        "gpu_power": 0.07307039201259613,
+        "gpu_ram_power": 0.0019083969527855515,
+        "gpu_usage": [
+          759,
+          0.030469443649053574
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11594334208,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1992,
+          0.00734472181648016
+        ],
+        "ram_power": 0.5446586012840271,
+        "sys_power": 16.88910484313965,
+        "temp": {
+          "cpu_temp_avg": 67.5176010131836,
+          "gpu_temp_avg": 62.46302795410156
+        },
+        "timestamp": "2026-10-16T16:51:33.585817+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "prefetch-copy-a",
+        "copy": true,
+        "prefetch": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 20.02638371883172,
+      "batch": 8,
+      "fetchSeconds": [
+        1.5182205829769373,
+        1.5189929995685816,
+        1.4384113331325352
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 653886352,
+        "peakParentBytes": 89424592,
+        "peakSimultaneousCombinedBytes": 729400904
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.1633844166062772,
+        3.2685772916302085,
+        3.195784166455269
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 2.3544020652770996,
+        "ane_power": 0.743240475654602,
+        "cpu_power": 1.544250726699829,
+        "ecpu_usage": [
+          2691,
+          0.3217836618423462
+        ],
+        "gpu_power": 0.0669107437133789,
+        "gpu_ram_power": 0.0028926488012075424,
+        "gpu_usage": [
+          762,
+          0.028270062059164047
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11637538816,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2376,
+          0.05628048628568649
+        ],
+        "ram_power": 0.6496700048446655,
+        "sys_power": 17.889381408691406,
+        "temp": {
+          "cpu_temp_avg": 61.06578063964844,
+          "gpu_temp_avg": 54.5114631652832
+        },
+        "timestamp": "2026-10-16T16:52:27.022669+00:00"
+      },
+      "systemAfter": {
+        "all_power": 2.497879981994629,
+        "ane_power": 0.6205766201019287,
+        "cpu_power": 1.8131898641586304,
+        "ecpu_usage": [
+          2871,
+          0.5923794507980347
+        ],
+        "gpu_power": 0.06411336362361908,
+        "gpu_ram_power": 0.002873903140425682,
+        "gpu_usage": [
+          732,
+          0.026124421507120132
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11678957568,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2375,
+          0.037271492183208466
+        ],
+        "ram_power": 0.7516919374465942,
+        "sys_power": 19.32851219177246,
+        "temp": {
+          "cpu_temp_avg": 69.24927520751953,
+          "gpu_temp_avg": 62.07209014892578
+        },
+        "timestamp": "2026-10-16T16:52:40.019028+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "serial-copy-b",
+        "copy": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 14.378708232723048,
+      "batch": 8,
+      "fetchSeconds": [
+        1.573942500166595,
+        1.5926711671054363,
+        1.548482249956578
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 653788000,
+        "peakParentBytes": 85656272,
+        "peakSimultaneousCombinedBytes": 727582256
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": false,
+      "rounds": 3,
+      "sweepSeconds": [
+        4.456425542011857,
+        4.428954916540533,
+        4.451025708578527
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.4288763999938965,
+        "ane_power": 0.6366768479347229,
+        "cpu_power": 0.7522339820861816,
+        "ecpu_usage": [
+          2737,
+          0.2997346818447113
+        ],
+        "gpu_power": 0.039965610951185226,
+        "gpu_ram_power": 0.0009505702764727175,
+        "gpu_usage": [
+          678,
+          0.012513037770986557
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11690409984,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1562,
+          0.007344299927353859
+        ],
+        "ram_power": 0.6023575067520142,
+        "sys_power": 16.964176177978516,
+        "temp": {
+          "cpu_temp_avg": 59.96096420288086,
+          "gpu_temp_avg": 54.286376953125
+        },
+        "timestamp": "2026-10-16T16:53:46.091808+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.6016963720321655,
+        "ane_power": 0.5261653661727905,
+        "cpu_power": 1.0309453010559082,
+        "ecpu_usage": [
+          2880,
+          0.3730774223804474
+        ],
+        "gpu_power": 0.0445857010781765,
+        "gpu_ram_power": 0.0009541984763927758,
+        "gpu_usage": [
+          715,
+          0.018341658636927605
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11667832832,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1906,
+          0.015148749575018883
+        ],
+        "ram_power": 0.6079273223876953,
+        "sys_power": 16.73663330078125,
+        "temp": {
+          "cpu_temp_avg": 69.9706802368164,
+          "gpu_temp_avg": 61.68568801879883
+        },
+        "timestamp": "2026-10-16T16:54:02.845104+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "prefetch-shared-b",
+        "prefetch": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 20.60788898770505,
+      "batch": 8,
+      "fetchSeconds": [
+        1.500337208621204,
+        1.4673213330097497,
+        1.5150321666151285
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 647480184,
+        "peakParentBytes": 87507664,
+        "peakSimultaneousCombinedBytes": 719455816
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.105606791563332,
+        3.0822482500225306,
+        3.1090626250952482
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.2848999798297882,
+        "ane_power": 0,
+        "cpu_power": 0.24604764580726624,
+        "ecpu_usage": [
+          1183,
+          0.044223614037036896
+        ],
+        "gpu_power": 0.03885232284665108,
+        "gpu_ram_power": 0.001886792597360909,
+        "gpu_usage": [
+          386,
+          0.01539628580212593
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11068014592,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1684,
+          0.014252059161663055
+        ],
+        "ram_power": 0.16535043716430664,
+        "sys_power": 12.01318645477295,
+        "temp": {
+          "cpu_temp_avg": 60.119327545166016,
+          "gpu_temp_avg": 54.55966567993164
+        },
+        "timestamp": "2026-10-16T16:54:31.008654+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.1310012340545654,
+        "ane_power": 0,
+        "cpu_power": 0.9263904690742493,
+        "ecpu_usage": [
+          2158,
+          0.1839527189731598
+        ],
+        "gpu_power": 0.20461076498031616,
+        "gpu_ram_power": 0.007759855128824711,
+        "gpu_usage": [
+          760,
+          0.06897737830877304
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11035541504,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1956,
+          0.03357221186161041
+        ],
+        "ram_power": 0.4378886818885803,
+        "sys_power": 11.929189682006836,
+        "temp": {
+          "cpu_temp_avg": 69.00946807861328,
+          "gpu_temp_avg": 62.21205139160156
+        },
+        "timestamp": "2026-10-16T16:54:43.791433+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "cached-serial-copy",
+        "copy": true,
+        "cached": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 22.090887230212346,
+      "batch": 8,
+      "fetchSeconds": [
+        3.824988380074501e-05,
+        3.145914524793625e-05,
+        3.4749507904052734e-05
+      ],
+      "frames": 64,
+      "input": "in-memory-jpeg-corpus",
+      "memory": {
+        "peakChildrenBytes": 653837176,
+        "peakParentBytes": 118768336,
+        "peakSimultaneousCombinedBytes": 772277832
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "2c14f9c766400401443749cf8aa20a28ddffee8512d7427f514b689b973aea6b",
+      "outputsStableAcrossRounds": true,
+      "prefetch": false,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.9594467082060874,
+        2.8836622084490955,
+        2.897122208494693
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.306074321269989,
+        "ane_power": 0,
+        "cpu_power": 0.2628123164176941,
+        "ecpu_usage": [
+          1150,
+          0.0759790688753128
+        ],
+        "gpu_power": 0.04326198995113373,
+        "gpu_ram_power": 0.000968992302659899,
+        "gpu_usage": [
+          799,
+          0.019813301041722298
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11066032128,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1261,
+          0.01311622466892004
+        ],
+        "ram_power": 0.23506665229797363,
+        "sys_power": 11.302785873413086,
+        "temp": {
+          "cpu_temp_avg": 59.17167663574219,
+          "gpu_temp_avg": 54.71278381347656
+        },
+        "timestamp": "2026-10-16T16:55:12.224647+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.120764136314392,
+        "ane_power": 0,
+        "cpu_power": 0.8694297671318054,
+        "ecpu_usage": [
+          1644,
+          0.1236560121178627
+        ],
+        "gpu_power": 0.25133436918258667,
+        "gpu_ram_power": 0.006647433619946241,
+        "gpu_usage": [
+          842,
+          0.0820879265666008
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11041292288,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2402,
+          0.04388013482093811
+        ],
+        "ram_power": 0.41168221831321716,
+        "sys_power": 18.188785552978516,
+        "temp": {
+          "cpu_temp_avg": 67.40293884277344,
+          "gpu_temp_avg": 61.40232467651367
+        },
+        "timestamp": "2026-10-16T16:55:24.275224+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "f63164656a0b24d6b75b7b0f5aa97654377d863fe29dafc262107c518f21dbce"
+    },
+    {
+      "configuration": {
+        "name": "cached-prefetch-shared",
+        "prefetch": true,
+        "cached": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 22.047684432780716,
+      "batch": 8,
+      "fetchSeconds": [
+        3.0375085771083832e-05,
+        2.704281359910965e-05,
+        2.7750618755817413e-05
+      ],
+      "frames": 64,
+      "input": "in-memory-jpeg-corpus",
+      "memory": {
+        "peakChildrenBytes": 647447416,
+        "peakParentBytes": 118670032,
+        "peakSimultaneousCombinedBytes": 765773384
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "2c14f9c766400401443749cf8aa20a28ddffee8512d7427f514b689b973aea6b",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.9164585419930518,
+        2.888354541733861,
+        2.902799166738987
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.3245272934436798,
+        "ane_power": 0,
+        "cpu_power": 0.2965112626552582,
+        "ecpu_usage": [
+          1151,
+          0.06400910019874573
+        ],
+        "gpu_power": 0.028016019612550735,
+        "gpu_ram_power": 0.0018903659656643867,
+        "gpu_usage": [
+          381,
+          0.014860423281788826
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11214635008,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1180,
+          0.01260986365377903
+        ],
+        "ram_power": 0.191220223903656,
+        "sys_power": 9.25144100189209,
+        "temp": {
+          "cpu_temp_avg": 59.54991149902344,
+          "gpu_temp_avg": 54.68183898925781
+        },
+        "timestamp": "2026-10-16T16:55:52.829761+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.2413266897201538,
+        "ane_power": 0,
+        "cpu_power": 1.017348051071167,
+        "ecpu_usage": [
+          1403,
+          0.09486492723226547
+        ],
+        "gpu_power": 0.2239786833524704,
+        "gpu_ram_power": 0.007731563411653042,
+        "gpu_usage": [
+          771,
+          0.07019654661417007
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11199365120,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          4334,
+          0.12858116626739502
+        ],
+        "ram_power": 0.5490378141403198,
+        "sys_power": 10.491217613220215,
+        "temp": {
+          "cpu_temp_avg": 69.08847045898438,
+          "gpu_temp_avg": 61.69691848754883
+        },
+        "timestamp": "2026-10-16T16:56:04.910707+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "sourceSHA256": "f63164656a0b24d6b75b7b0f5aa97654377d863fe29dafc262107c518f21dbce"
+    },
+    {
+      "configuration": {
+        "name": "prefetch-copy-b",
+        "copy": true,
+        "prefetch": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 20.508768332814796,
+      "batch": 8,
+      "fetchSeconds": [
+        1.54332304187119,
+        1.4685793337412179,
+        1.511268415953964
+      ],
+      "frames": 64,
+      "input": "regenerated-video-thumbnails",
+      "memory": {
+        "peakChildrenBytes": 653755160,
+        "peakParentBytes": 89195216,
+        "peakSimultaneousCombinedBytes": 732972496
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "19e8eb0c7b9290cfa59bf1a2cc3e3e5cdf646b35b1309c3f8e9044496264b85f",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.1407345831394196,
+        3.082321499940008,
+        3.1206164583563805
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.09688620269298553,
+        "ane_power": 0,
+        "cpu_power": 0.07239952683448792,
+        "ecpu_usage": [
+          1113,
+          0.04090483486652374
+        ],
+        "gpu_power": 0.02448667399585247,
+        "gpu_ram_power": 0.0009615385206416249,
+        "gpu_usage": [
+          629,
+          0.015913136303424835
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11054186496,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1390,
+          0.003010227344930172
+        ],
+        "ram_power": 0.16716475784778595,
+        "sys_power": 10.485860824584961,
+        "temp": {
+          "cpu_temp_avg": 58.82294845581055,
+          "gpu_temp_avg": 53.318145751953125
+        },
+        "timestamp": "2026-10-16T16:56:47.750186+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.442490577697754,
+        "ane_power": 0,
+        "cpu_power": 1.1850144863128662,
+        "ecpu_usage": [
+          2848,
+          0.29586896300315857
+        ],
+        "gpu_power": 0.2574760317802429,
+        "gpu_ram_power": 0.009713476523756981,
+        "gpu_usage": [
+          770,
+          0.08226052671670914
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11047026688,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1738,
+          0.03499109670519829
+        ],
+        "ram_power": 0.5035242438316345,
+        "sys_power": 24.370264053344727,
+        "temp": {
+          "cpu_temp_avg": 67.37578582763672,
+          "gpu_temp_avg": 60.74068069458008
+        },
+        "timestamp": "2026-10-16T16:57:00.341987+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4"
+    },
+    {
+      "configuration": {
+        "name": "cached-prefetch-copy",
+        "copy": true,
+        "prefetch": true,
+        "cached": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 21.764526386650775,
+      "batch": 8,
+      "fetchSeconds": [
+        5.71240670979023e-05,
+        4.6459026634693146e-05,
+        2.7666334062814713e-05
+      ],
+      "frames": 64,
+      "input": "in-memory-jpeg-corpus",
+      "memory": {
+        "peakChildrenBytes": 653771544,
+        "peakParentBytes": 118883024,
+        "peakSimultaneousCombinedBytes": 772048360
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "2c14f9c766400401443749cf8aa20a28ddffee8512d7427f514b689b973aea6b",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.0638658748939633,
+        2.9405647916719317,
+        2.8700598748400807
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.11018310487270355,
+        "ane_power": 0,
+        "cpu_power": 0.0666038766503334,
+        "ecpu_usage": [
+          1158,
+          0.04888170212507248
+        ],
+        "gpu_power": 0.04357922822237015,
+        "gpu_ram_power": 0.0019305308815091848,
+        "gpu_usage": [
+          557,
+          0.019329359754920006
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11079532544,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1307,
+          0.0007660032133571804
+        ],
+        "ram_power": 0.18273894488811493,
+        "sys_power": 8.84824275970459,
+        "temp": {
+          "cpu_temp_avg": 58.66535949707031,
+          "gpu_temp_avg": 54.07597732543945
+        },
+        "timestamp": "2026-10-16T16:57:28.489181+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.301186442375183,
+        "ane_power": 0,
+        "cpu_power": 1.1322689056396484,
+        "ecpu_usage": [
+          2845,
+          0.2572222650051117
+        ],
+        "gpu_power": 0.16891753673553467,
+        "gpu_ram_power": 0.006855295971035957,
+        "gpu_usage": [
+          565,
+          0.05234421417117119
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11068096512,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2582,
+          0.03343288600444794
+        ],
+        "ram_power": 0.4287317395210266,
+        "sys_power": 11.770886421203613,
+        "temp": {
+          "cpu_temp_avg": 67.65181732177734,
+          "gpu_temp_avg": 61.63644790649414
+        },
+        "timestamp": "2026-10-16T16:57:40.516811+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "f63164656a0b24d6b75b7b0f5aa97654377d863fe29dafc262107c518f21dbce"
+    },
+    {
+      "configuration": {
+        "name": "cached-prefetch-copy-repeat",
+        "copy": true,
+        "prefetch": true,
+        "cached": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 21.696605625717666,
+      "batch": 8,
+      "fetchSeconds": [
+        6.137415766716003e-05,
+        4.0416140109300613e-05,
+        3.2875221222639084e-05
+      ],
+      "frames": 64,
+      "input": "in-memory-jpeg-corpus",
+      "memory": {
+        "peakChildrenBytes": 653788024,
+        "peakParentBytes": 118620880,
+        "peakSimultaneousCombinedBytes": 770246216
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "2c14f9c766400401443749cf8aa20a28ddffee8512d7427f514b689b973aea6b",
+      "outputsStableAcrossRounds": true,
+      "prefetch": true,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.0490545416250825,
+        2.949770167004317,
+        2.9109255000948906
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.25563517212867737,
+        "ane_power": 0,
+        "cpu_power": 0.23291292786598206,
+        "ecpu_usage": [
+          1146,
+          0.06336937844753265
+        ],
+        "gpu_power": 0.022722240537405014,
+        "gpu_ram_power": 0.0009615385206416249,
+        "gpu_usage": [
+          369,
+          0.011027547530829906
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11221762048,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1399,
+          0.013188228011131287
+        ],
+        "ram_power": 0.16082404553890228,
+        "sys_power": 10.3251371383667,
+        "temp": {
+          "cpu_temp_avg": 61.081241607666016,
+          "gpu_temp_avg": 53.99257278442383
+        },
+        "timestamp": "2026-10-16T16:59:28.487244+00:00"
+      },
+      "systemAfter": {
+        "all_power": 0.5550956726074219,
+        "ane_power": 0,
+        "cpu_power": 0.5221215486526489,
+        "ecpu_usage": [
+          2815,
+          0.1964554637670517
+        ],
+        "gpu_power": 0.03297415375709534,
+        "gpu_ram_power": 0.001937984605319798,
+        "gpu_usage": [
+          550,
+          0.016122890636324883
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11171266560,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1314,
+          0.003891101572662592
+        ],
+        "ram_power": 0.2637583613395691,
+        "sys_power": 11.14830207824707,
+        "temp": {
+          "cpu_temp_avg": 64.99542236328125,
+          "gpu_temp_avg": 60.04569625854492
+        },
+        "timestamp": "2026-10-16T16:59:40.530662+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "f63164656a0b24d6b75b7b0f5aa97654377d863fe29dafc262107c518f21dbce"
+    },
+    {
+      "configuration": {
+        "name": "cached-serial-copy-repeat",
+        "copy": true,
+        "cached": true
+      },
+      "analysisWidth": 512,
+      "appPipelineFPS": 21.734513206882134,
+      "batch": 8,
+      "fetchSeconds": [
+        6.316741928458214e-05,
+        3.9542559534311295e-05,
+        3.354065120220184e-05
+      ],
+      "frames": 64,
+      "input": "in-memory-jpeg-corpus",
+      "memory": {
+        "peakChildrenBytes": 653771616,
+        "peakParentBytes": 118670032,
+        "peakSimultaneousCombinedBytes": 772097584
+      },
+      "method": "Production thumbnail retrieval/regeneration, JPEG decode, CI preprocessing, native worker, vocabulary and probability encoding; ordered 64-frame sweeps. Warmup excluded. Combined footprint sums this parent and its direct children at each 10 ms sample; shared mappings can be accounted in both processes. OS codec/XPC service memory is excluded. No GPU trace.",
+      "outputSHA256": "2c14f9c766400401443749cf8aa20a28ddffee8512d7427f514b689b973aea6b",
+      "outputsStableAcrossRounds": true,
+      "prefetch": false,
+      "rounds": 3,
+      "sweepSeconds": [
+        3.0295640830881894,
+        2.944625416304916,
+        2.912946166470647
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-copy/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.12202458828687668,
+        "ane_power": 0,
+        "cpu_power": 0.06601317971944809,
+        "ecpu_usage": [
+          1120,
+          0.037022992968559265
+        ],
+        "gpu_power": 0.05601140856742859,
+        "gpu_ram_power": 0.0009727626456879079,
+        "gpu_usage": [
+          854,
+          0.023444917052984238
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11265703936,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1619,
+          0.0023401128128170967
+        ],
+        "ram_power": 0.18470188975334167,
+        "sys_power": 11.11137580871582,
+        "temp": {
+          "cpu_temp_avg": 60.07693862915039,
+          "gpu_temp_avg": 54.45018005371094
+        },
+        "timestamp": "2026-10-16T17:00:08.639527+00:00"
+      },
+      "systemAfter": {
+        "all_power": 0.7628922462463379,
+        "ane_power": 0,
+        "cpu_power": 0.7093173861503601,
+        "ecpu_usage": [
+          2807,
+          0.21546447277069092
+        ],
+        "gpu_power": 0.05357487499713898,
+        "gpu_ram_power": 0.0009803922148421407,
+        "gpu_usage": [
+          888,
+          0.024213070049881935
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11241635840,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1787,
+          0.013782619498670101
+        ],
+        "ram_power": 0.3153115510940552,
+        "sys_power": 12.58352279663086,
+        "temp": {
+          "cpu_temp_avg": 68.08969116210938,
+          "gpu_temp_avg": 61.12421417236328
+        },
+        "timestamp": "2026-10-16T17:00:20.718244+00:00"
+      },
+      "outputMatchesControl": true,
+      "probeSHA256": "ffc4a62fb1e7428f1eb51f45956e0a4ad569647ab8e3274abbca1edc068ac9d3",
+      "workerSHA256": "f2b654ed2aab8378f288c8c6586dbbf35f777937de6707414be3a96e0936e3a0",
+      "sourceSHA256": "f63164656a0b24d6b75b7b0f5aa97654377d863fe29dafc262107c518f21dbce"
+    }
+  ],
+  "workerSharedInputExperiments": [
+    {
+      "name": "copy-a",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.35190187487751245
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.33915758365765214
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.3419931251555681
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.3388833333738148
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.34772508358582854
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.3428888749331236
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.33656179159879684
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.3363659167662263
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.34324141684919596
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.3388872086070478
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.3392542083747685
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.3471708749420941
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.33624816639348865
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.354307500179857
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.35919899959117174
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.3557757083326578
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.33976495871320367
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.34213183354586363
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.3388943332247436
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.34631704166531563
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.34355037519708276
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.3377037914469838
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3397678746841848
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.34263808373361826
+        }
+      ],
+      "copyInput": true,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 654623656,
+      "predictionAndIPCFPS": 23.396280187249516,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.735477583948523,
+        2.7740840832702816,
+        2.730768292210996
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.1894608736038208,
+        "ane_power": 0,
+        "cpu_power": 1.1314069032669067,
+        "ecpu_usage": [
+          1421,
+          0.10143016278743744
+        ],
+        "gpu_power": 0.05805399641394615,
+        "gpu_ram_power": 0.0029298067092895508,
+        "gpu_usage": [
+          753,
+          0.02672211080789566
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12213305344,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2340,
+          0.0760410726070404
+        ],
+        "ram_power": 0.2981559932231903,
+        "sys_power": 10.541439056396484,
+        "temp": {
+          "cpu_temp_avg": 56.33796691894531,
+          "gpu_temp_avg": 48.68222427368164
+        },
+        "timestamp": "2026-10-16T16:37:12.526747+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.0070805549621582,
+        "ane_power": 0,
+        "cpu_power": 0.769869327545166,
+        "ecpu_usage": [
+          1403,
+          0.1724177896976471
+        ],
+        "gpu_power": 0.2372112274169922,
+        "gpu_ram_power": 0.00777461938560009,
+        "gpu_usage": [
+          773,
+          0.07989992201328278
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12235456512,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          4014,
+          0.1092284768819809
+        ],
+        "ram_power": 0.5540457963943481,
+        "sys_power": 16.151962280273438,
+        "temp": {
+          "cpu_temp_avg": 62.501609802246094,
+          "gpu_temp_avg": 56.869895935058594
+        },
+        "timestamp": "2026-10-16T16:37:25.013912+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    },
+    {
+      "name": "shared-a",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.3465441665612161
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.3391798329539597
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.337846708483994
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.34259629156440496
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.3388793752528727
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.33989520836621523
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.3615317917428911
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.35555650014430285
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.34672291623428464
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.3535506669431925
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.35447854176163673
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.35342133324593306
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.3463667081668973
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.348775333724916
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.3432133747264743
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.3499293331988156
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.3471497083082795
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.34232516633346677
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.34887275006622076
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.3455663747154176
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.35450733359903097
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.36584183340892196
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3516429583542049
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.34180662501603365
+        }
+      ],
+      "copyInput": false,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 648135544,
+      "predictionAndIPCFPS": 22.886092063475886,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.7620298750698566,
+        2.79645820800215,
+        2.797712749801576
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.3501582145690918,
+        "ane_power": 0,
+        "cpu_power": 1.2995100021362305,
+        "ecpu_usage": [
+          2745,
+          0.29929158091545105
+        ],
+        "gpu_power": 0.05064816027879715,
+        "gpu_ram_power": 0.001945554744452238,
+        "gpu_usage": [
+          544,
+          0.01690973900258541
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12308660224,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          4402,
+          0.12406764179468155
+        ],
+        "ram_power": 0.5004304051399231,
+        "sys_power": 14.20397663116455,
+        "temp": {
+          "cpu_temp_avg": 61.571414947509766,
+          "gpu_temp_avg": 53.46586608886719
+        },
+        "timestamp": "2026-10-16T16:37:40.482200+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.2586500644683838,
+        "ane_power": 0,
+        "cpu_power": 1.0964851379394531,
+        "ecpu_usage": [
+          1390,
+          0.21548043191432953
+        ],
+        "gpu_power": 0.16216497123241425,
+        "gpu_ram_power": 0.007714756298810244,
+        "gpu_usage": [
+          745,
+          0.04419776052236557
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12429410304,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2353,
+          0.0674392431974411
+        ],
+        "ram_power": 0.3690381646156311,
+        "sys_power": 12.698348045349121,
+        "temp": {
+          "cpu_temp_avg": 65.2015609741211,
+          "gpu_temp_avg": 59.52436828613281
+        },
+        "timestamp": "2026-10-16T16:37:53.174899+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    },
+    {
+      "name": "shared-b",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.33713966654613614
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.34470883337780833
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.339630083180964
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.340810916852206
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.3466212498024106
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.35197383305057883
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.3529987917281687
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.3594316248781979
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.3429645001888275
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.34087949991226196
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.3513965834863484
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.3473838330246508
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.34128854144364595
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.34573037503287196
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.3507226253859699
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.341517916880548
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.3473105002194643
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.34313295828178525
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.3412060416303575
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.34675325034186244
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.36236379155889153
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.3559790416620672
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3533920831978321
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.3426254163496196
+        }
+      ],
+      "copyInput": false,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 648135568,
+      "predictionAndIPCFPS": 23.077075634562302,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.7733149994164705,
+        2.7618838753551245,
+        2.79276308324188
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.5685317516326904,
+        "ane_power": 0,
+        "cpu_power": 0.521438479423523,
+        "ecpu_usage": [
+          2871,
+          0.18195034563541412
+        ],
+        "gpu_power": 0.04709324985742569,
+        "gpu_ram_power": 0.0009842519648373127,
+        "gpu_usage": [
+          386,
+          0.017592964693903923
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12408012800,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1295,
+          0.0032700863666832447
+        ],
+        "ram_power": 0.23512646555900574,
+        "sys_power": 15.14669418334961,
+        "temp": {
+          "cpu_temp_avg": 58.14998245239258,
+          "gpu_temp_avg": 53.22492980957031
+        },
+        "timestamp": "2026-10-16T16:38:21.306533+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.0851597785949707,
+        "ane_power": 0,
+        "cpu_power": 0.9540145397186279,
+        "ecpu_usage": [
+          2459,
+          0.1761467456817627
+        ],
+        "gpu_power": 0.13114520907402039,
+        "gpu_ram_power": 0.004837566055357456,
+        "gpu_usage": [
+          744,
+          0.038783177733421326
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12400033792,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2223,
+          0.03218253701925278
+        ],
+        "ram_power": 0.35282617807388306,
+        "sys_power": 12.070996284484863,
+        "temp": {
+          "cpu_temp_avg": 65.4023208618164,
+          "gpu_temp_avg": 59.41303253173828
+        },
+        "timestamp": "2026-10-16T16:38:34.019738+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    },
+    {
+      "name": "copy-b",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.33969741640612483
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.3434831667691469
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.3467947915196419
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.3419165830127895
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.3477455419488251
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.3520847917534411
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.35097933327779174
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.3548533748835325
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.34696041652932763
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.3410675418563187
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.34299283334985375
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.35077500017359853
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.34358425019308925
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.3421886251308024
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.3534228331409395
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.3409811668097973
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.3413740829564631
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.3495132913812995
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.34353695856407285
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.34483770839869976
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.3632976249791682
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.35583670856431127
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3494295417331159
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.3510505831800401
+        }
+      ],
+      "copyInput": true,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 654721936,
+      "predictionAndIPCFPS": 23.04184795976252,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.7775549995712936,
+        2.761972667183727,
+        2.7988764997571707
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 1.0207326412200928,
+        "ane_power": 0,
+        "cpu_power": 0.9816911816596985,
+        "ecpu_usage": [
+          2878,
+          0.195292666554451
+        ],
+        "gpu_power": 0.0390414260327816,
+        "gpu_ram_power": 0.0019686259329319,
+        "gpu_usage": [
+          383,
+          0.013959478586912155
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12371968000,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          3981,
+          0.09998450428247452
+        ],
+        "ram_power": 0.36663487553596497,
+        "sys_power": 14.162599563598633,
+        "temp": {
+          "cpu_temp_avg": 59.268802642822266,
+          "gpu_temp_avg": 53.49384307861328
+        },
+        "timestamp": "2026-10-16T16:39:02.044450+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.3398699760437012,
+        "ane_power": 0,
+        "cpu_power": 1.2758228778839111,
+        "ecpu_usage": [
+          2858,
+          0.23004594445228577
+        ],
+        "gpu_power": 0.06404706090688705,
+        "gpu_ram_power": 0.0038096753414720297,
+        "gpu_usage": [
+          745,
+          0.029528895393013954
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12358713344,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          2041,
+          0.04516828432679176
+        ],
+        "ram_power": 0.3503485321998596,
+        "sys_power": 10.78603458404541,
+        "temp": {
+          "cpu_temp_avg": 65.2306900024414,
+          "gpu_temp_avg": 60.26235580444336
+        },
+        "timestamp": "2026-10-16T16:39:14.638696+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    },
+    {
+      "name": "copy-c",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.3423398332670331
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.34805141668766737
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.34312654146924615
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.35377737507224083
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.3612977918237448
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.356159791816026
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.3443734999746084
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.34767137467861176
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.3458057916723192
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.3418305004015565
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.3505894164554775
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.34191745799034834
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.34164095809683204
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.34848883328959346
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.34536479180678725
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.34499816689640284
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.34743258357048035
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.3433047914877534
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.3597787916660309
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.361500957980752
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.3542175833135843
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.3424558751285076
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3486448749899864
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.3474957915022969
+        }
+      ],
+      "copyInput": true,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 654672760,
+      "predictionAndIPCFPS": 22.883314628395503,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.7967976247891784,
+        2.760635916609317,
+        2.804831249639392
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.8768090605735779,
+        "ane_power": 0,
+        "cpu_power": 0.8555920124053955,
+        "ecpu_usage": [
+          2443,
+          0.1476445347070694
+        ],
+        "gpu_power": 0.02121703140437603,
+        "gpu_ram_power": 0.0009505702764727175,
+        "gpu_usage": [
+          192,
+          0.007729021366685629
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12367265792,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          4035,
+          0.10904912650585175
+        ],
+        "ram_power": 0.2688317894935608,
+        "sys_power": 14.154996871948242,
+        "temp": {
+          "cpu_temp_avg": 59.157615661621094,
+          "gpu_temp_avg": 53.734615325927734
+        },
+        "timestamp": "2026-10-16T16:39:42.963758+00:00"
+      },
+      "systemAfter": {
+        "all_power": 1.8865174055099487,
+        "ane_power": 0,
+        "cpu_power": 1.6942062377929688,
+        "ecpu_usage": [
+          2863,
+          0.26626497507095337
+        ],
+        "gpu_power": 0.19231119751930237,
+        "gpu_ram_power": 0.0068329134956002235,
+        "gpu_usage": [
+          760,
+          0.05052352696657181
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12339019776,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          4305,
+          0.13812769949436188
+        ],
+        "ram_power": 0.5987645387649536,
+        "sys_power": 11.82650375366211,
+        "temp": {
+          "cpu_temp_avg": 68.65876770019531,
+          "gpu_temp_avg": 61.49164581298828
+        },
+        "timestamp": "2026-10-16T16:39:55.504204+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    },
+    {
+      "name": "shared-c",
+      "batch": 8,
+      "batches": [
+        {
+          "batch": 0,
+          "round": 0,
+          "seconds": 0.3541671670973301
+        },
+        {
+          "batch": 1,
+          "round": 0,
+          "seconds": 0.36181404162198305
+        },
+        {
+          "batch": 2,
+          "round": 0,
+          "seconds": 0.3548974166624248
+        },
+        {
+          "batch": 3,
+          "round": 0,
+          "seconds": 0.35540437512099743
+        },
+        {
+          "batch": 4,
+          "round": 0,
+          "seconds": 0.36314833350479603
+        },
+        {
+          "batch": 5,
+          "round": 0,
+          "seconds": 0.34184562461450696
+        },
+        {
+          "batch": 6,
+          "round": 0,
+          "seconds": 0.3405483332462609
+        },
+        {
+          "batch": 7,
+          "round": 0,
+          "seconds": 0.3509843754582107
+        },
+        {
+          "batch": 7,
+          "round": 1,
+          "seconds": 0.343320875428617
+        },
+        {
+          "batch": 6,
+          "round": 1,
+          "seconds": 0.34229795821011066
+        },
+        {
+          "batch": 5,
+          "round": 1,
+          "seconds": 0.3519367082044482
+        },
+        {
+          "batch": 4,
+          "round": 1,
+          "seconds": 0.3440923332236707
+        },
+        {
+          "batch": 3,
+          "round": 1,
+          "seconds": 0.33771341666579247
+        },
+        {
+          "batch": 2,
+          "round": 1,
+          "seconds": 0.3546643750742078
+        },
+        {
+          "batch": 1,
+          "round": 1,
+          "seconds": 0.3425674168393016
+        },
+        {
+          "batch": 0,
+          "round": 1,
+          "seconds": 0.33802800020202994
+        },
+        {
+          "batch": 0,
+          "round": 2,
+          "seconds": 0.34888083348050714
+        },
+        {
+          "batch": 1,
+          "round": 2,
+          "seconds": 0.35974029172211885
+        },
+        {
+          "batch": 2,
+          "round": 2,
+          "seconds": 0.3586228331550956
+        },
+        {
+          "batch": 3,
+          "round": 2,
+          "seconds": 0.35856425017118454
+        },
+        {
+          "batch": 4,
+          "round": 2,
+          "seconds": 0.34400829160586
+        },
+        {
+          "batch": 5,
+          "round": 2,
+          "seconds": 0.341218666639179
+        },
+        {
+          "batch": 6,
+          "round": 2,
+          "seconds": 0.3503932496532798
+        },
+        {
+          "batch": 7,
+          "round": 2,
+          "seconds": 0.343874916434288
+        }
+      ],
+      "copyInput": false,
+      "exactAllOutputs": true,
+      "frames": 64,
+      "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "peakWorkerPhysicalFootprintBytes": 648233872,
+      "predictionAndIPCFPS": 22.81393218704718,
+      "rounds": 3,
+      "sweepSeconds": [
+        2.82280966732651,
+        2.7546210838481784,
+        2.805303332861513
+      ],
+      "tailCountsExact": [
+        1,
+        5,
+        8
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/bin-shared/waifu-wdtagger",
+      "systemBefore": {
+        "all_power": 0.49310502409935,
+        "ane_power": 0,
+        "cpu_power": 0.46404018998146057,
+        "ecpu_usage": [
+          2041,
+          0.1181999072432518
+        ],
+        "gpu_power": 0.0290648452937603,
+        "gpu_ram_power": 0.0028921831399202347,
+        "gpu_usage": [
+          551,
+          0.02412198670208454
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12490194944,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1806,
+          0.013956465758383274
+        ],
+        "ram_power": 0.2502741515636444,
+        "sys_power": 10.756033897399902,
+        "temp": {
+          "cpu_temp_avg": 59.76888656616211,
+          "gpu_temp_avg": 54.4759635925293
+        },
+        "timestamp": "2026-10-16T16:40:23.570015+00:00"
+      },
+      "systemAfter": {
+        "all_power": 2.0855534076690674,
+        "ane_power": 0.009680048562586308,
+        "cpu_power": 1.7882866859436035,
+        "ecpu_usage": [
+          2886,
+          0.6545794010162354
+        ],
+        "gpu_power": 0.2875867784023285,
+        "gpu_ram_power": 0.013608490116894245,
+        "gpu_usage": [
+          778,
+          0.10424553602933884
+        ],
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12221153280,
+          "swap_total": 1073741824,
+          "swap_usage": 287571968
+        },
+        "pcpu_usage": [
+          1917,
+          0.046193938702344894
+        ],
+        "ram_power": 0.7032004594802856,
+        "sys_power": 23.72565269470215,
+        "temp": {
+          "cpu_temp_avg": 70.06671905517578,
+          "gpu_temp_avg": 62.76620864868164
+        },
+        "timestamp": "2026-10-16T16:40:36.072549+00:00"
+      },
+      "workerSHA256": "269c23085c844a6054410d5b35931668c9b8b9f1273f2a1af0a7448ba71c67f3",
+      "probeSHA256": "86921779f39ebe9c5fcf17eb2e77f9a1fde2c857d040e061951badf696330860"
+    }
+  ],
+  "packagedWorkerValidation": {
+    "batch": 8,
+    "batches": [
+      {
+        "batch": 0,
+        "round": 0,
+        "seconds": 0.35389612475410104
+      },
+      {
+        "batch": 1,
+        "round": 0,
+        "seconds": 0.3402656251564622
+      },
+      {
+        "batch": 2,
+        "round": 0,
+        "seconds": 0.34607004188001156
+      },
+      {
+        "batch": 3,
+        "round": 0,
+        "seconds": 0.3440058333799243
+      },
+      {
+        "batch": 4,
+        "round": 0,
+        "seconds": 0.33850250020623207
+      },
+      {
+        "batch": 5,
+        "round": 0,
+        "seconds": 0.3360591665841639
+      },
+      {
+        "batch": 6,
+        "round": 0,
+        "seconds": 0.3471561665646732
+      },
+      {
+        "batch": 7,
+        "round": 0,
+        "seconds": 0.3387862080708146
+      },
+      {
+        "batch": 7,
+        "round": 1,
+        "seconds": 0.34394704177975655
+      },
+      {
+        "batch": 6,
+        "round": 1,
+        "seconds": 0.36222308361902833
+      },
+      {
+        "batch": 5,
+        "round": 1,
+        "seconds": 0.3560809167101979
+      },
+      {
+        "batch": 4,
+        "round": 1,
+        "seconds": 0.35119441663846374
+      },
+      {
+        "batch": 3,
+        "round": 1,
+        "seconds": 0.35087304189801216
+      },
+      {
+        "batch": 2,
+        "round": 1,
+        "seconds": 0.340081250295043
+      },
+      {
+        "batch": 1,
+        "round": 1,
+        "seconds": 0.337307708337903
+      },
+      {
+        "batch": 0,
+        "round": 1,
+        "seconds": 0.34788925014436245
+      },
+      {
+        "batch": 0,
+        "round": 2,
+        "seconds": 0.33754400024190545
+      },
+      {
+        "batch": 1,
+        "round": 2,
+        "seconds": 0.33718879148364067
+      },
+      {
+        "batch": 2,
+        "round": 2,
+        "seconds": 0.34582029189914465
+      },
+      {
+        "batch": 3,
+        "round": 2,
+        "seconds": 0.3377807498909533
+      },
+      {
+        "batch": 4,
+        "round": 2,
+        "seconds": 0.3367418749257922
+      },
+      {
+        "batch": 5,
+        "round": 2,
+        "seconds": 0.34509483352303505
+      },
+      {
+        "batch": 6,
+        "round": 2,
+        "seconds": 0.3364240415394306
+      },
+      {
+        "batch": 7,
+        "round": 2,
+        "seconds": 0.3362017082981765
+      }
+    ],
+    "copyInput": false,
+    "exactAllOutputs": true,
+    "frames": 64,
+    "method": "Warm worker, three 64-frame sweeps, forward/reverse/forward batch order. Input file preparation excluded; IPC through full response receipt included. Worker-only footprint sampled every 10 ms with proc_pid_rusage. No GPU trace.",
+    "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+    "peakWorkerPhysicalFootprintBytes": 655065928,
+    "predictionAndIPCFPS": 23.317312801741085,
+    "rounds": 3,
+    "sweepSeconds": [
+      2.744741666596383,
+      2.789596709422767,
+      2.7127962918020785
+    ],
+    "tailCountsExact": [
+      1,
+      5,
+      8
+    ],
+    "thermalAfter": 0,
+    "thermalBefore": 0,
+    "worker": "/Users/henry/waifu-gpu-bench.f9Mw3f/checkpoint/WaifuFinder-native-wdtagger-v4.app/Contents/Resources/Runtime/waifu-wdtagger",
+    "validationOnly": true,
+    "coolingGateApplied": false
+  },
+  "packagedWorkerInputMode": "WDTagger input: copy",
+  "signatureVerification": "/Users/henry/waifu-gpu-bench.f9Mw3f/checkpoint/WaifuFinder-native-wdtagger-v4.app: valid on disk\n/Users/henry/waifu-gpu-bench.f9Mw3f/checkpoint/WaifuFinder-native-wdtagger-v4.app: satisfies its Designated Requirement",
+  "syntheticVideo": {
+    "sha256": "084bd5a53b1c9ebe445b1a8ef1dc054c8a000eca0d4b85b1a63d6bf07fa69cf4",
+    "bytes": 10190137,
+    "requestedFrames": 64,
+    "requestedSecondsFormula": "0.05 + index * 0.125",
+    "analysisWidth": 512,
+    "historicalGeneratorRetired": true,
+    "currentGenerator": "tools/make-synthetic-video.sh tagging-source.mp4 1920 1080 30 10",
+    "currentGeneratorIsByteIdentical": false
+  },
+  "modelWeightsSHA256": "34fdaae4d72640985f985bb447db27c227288571122ff40cb773f1299074d550",
+  "limitations": [
+    "Tagging-stage component benchmark: production thumbnail regeneration/cache encoding, JPEG decoding, Core Image preprocessing, worker inference, vocabulary and probability encoding. It excludes interactive UI, session frame lookup/progress publication, video analysis/scoring/grouping and export.",
+    "Video-backed trials regenerate every requested thumbnail from a synthetic 1920x1080 H.264 clip. Benefit depends on cache misses, source codec, seek cost and machine load.",
+    "Cached trials create a 64-JPEG cache from the retained RGBA corpus before timing; their memory includes residual fixture-construction allocator pages. Compare memory within the same fixture mode.",
+    "Combined memory is the peak simultaneous sum of parent and direct-child physical footprints sampled via proc_pid_rusage every 10 ms. This is not unique DRAM use; shared mappings may be counted by both processes. OS codec/XPC service memory is excluded.",
+    "M4 starts require normal thermal state, GPU <=55 C, and sampled maximum P/E scaled CPU usage <=40%. Background macOS processes and clocks still vary.",
+    "Controls and candidates run in separate fresh processes. All 64 encoded outputs match by SHA256 across configurations within each input mode, and are byte-compared across repeated sweeps.",
+    "Prototype worker binaries enabled shared input by default; final code retains copy input by default and exposes the same shared implementation through --shared-input or WAIFU_WD_SHARED_INPUT=1. Benchmark scripts now request the experimental mode explicitly. Warmup/startup are excluded from timing.",
+    "Shared input saved about 6.5 MB in the M4 worker trials but did not establish a speed gain and did not reproduce a consistent memory benefit in an earlier M3 trial; it remains experimental. No further M3 tests were run after the user requested M4-only testing.",
+    "An initial app sampler run was discarded after correcting the child-PID count interpretation. Only corrected runs are included here. The corrected sampler also rejects runs that never observe worker memory.",
+    "Model-only Core ML comparisons remain those in WDTagger-native-m4.md; this pass does not measure a new model-only speed advantage over Core ML. No additional GPU trace was recorded."
+  ],
+  "regressionTests": {
+    "host": "Mac mini M4",
+    "sourceCommit": "2e2f2bb",
+    "passed": 18,
+    "failed": 0,
+    "knownBugs": 0,
+    "log": "==> Compiling 76 production + 27 test sources for arm64-apple-macosx15.0\n==> Running\nWaifuFinder regression suite \u2014 226 cases\ntemporary directories only; no sample video, no network, no root\n\nWDTagger\n  PASS  native model top15 matches independent original BGR Torch reference  (3.00s)\n  PASS  independent native model instances preserve mixed batches under concurrent prediction  (5.64s)\n  PASS  label order, threshold, rating and character exclusion  (38ms)\n  PASS  autocomplete ranks exact then prefix then substring and preserves kaomoji  (39ms)\n  PASS  live probabilities stay uncompressed and reject malformed buffers  (4ms)\n  PASS  legacy compressed runtime probabilities remain readable  (3ms)\n  PASS  tagging pipeline batches eight and preserves source image order and frame metadata  (74ms)\n\nWDTagger contract\n  PASS  tagging prefetch overlaps one fetch and drains only after committing ordered results  (121ms)\n  PASS  tagging prefetch preserves completed results when the following fetch fails  (40ms)\n  PASS  tagging prefetch rechecks a queue that grows while draining  (33ms)\n  PASS  tagging prefetch observes cancellation before consuming a following batch  (40ms)\n  PASS  native probability rows decode exactly from unaligned byte storage  (31ms)\n  PASS  tagging progress limits redraws and always publishes state transitions  (2ms)\n  PASS  model discovery uses default storage and skips stale configured paths  (3ms)\n  PASS  probability buffer decoding honors padded rows and strided columns  (52ms)\n  PASS  older settings and frames retain preferences while new tag fields decode nil  (2ms)\n  PASS  RGB preprocessing preserves top-bottom orientation and writes unnormalized RGB planes  (69ms)\n  PASS  letterbox is white, centered, opaque, and downscales wide images  (469ms)\n\n18 passed, 0 failed, 0 known bugs  in 9.66s\n"
+  }
+}

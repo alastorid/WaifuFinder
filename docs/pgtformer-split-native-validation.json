@@ -1,0 +1,6 @@
+{
+  "backend" : "native Swift CPU encoder \/ GPU decoder",
+  "maximumAbsoluteError" : 0.00011527538299560547,
+  "meanAbsoluteError" : 4.133716347623495e-06,
+  "passed" : true
+}

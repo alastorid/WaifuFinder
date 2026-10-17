@@ -1,0 +1,47 @@
+# Build output. dist/ holds the .app bundle and any DMGs; nothing in it is
+# ever committed.
+.build/
+dist/
+*.o
+*.dSYM/
+
+# SwiftPM. There is no Package.resolved because there are no dependencies, but
+# these are what a stray `swift build` leaves behind.
+.swiftpm/
+Package.resolved
+WaifuFinder-1.*
+
+# Xcode. The app is built by ./build.sh with swiftc, not by a project, but a
+# developer with Xcode open will generate these anyway.
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# Frame and thumbnail caches. These are derived: deleting them costs a re-run,
+# never a result.
+.waifu-cache/
+.uncover-runtime/
+.native-runtime/
+.native-toolchain/
+__pycache__/
+
+# macOS
+.DS_Store
+
+# Node, for the web-UI test harness only
+node_modules/
+
+# Final model weights and local development artifacts
+/models/published/
+.tagger-build/
+.tagger-sdpa*/
+
+!Runtime/Package.resolved
+
+# Test data is generated locally from source; never upload binary fixtures.
+/Tests/Fixtures/**/*.bin
+/Tests/Fixtures/**/*.png
+/Tests/Fixtures/**/*.f32
+/Tests/Fixtures/**/*.gz
+/docs/development-archive/**/*.gz
+

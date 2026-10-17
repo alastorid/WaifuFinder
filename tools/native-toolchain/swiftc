@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+# CLT 26.5 ships a stale private PackageDescription interface alongside a current
+# public interface/dylib. Use a local copy; never modify the installed toolchain.
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REAL="$(xcrun --find swiftc)"
+ORIGINAL="$(dirname "$REAL")/../lib/swift/pm/ManifestAPI"
+LOCAL="$ROOT/.native-toolchain/ManifestAPI"
+ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "$ORIGINAL" ] || [ "$arg" = "/Library/Developer/CommandLineTools/usr/lib/swift/pm/ManifestAPI" ]; then
+        ARGS+=("$LOCAL")
+    else
+        ARGS+=("$arg")
+    fi
+done
+exec "$REAL" "${ARGS[@]}"

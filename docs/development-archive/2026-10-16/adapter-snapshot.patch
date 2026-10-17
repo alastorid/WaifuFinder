@@ -1,0 +1,577 @@
+diff --git a/Sources/Waifu/Engine/WaifuSession.swift b/Sources/Waifu/Engine/WaifuSession.swift
+index 8ae5b36..ef296d8 100644
+--- a/Sources/Waifu/Engine/WaifuSession.swift
++++ b/Sources/Waifu/Engine/WaifuSession.swift
+@@ -658,12 +658,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
+             acquired = true
+             let tagger = try WDTaggerBackend(directory: config.directory,
+                                              generalThreshold: threshold)
+-            try await TaggingBatchPipeline.run(next: {
+-                try await self.nextTaggingBatch(token: token)
+-            }, whenEmpty: {
+-                await self.finishTaggingIfDrained(token: token, elapsed: Date().timeIntervalSince(started))
+-            }, consume: { batch in
++            while true {
+                 try Task.checkCancellation()
++                guard let batch = try await self.nextTaggingBatch(token: token) else { break }
++                if batch.isEmpty {
++                    let elapsed = Date().timeIntervalSince(started)
++                    guard await finishTaggingIfDrained(token: token, elapsed: elapsed) else { break }
++                    continue
++                }
++
+                 let images = try batch.map { item -> CGImage in
+                     guard let source = CGImageSourceCreateWithData(item.thumbnailData as CFData, nil),
+                           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+@@ -691,9 +694,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
+                     updates.append(frame)
+                 }
+                 let elapsed = Date().timeIntervalSince(started)
+-                await self.acceptTaggedFrames(updates, token: token, elapsed: elapsed,
+-                                              cacheIdentity: cacheIdentity)
+-            })
++                await acceptTaggedFrames(updates, token: token, elapsed: elapsed,
++                                         cacheIdentity: cacheIdentity)
++            }
+         } catch {
+             let elapsed = Date().timeIntervalSince(started)
+             await failTagging(error, token: token, elapsed: elapsed)
+@@ -1051,9 +1054,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
+                                                 videoStem: videoInfo.url.deletingPathExtension().lastPathComponent)
+             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
+                                               thumbnailStore: writer, analysisWidth: settings.analysisWidth,
+-                                              workerCount: FrameProcessingConcurrency(
+-                                                width: videoInfo.width, height: videoInfo.height,
+-                                                analysisWidth: settings.analysisWidth).scoringWorkers,
++                                              workerCount: 2,
+                                               cacheSuffix: "-\(token.uuidString)",
+                                               cachedResults: cachedAnalysisResults)
+             let scoredFrames = pipeline.run(frames: sampled,
+diff --git a/Sources/Waifu/UI/ZoomableFrameImage.swift b/Sources/Waifu/UI/ZoomableFrameImage.swift
+index f2c9b73..35824bb 100644
+--- a/Sources/Waifu/UI/ZoomableFrameImage.swift
++++ b/Sources/Waifu/UI/ZoomableFrameImage.swift
+@@ -40,11 +40,11 @@ struct ZoomableFrameImage: NSViewRepresentable {
+         }
+ 
+         func store(ratio: CGFloat, center point: CGPoint) {
+-            if abs(zoomRatio.wrappedValue - ratio) > 0.000001 {
++            if abs(zoomRatio.wrappedValue - ratio) > 0.002 {
+                 zoomRatio.wrappedValue = ratio
+             }
+-            if abs(center.wrappedValue.x - point.x) > 0.000001
+-                || abs(center.wrappedValue.y - point.y) > 0.000001 {
++            if abs(center.wrappedValue.x - point.x) > 0.002
++                || abs(center.wrappedValue.y - point.y) > 0.002 {
+                 center.wrappedValue = point
+             }
+         }
+@@ -143,7 +143,7 @@ struct FrameZoomGeometry: Equatable {
+         return scrollOrigin(keeping: centre, under: focus)
+     }
+ 
+-    /// How far to scroll so the viewport position `point` — normally the pointer — stays
++    /// How far to scroll so the canvas position `point` — normally the pointer — stays
+     /// over the image point `focus` it is over now. This is what a pinch needs, and it
+     /// is *not* `scrollOrigin(focus:)`: re-centring the focus would move the picture
+     /// out from under the pointer the gesture is being made with.
+@@ -190,15 +190,12 @@ final class FrameZoomScrollView: NSScrollView {
+     private let canvas = NSView()
+     private let frameImageView = NSImageView()
+     private var displayedID: FrameID?
+-    /// The frame's own size in points — what the geometry scales, and therefore what the
+-    /// ratio is a multiple of.
++    /// The frame's own size in points. An image's size is what it is drawn at when
++    /// nothing has scaled it, so this is the ratio-1 size.
+     private var imageSize: CGSize = .zero
+-    /// The zoom as a multiple of the fit, and the image point kept at the middle of
+-    /// the viewport.
+     private var requestedRatio: CGFloat = 1
+     private var requestedCenter = CGPoint(x: 0.5, y: 0.5)
+     private var lastViewportSize = CGSize.zero
+-    private var applyingLayout = false
+     nonisolated(unsafe) private var boundsObserver: NSObjectProtocol?
+ 
+     override init(frame: NSRect) {
+@@ -221,7 +218,6 @@ final class FrameZoomScrollView: NSScrollView {
+         hasHorizontalScroller = true
+         hasVerticalScroller = true
+         autohidesScrollers = true
+-        scrollerStyle = .overlay
+         // Left on so a trackpad pinch still reaches `magnify(with:)`; the magnification
+         // itself is this class's business, not AppKit's.
+         allowsMagnification = true
+@@ -235,10 +231,6 @@ final class FrameZoomScrollView: NSScrollView {
+         frameImageView.imageScaling = .scaleProportionallyUpOrDown
+         frameImageView.imageAlignment = .alignCenter
+ 
+-        let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(toggleZoom(_:)))
+-        doubleClick.numberOfClicksRequired = 2
+-        addGestureRecognizer(doubleClick)
+-
+         contentView.postsBoundsChangedNotifications = true
+         boundsObserver = NotificationCenter.default.addObserver(
+             forName: NSView.boundsDidChangeNotification,
+@@ -260,20 +252,10 @@ final class FrameZoomScrollView: NSScrollView {
+         let isNewFrame = displayedID != id
+         let ratio = FrameZoomGeometry.clampedRatio(zoomRatio)
+         let focus = CGPoint(x: min(1, max(0, center.x)), y: min(1, max(0, center.y)))
+-        // A completed source read can replace the image already on screen, and
+-        // SwiftUI calls this on every state change, so an
+-        // unchanged request is otherwise left alone: re-applying on every update would
+-        // re-centre under the user's scroll.
+-        let isNewImage = frameImageView.image !== image
+-        guard isNewFrame || isNewImage || ratio != requestedRatio || focus != requestedCenter else { return }
+-        if !isNewFrame, !isNewImage, ratio != requestedRatio {
+-            let pointer = window.map { contentView.convert($0.mouseLocationOutsideOfEventStream, from: nil) }
+-            let anchor = pointer.flatMap { contentView.bounds.contains($0) ? $0 : nil }
+-                ?? contentView.bounds.center
+-            zoom(to: ratio, atClipPoint: anchor)
+-            return
+-        }
+-        if isNewImage {
++        // SwiftUI calls this on every state change, so an unchanged request is left
++        // alone: re-applying on every update would re-centre under the user's scroll.
++        guard isNewFrame || ratio != requestedRatio || focus != requestedCenter else { return }
++        if isNewFrame {
+             frameImageView.image = image
+             imageSize = image.size
+         }
+@@ -285,7 +267,6 @@ final class FrameZoomScrollView: NSScrollView {
+ 
+     override func layout() {
+         super.layout()
+-        guard !applyingLayout else { return }
+         let viewport = contentView.bounds.size
+         guard viewport.width > 1, viewport.height > 1, viewport != lastViewportSize else { return }
+         lastViewportSize = viewport
+@@ -299,18 +280,16 @@ final class FrameZoomScrollView: NSScrollView {
+         let geometry = currentGeometry
+         guard geometry.viewport.width > 1, geometry.viewport.height > 1,
+               geometry.imageSize.width > 1, geometry.imageSize.height > 1 else { return }
+-        applyingLayout = true
+         canvas.frame = NSRect(origin: .zero, size: geometry.canvasSize)
+         frameImageView.frame = geometry.imageRect
+         frameImageView.needsDisplay = true
+         contentView.scroll(to: origin ?? geometry.scrollOrigin(focus: requestedCenter))
+         reflectScrolledClipView(contentView)
+-        applyingLayout = false
+         publishState()
+     }
+ 
+-    /// The layout for what is on screen now: the real viewport, the frame's own size,
+-    /// and the zoom that is being asked for.
++    /// A window resize refits: the frame follows the new viewport at the zoom level
++    /// and the image point the user was looking at.
+     private var currentGeometry: FrameZoomGeometry {
+         FrameZoomGeometry(viewport: contentView.bounds.size, imageSize: imageSize, ratio: requestedRatio)
+     }
+@@ -322,23 +301,10 @@ final class FrameZoomScrollView: NSScrollView {
+     /// a hand that has not moved.
+     override func magnify(with event: NSEvent) {
+         let anchor = contentView.convert(event.locationInWindow, from: nil)
+-        // Converted clip coordinates include the existing scroll origin. The
+-        // anchor passed to layout must be relative to the visible viewport.
+-        zoom(to: requestedRatio * (1 + event.magnification), atClipPoint: anchor)
+-    }
+-
+-    /// Use one pointer-preserving path for pinch, double-click and zoom controls.
+-    func zoom(to ratio: CGFloat, atClipPoint anchor: CGPoint) {
+-        let point = CGPoint(x: anchor.x - contentView.bounds.minX,
+-                            y: anchor.y - contentView.bounds.minY)
+         let focus = currentGeometry.focus(atCanvasPoint: anchor)
+-        requestedRatio = FrameZoomGeometry.clampedRatio(ratio)
+-        applyLayout(origin: currentGeometry.scrollOrigin(keeping: point, under: focus))
+-    }
+-
+-    @objc private func toggleZoom(_ gesture: NSClickGestureRecognizer) {
+-        let anchor = gesture.location(in: contentView)
+-        zoom(to: requestedRatio > 1.01 ? 1 : 2, atClipPoint: anchor)
++        requestedRatio = FrameZoomGeometry.clampedRatio(requestedRatio * (1 + event.magnification))
++        requestedCenter = focus
++        applyLayout(origin: currentGeometry.scrollOrigin(keeping: anchor, under: focus))
+     }
+ 
+     override func scrollWheel(with event: NSEvent) {
+@@ -349,7 +315,7 @@ final class FrameZoomScrollView: NSScrollView {
+     /// The zoom and the image point at the centre of the viewport, read back off the
+     /// clip view: the user moved them, so the bindings holding them have to be told.
+     private func publishState() {
+-        guard !applyingLayout, imageSize.width > 1, imageSize.height > 1 else { return }
++        guard imageSize.width > 1, imageSize.height > 1 else { return }
+         let geometry = currentGeometry
+         // With nothing to scroll there is no position to report: the focus point stays
+         // where the user left it, so magnifying back in returns there rather than to
+@@ -365,4 +331,4 @@ final class FrameZoomScrollView: NSScrollView {
+ 
+ private extension NSRect {
+     var center: NSPoint { NSPoint(x: midX, y: midY) }
+-}
++}
+\ No newline at end of file
+diff --git a/Sources/Waifu/Video/FrameSampler.swift b/Sources/Waifu/Video/FrameSampler.swift
+index 1ae2f87..d7676de 100644
+--- a/Sources/Waifu/Video/FrameSampler.swift
++++ b/Sources/Waifu/Video/FrameSampler.swift
+@@ -51,19 +51,43 @@ enum FrameSamplingError: Error, LocalizedError, Equatable {
+ // **every frame the decoder produces**. The pass is frame by frame: no frame
+ // is skipped, dropped, or sampled away.
+ //
+-// ## Bounded parallel preparation
++// ## Frames are produced on demand, not pushed
+ //
+-// The source reader advances sequentially. Each selected pixel buffer is then
+-// cropped and resized on a background task, with at most two preparation tasks
+-// retained. They can complete in either order; `next()` returns them in source
+-// order. This overlaps raster work with decoding and scoring without buffering
+-// the video. FrameProcessingConcurrency reduces concurrency for large sources.
+-// Each task drains its temporary image objects before returning its two images.
++// `sample` returns a stream built with `AsyncThrowingStream(unfolding:)`, so a
++// frame is decoded only when the consumer asks for the next one. That is not a
++// micro-optimisation — it is the difference between a bounded and an unbounded
++// memory footprint. The obvious alternative, a producing `Task` that yields into
++// an `AsyncThrowingStream`, has **no backpressure**: its buffer is unbounded, so
++// a decoder that outruns the Vision pass holds every decoded frame at once. At
++// 512 px a frame is ~576 KB, so the 47-minute reference (84,067 frames) is
++// 48 GB if the decoder runs ahead. Unfolding keeps exactly one frame in flight
++// here, and the scoring pipeline's worker count bounds the rest, whatever the
++// length of the video.
+ //
+-// Native picture pixels supply both face scores; a smaller raster supplies
+-// aesthetics, FeaturePrint and thumbnails. Its longest edge is analysisWidth.
+-// A caller that stops pulling triggers no more decoding; already queued work is
+-// limited to the small preparation window.
++// ## Why one sequential pass
++//
++// Every frame is wanted, so there is no seeking alternative: a front-to-back
++// read is the only way to touch each frame exactly once, in a single pass,
++// with no decode work thrown away. The reader decodes every frame and yields
++// every frame — the total work is the file's actual frame count, which is also
++// the stream's length.
++//
++// ## Native face pixels and cropped analysis input
++//
++// The reader decodes native pixels once and applies the preferred transform.
++// Large opposing black borders are removed before any scoring request. Native
++// picture pixels supply both face scores through one detection request; a
++// second, smaller raster supplies aesthetics, FeaturePrint and the thumbnail.
++// Its longest edge is bounded by `analysisWidth`, preserving portrait crops.
++// Two scoring workers bound native image retention; no second scan is needed.
++//
++// ## Throughput
++//
++// The pass is serial by construction — one reader, one frame at a time — so the
++// decoder, not Vision, is usually the throughput floor; the scoring pipeline's
++// four workers run alongside it. Nothing is parallelised *within* the file,
++// which is what the memory bound above requires, and it would buy little anyway:
++// the decode hardware is the same either way.
+ //
+ // ## Frame ownership
+ //
+@@ -111,42 +135,6 @@ private struct FrameTrackContext: @unchecked Sendable {
+     let transform: CGAffineTransform
+ }
+ 
+-/// The pixel buffer is retained until raster preparation finishes and is only
+-/// read by that task. The serial reader cannot reuse a retained buffer.
+-private struct DecodedFrame: @unchecked Sendable {
+-    let sampleIndex: Int
+-    let timeSeconds: Double
+-    let pixels: CVPixelBuffer
+-}
+-
+-/// CIContext supports concurrent rendering. Reuse one context across the small
+-/// preparation window without caching intermediates from unrelated video frames.
+-private final class FrameRasterizer: @unchecked Sendable {
+-    private let context = CIContext(options: [.cacheIntermediates: false])
+-
+-    func render(_ frame: DecodedFrame, transform: CGAffineTransform,
+-                analysisWidth: Int) throws -> SampledFrame {
+-        try autoreleasepool {
+-            try Task.checkCancellation()
+-            let native = CIImage(cvPixelBuffer: frame.pixels).transformed(by: transform)
+-            guard let decodedImage = context.createCGImage(native, from: native.extent) else {
+-                throw FrameSamplingError.decodingFailed("could not rasterise native pixels at \(frame.timeSeconds)s")
+-            }
+-            let picture = FramePictureArea.bounds(decodedImage)
+-            let nativeImage = decodedImage.cropping(to: picture) ?? decodedImage
+-            let input = CIImage(cgImage: nativeImage)
+-            let scale = CGFloat(analysisWidth) / max(input.extent.width, input.extent.height)
+-            let scaled = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+-            guard let image = context.createCGImage(scaled, from: scaled.extent) else {
+-                throw FrameSamplingError.decodingFailed("could not rasterise the frame at \(frame.timeSeconds)s")
+-            }
+-            try Task.checkCancellation()
+-            return SampledFrame(sampleIndex: frame.sampleIndex, timeSeconds: frame.timeSeconds,
+-                                image: image, nativeImage: nativeImage)
+-        }
+-    }
+-}
+-
+ /// The presentation times of a video's sync samples — the frames the
+ /// encoder marked decodable on their own.
+ ///
+@@ -232,9 +220,10 @@ private actor FrameSamplingProducer {
+     private let mode: AnalysisMode
+     private let onProgress: @Sendable (Int) -> Void
+ 
+-    private let rasterizer = FrameRasterizer()
+-    private var preparationWorkers = 1
+-    private var prepared: [Task<SampledFrame, Error>] = []
++    /// One context for the whole pass. `CIContext()` per frame — which this
++    /// replaced — allocates a Metal-backed context every time, and there are
++    /// tens of thousands of frames.
++    private let ciContext = CIContext()
+ 
+     private var reader: AVAssetReader?
+     private var output: AVAssetReaderTrackOutput?
+@@ -317,59 +306,16 @@ private actor FrameSamplingProducer {
+ 
+     /// The next frame of the file, or `nil` at its end.
+     func next() async throws -> SampledFrame? {
+-        do {
+-            try Task.checkCancellation()
+-            if !isPrepared { try await prepare() }
+-            // Read serially, then prepare at most two native frames in parallel.
+-            // A slow consumer never causes additional decoding or queued work.
+-            while !isFinished, prepared.count < preparationWorkers {
+-                guard let decoded = try nextDecodedFrame() else { break }
+-                let rasterizer = self.rasterizer
+-                let transform = nativeTransform
+-                let width = analysisWidth
+-                prepared.append(Task.detached(priority: .userInitiated) {
+-                    try rasterizer.render(decoded, transform: transform, analysisWidth: width)
+-                })
+-            }
+-            guard !prepared.isEmpty else { return nil }
+-            // Tasks can finish in either order. Await submission order so source
+-            // ordinals and timestamps stay deterministic in every analysis mode.
+-            let task = prepared.removeFirst()
+-            let frame = try await withTaskCancellationHandler {
+-                try await task.value
+-            } onCancel: {
+-                task.cancel()
+-            }
+-            try Task.checkCancellation()
+-            framesEmitted += 1
+-            onProgress(framesEmitted)
+-            return frame
+-        } catch {
+-            for task in prepared { task.cancel() }
+-            prepared.removeAll(keepingCapacity: false)
+-            reader?.cancelReading()
+-            isFinished = true
+-            throw error
+-        }
+-    }
+-
+-    /// AVAssetReader remains owned by this actor; expensive raster work does not.
+-    private func nextDecodedFrame() throws -> DecodedFrame? {
+         try Task.checkCancellation()
+         if isFinished { return nil }
+-        guard let output else { isFinished = true; return nil }
++        if !isPrepared { try await prepare() }
++        guard let output else { return stop() }
+ 
+         while true {
+             try Task.checkCancellation()
+             // The reader is exhausted: the pass is over. Every frame
+             // the mode selects has been emitted.
+-            guard let buffer = output.copyNextSampleBuffer() else {
+-                isFinished = true
+-                if let reader, reader.status == .failed {
+-                    throw FrameSamplingError.assetReaderFailed(reader.error?.localizedDescription ?? "unknown error")
+-                }
+-                return nil
+-            }
++            guard let buffer = output.copyNextSampleBuffer() else { return try conclude() }
+ 
+             let decodedIndex = decodedCount
+             decodedCount += 1
+@@ -400,7 +346,31 @@ private actor FrameSamplingProducer {
+             guard let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else {
+                 throw FrameSamplingError.decodingFailed("sample buffer has no image buffer at \(seconds)s")
+             }
+-            return DecodedFrame(sampleIndex: decodedIndex, timeSeconds: seconds, pixels: imageBuffer)
++            // Core Image and AppKit create autoreleased intermediates while
++            // rasterising each frame. A long async stream does not guarantee an
++            // autorelease-pool drain between `next()` calls, so bound those
++            // temporaries to this frame. The returned CGImages remain retained by
++            // the SampledFrame until its scoring worker finishes.
++            return try autoreleasepool {
++                let native = CIImage(cvPixelBuffer: imageBuffer).transformed(by: nativeTransform)
++                guard let decodedImage = ciContext.createCGImage(native, from: native.extent) else {
++                    throw FrameSamplingError.decodingFailed("could not rasterise native pixels at \(seconds)s")
++                }
++                let picture = FramePictureArea.bounds(decodedImage)
++                let nativeImage = decodedImage.cropping(to: picture) ?? decodedImage
++                let input = CIImage(cgImage: nativeImage)
++                let scale = CGFloat(analysisWidth) / max(input.extent.width, input.extent.height)
++                let ciImage = input.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
++                guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
++                    throw FrameSamplingError.decodingFailed("could not rasterise the frame at \(seconds)s")
++                }
++
++                let frame = SampledFrame(sampleIndex: decodedIndex, timeSeconds: seconds,
++                                         image: cgImage, nativeImage: nativeImage)
++                framesEmitted += 1
++                onProgress(framesEmitted)
++                return frame
++            }
+         }
+     }
+ 
+@@ -412,9 +382,6 @@ private actor FrameSamplingProducer {
+         let videoInfo = try await VideoProbe.probe(url)
+         guard videoInfo.hasVideo else { throw FrameSamplingError.noVideoTrack }
+         frameStep = mode.frameStep(frameRate: videoInfo.frameRate)
+-        preparationWorkers = FrameProcessingConcurrency(
+-            width: videoInfo.width, height: videoInfo.height,
+-            analysisWidth: analysisWidth).preparationWorkers
+ 
+         let trackContext = try await Self.loadTrack(url: url)
+         let asset = trackContext.asset
+@@ -459,4 +426,19 @@ private actor FrameSamplingProducer {
+         self.output = readerOutput
+     }
+ 
++    /// The reader handed back no more buffers: the pass is complete, or failed.
++    private func conclude() throws -> SampledFrame? {
++        isFinished = true
++        if let reader, reader.status == .failed {
++            throw FrameSamplingError.assetReaderFailed(reader.error?.localizedDescription ?? "unknown error")
++        }
++        return nil
++    }
++
++    /// The stream is over and the reader should stop decoding.
++    private func stop() -> SampledFrame? {
++        isFinished = true
++        reader?.cancelReading()
++        return nil
++    }
+ }
+diff --git a/Tests/FrameSamplerTests.swift b/Tests/FrameSamplerTests.swift
+index 54712b6..3d33252 100644
+--- a/Tests/FrameSamplerTests.swift
++++ b/Tests/FrameSamplerTests.swift
+@@ -23,54 +23,6 @@ import Foundation
+ func registerFrameSamplerTests() {
+     let suite = "frame sampling"
+ 
+-    Registry.shared.add(suite: suite, TestCase(
+-        name: "native-frame concurrency scales down for large sources and small memory budgets", knownBug: nil) {
+-        let normal = FrameProcessingConcurrency(width: 1920, height: 1080,
+-                                               processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
+-        checkEqual(normal.preparationWorkers, 2, "ordinary video can prepare two frames concurrently")
+-        check(normal.scoringWorkers > 2, "ordinary video can fill more than the previous two scoring slots")
+-        let large = FrameProcessingConcurrency(width: 7680, height: 4320,
+-                                              processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
+-        check(large.preparationWorkers + large.scoringWorkers < normal.preparationWorkers + normal.scoringWorkers,
+-              "8K inputs reduce native image residency")
+-        let small = FrameProcessingConcurrency(width: 3840, height: 2160,
+-                                              processorCount: 8, physicalMemory: 4 * 1024 * 1024 * 1024)
+-        checkEqual(small.preparationWorkers, 1, "a tight memory budget avoids parallel native rasters")
+-        checkEqual(small.scoringWorkers, 1, "one scoring slot still permits progress under a tight budget")
+-        let single = FrameProcessingConcurrency(width: 1920, height: 1080,
+-                                               processorCount: 1, physicalMemory: 16 * 1024 * 1024 * 1024)
+-        checkEqual(single.preparationWorkers, 1, "one processor avoids parallel preparation")
+-        checkEqual(single.scoringWorkers, 1, "one processor avoids oversubscribing CPU scoring")
+-        let enlarged = FrameProcessingConcurrency(width: 1920, height: 1080, analysisWidth: 4096,
+-                                                 processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
+-        check(enlarged.preparationWorkers + enlarged.scoringWorkers < normal.preparationWorkers + normal.scoringWorkers,
+-              "large analysis rasters count toward the same working budget")
+-    })
+-
+-    Registry.shared.add(suite: suite, TestCase(
+-        name: "cancelling a consumer stops an active preparation window without emitting extra frames", knownBug: nil) {
+-        // Use Apple-native fixtures.
+-        let directory = try Temporary.directory("sampler-cancellation")
+-        let clip = try VideoFixture.makeMP4(in: directory, durationSeconds: 3,
+-                                          width: 320, height: 240, frameRate: 30)
+-        let ticks = TickLog()
+-        let consumer = Task {
+-            var count = 0
+-            for try await _ in AVFoundationFrameSampler().sample(
+-                clip, analysisWidth: 64, mode: .full, onProgress: { ticks.record($0) }
+-            ) {
+-                count += 1
+-                if count == 2 { withUnsafeCurrentTask { $0?.cancel() } }
+-            }
+-            return count
+-        }
+-        switch await consumer.result {
+-        case .success(let count): checkEqual(count, 2, "a cancelled stream may finish normally but must stop")
+-        case .failure(let error): check(error is CancellationError, "cancellation retains its error type")
+-        }
+-        checkEqual(ticks.all, [1, 2], "prepared frames do not escape after cancellation")
+-    })
+-
+     Registry.shared.add(suite: suite, TestCase(
+         name: "a clip is processed frame by frame, from its first frame, ascending and contiguous", knownBug: nil) {
+         // Use Apple-native fixtures.
+diff --git a/Tests/FrameZoomGeometryTests.swift b/Tests/FrameZoomGeometryTests.swift
+index fb4c013..245a479 100644
+--- a/Tests/FrameZoomGeometryTests.swift
++++ b/Tests/FrameZoomGeometryTests.swift
+@@ -20,44 +20,6 @@ func registerFrameZoomGeometryTests() {
+     let landscape = CGSize(width: 1920, height: 1080)
+     let portrait = CGSize(width: 1080, height: 1920)
+ 
+-    Registry.shared.add(suite: "Frame zoom", TestCase(name: "the actual scrolled preview keeps the same image point under the mouse through repeated zooms", knownBug: nil) {
+-        try await Task { @MainActor in
+-            for size in [landscape, portrait] {
+-                let pixels = try ImageFixture.cgImage(width: Int(size.width), height: Int(size.height), gray: 0.5)
+-                let image = NSImage(cgImage: pixels, size: size)
+-                let scroll = FrameZoomScrollView(frame: NSRect(origin: .zero, size: viewport))
+-                let id = FrameID(sampleIndex: 0)
+-                var reportedRatio: CGFloat = 4
+-                var reportedCenter = CGPoint(x: 0.5, y: 0.5)
+-                scroll.onStateChange = { ratio, center in reportedRatio = ratio; reportedCenter = center }
+-                scroll.show(image, id: id, zoomRatio: 4, center: reportedCenter)
+-                scroll.layoutSubtreeIfNeeded()
+-                // Start panned on both axes. Clip coordinates now contain an
+-                // offset and cannot be used as viewport coordinates directly.
+-                scroll.contentView.scroll(to: CGPoint(x: 90, y: 110))
+-                scroll.reflectScrolledClipView(scroll.contentView)
+-                let pointer = CGPoint(x: 260, y: 270)
+-                let before = FrameZoomGeometry(viewport: scroll.contentView.bounds.size, imageSize: size, ratio: 4)
+-                let focus = before.focus(atCanvasPoint: offset(scroll.contentView.bounds.origin, pointer))
+-                for ratio: CGFloat in [4.25, 5, 6, 5.25, 4.5] {
+-                    scroll.zoom(to: ratio, atClipPoint: offset(scroll.contentView.bounds.origin, pointer))
+-                    scroll.layoutSubtreeIfNeeded()
+-                    let geometry = FrameZoomGeometry(viewport: scroll.contentView.bounds.size, imageSize: size, ratio: ratio)
+-                    let actual = geometry.focus(atCanvasPoint: offset(scroll.contentView.bounds.origin, pointer))
+-                    checkClose(Double(actual.x), Double(focus.x), tolerance: 0.001,
+-                               "horizontal anchor survives a panned zoom to \(ratio) for \(size)")
+-                    checkClose(Double(actual.y), Double(focus.y), tolerance: 0.001,
+-                               "vertical anchor survives a panned zoom to \(ratio) for \(size)")
+-                    let origin = scroll.contentView.bounds.origin
+-                    scroll.show(image, id: id, zoomRatio: reportedRatio, center: reportedCenter)
+-                    checkEqual(scroll.contentView.bounds.origin, origin, "binding feedback does not recenter the zoom")
+-                    let imageView = scroll.documentView?.subviews.first as? NSImageView
+-                    check(imageView?.image === image, "zoom keeps the native image as its drawing source")
+-                }
+-            }
+-        }.value
+-    })
+-
+     Registry.shared.add(suite: "Frame zoom", TestCase(name: "a fitted frame touches the viewport and is centred on the other axis", knownBug: nil) {
+         // The bug, in one line: the frame has to reach the border on the axis it is
+         // limited by, and sit in the middle on the other. Both halves were wrong at
+@@ -187,7 +149,7 @@ func registerFrameZoomGeometryTests() {
+             }
+             guard holds(zoomedBefore), holds(zoomedAfter) else { continue }
+             let centreBefore = CGPoint(x: before.width / 2, y: before.height / 2)
+-            let focus = zoomedBefore.focus(atCanvasPoint: offset(zoomedBefore.scrollOrigin(focus: CGPoint(x: 0.5, y: 0.5)),
++            let focus = zoomedBefore.focus(atCanvasPoint: offset(zoomedBefore.scrollOrigin(focus: centreBefore),
+                                                                   centreBefore))
+             let centreAfter = CGPoint(x: after.width / 2, y: after.height / 2)
+             let readBack = zoomedAfter.focus(atCanvasPoint: offset(zoomedAfter.scrollOrigin(focus: focus),
+@@ -305,4 +267,4 @@ func registerFrameZoomGeometryTests() {
+                   "the canvas holds the image view that does the drawing")
+         }.value
+     })
+-}
++}
+\ No newline at end of file

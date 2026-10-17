@@ -1,0 +1,22 @@
+cuOpt routing search port for WaifuFinder
+
+Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Upstream: https://github.com/NVIDIA/cuopt
+Audited revision: 02bfe53163c3e8eba25827f548623a8ab8071f88
+Source: cpp/src/routing/local_search/two_opt.cu
+
+WaifuFinder modifications:
+- Reimplemented candidate evaluation, ranked reduction, and move execution in
+  native Swift and Metal for a symmetric open path with free endpoints.
+- Removed vehicle, depot, capacity, pickup/delivery, route-dimension and CUDA
+  bookkeeping. No CUDA, RAFT, RMM, Thrust or CUB implementation is included.
+- Uses independent initial routes and one accepted move per route per snapshot.
+- Added Apple Vision metric validation, GPU feature distances, bounded candidate
+  evaluation for large sets, cancellation, CPU fallback, and original-image IDs.
+
+This is a specialized port of the routing 2-opt search, not the complete NVIDIA
+cuOpt solver, a binary distribution of cuOpt, or an NVIDIA-supported Metal backend.
+Files covered: Sources/Waifu/Grouping/CuOptTSP.swift and CuOptMetalTSP.swift.
+The surrounding application code remains under the repository's MIT license.

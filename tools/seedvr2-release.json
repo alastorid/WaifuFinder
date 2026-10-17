@@ -1,0 +1,15 @@
+{
+  "repository": "alastorid/SeedVR2-3B-Swift-MLX-4bit",
+  "revision": "899026828dbd1c8985749c1b890eb2b8ee5e89eb",
+  "algorithm": "seedvr2-3b",
+  "fusion": "packed-projections-v1",
+  "vaeFusion": "qkv-packed-v1",
+  "manifestSHA256": "5ffd3221e5e3dacd31e6c1f5f15c0f2d482cf9771e37cc59f6a473cb4aac3232",
+  "supportFilesSHA256": {
+    "LICENSE": "5967a0c153e731109b76c5d83b5e0fae2382b6aaf7b898d08ff03702eea59430",
+    "NOTICE": "11341996ec4d4e556c0fca87577c11af5261afe0d866e087ed3152a4bb5c5f40",
+    "README.md": "341c2507cccf7174fbe145ea7116d74211ce1e853c500df3aeaa47a9f4cf8e3b",
+    "UPSTREAM_MODEL_CARD.md": "7194b0b1523c7bcaf5242190b55a3619e5ae3db65d37e7329a8614200862a6d3",
+    "validation.json": "626db232861cf8aeb5d4977393b8645521443c9c3a1e71a6ae36ae3be4836097"
+  }
+}

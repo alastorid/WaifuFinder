@@ -1,0 +1,33 @@
+{
+  "applicationIntegrated" : false,
+  "backend" : "Native Swift Core ML",
+  "compileSeconds" : 0.30426597595214844,
+  "hardware" : "Apple M3 \/ 16 GB",
+  "measurements" : [
+    {
+      "computeUnits" : "cpuOnly",
+      "inferenceSeconds" : [
+        6.3357830047607422,
+        6.4469500780105591,
+        5.669732928276062
+      ],
+      "loadSeconds" : 3.4653398990631104,
+      "maximumAbsoluteError" : 0.00010138750076293945,
+      "meanAbsoluteError" : 4.0046606955002062e-06,
+      "passed" : true
+    },
+    {
+      "computeUnits" : "cpuAndGPU",
+      "inferenceSeconds" : [
+        8.3075900077819824,
+        2.1741859912872314,
+        2.1265280246734619
+      ],
+      "loadSeconds" : 1.2256640195846558,
+      "maximumAbsoluteError" : 0.00010281801223754883,
+      "meanAbsoluteError" : 4.0905902096710633e-06,
+      "passed" : true
+    }
+  ],
+  "scope" : "Complete pretrained PGTFormer graph, one three-frame reference fixture"
+}

@@ -1,0 +1,95 @@
+{
+  "model": "pgtformer",
+  "scope": "Actual product video inputs, preprocessing and native graph versus original pretrained network",
+  "passed": true,
+  "frames": [
+    {
+      "frame": 0,
+      "window": [
+        0,
+        0,
+        1
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 1.7315149307250977e-05,
+      "meanAbsoluteError": 4.820012122763728e-07
+    },
+    {
+      "frame": 1,
+      "window": [
+        0,
+        1,
+        2
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 2.4080276489257812e-05,
+      "meanAbsoluteError": 4.52119678584495e-07
+    },
+    {
+      "frame": 2,
+      "window": [
+        1,
+        2,
+        3
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 2.014636993408203e-05,
+      "meanAbsoluteError": 4.2242166387040925e-07
+    },
+    {
+      "frame": 3,
+      "window": [
+        2,
+        3,
+        4
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 1.7404556274414062e-05,
+      "meanAbsoluteError": 4.2911531750178256e-07
+    },
+    {
+      "frame": 4,
+      "window": [
+        3,
+        4,
+        5
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 1.5020370483398438e-05,
+      "meanAbsoluteError": 4.538386235708458e-07
+    },
+    {
+      "frame": 5,
+      "window": [
+        4,
+        5,
+        6
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 1.3709068298339844e-05,
+      "meanAbsoluteError": 4.6886790983080573e-07
+    },
+    {
+      "frame": 6,
+      "window": [
+        5,
+        6,
+        7
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 2.0444393157958984e-05,
+      "meanAbsoluteError": 4.5863922082389763e-07
+    },
+    {
+      "frame": 7,
+      "window": [
+        6,
+        7,
+        7
+      ],
+      "inputMaximumError": 0.0,
+      "maximumAbsoluteError": 1.9431114196777344e-05,
+      "meanAbsoluteError": 4.956933139510511e-07
+    }
+  ]
+}

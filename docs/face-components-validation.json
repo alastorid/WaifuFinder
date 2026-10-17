@@ -1,0 +1,32 @@
+{
+  "backend": "MLX Swift / Metal",
+  "checks": [
+    {
+      "component": "attention.37.",
+      "maximumAbsoluteError": 9.1552734375e-05,
+      "maximumErrorLimit": 9.999999747378752e-05,
+      "meanAbsoluteError": 1.6061741234807414e-06,
+      "meanErrorLimit": 9.999999747378752e-06,
+      "passed": true
+    },
+    {
+      "component": "attention.3072.",
+      "maximumAbsoluteError": 5.340576171875e-05,
+      "maximumErrorLimit": 9.999999747378752e-05,
+      "meanAbsoluteError": 1.0758886901385267e-06,
+      "meanErrorLimit": 9.999999747378752e-06,
+      "passed": true
+    },
+    {
+      "component": "adain",
+      "maximumAbsoluteError": 3.5762786865234375e-07,
+      "maximumErrorLimit": 9.999999747378752e-06,
+      "meanAbsoluteError": 3.08374623614327e-08,
+      "meanErrorLimit": 9.999999974752427e-07,
+      "passed": true
+    }
+  ],
+  "completeModelsValidated": false,
+  "passed": true,
+  "scope": "Original PGTFormer components only"
+}

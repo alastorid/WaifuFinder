@@ -1,0 +1,21 @@
+{
+  "source": "SmilingWolf/wd-swinv2-tagger-v3 original unfused weights; BGR input",
+  "weightsSHA256": "39fe04000d5907a0a7616df54af744d43fbd70b5fba7abc3135d3675734c03ef",
+  "top15Indices": [
+    0,
+    307,
+    14,
+    7071,
+    5,
+    299,
+    80,
+    1434,
+    1,
+    4,
+    905,
+    3221,
+    112,
+    24,
+    6
+  ]
+}

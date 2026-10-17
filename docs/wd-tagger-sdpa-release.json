@@ -1,0 +1,173 @@
+{
+  "release": {
+    "repository": "alastorid/WD-SwinV2-Tagger-v3-CoreML",
+    "revision": "95615611e0cb63e081b6c9904ee9d4047c90e7d3",
+    "manifestSHA256": "2d55b852d9531da0bf6f3e83cffab7e7ed7888833720350d7d1f9442e5daf1b0",
+    "supportFilesSHA256": {
+      "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "NOTICE": "60cc7513971e11ccaf4ed8a3fbb595fbef95f9c7631c3666805b2ae42fd4f5da",
+      "README.md": "6d31a9a8710872c24d8a75fb6b88d615fcbe60372227d56952cbcc074e4b7556",
+      "validation.json": "d6178cceb90a7fa8f640b0bc6695517c2bdbbed814ade4f930d8afd21f8fbc6e"
+    }
+  },
+  "encoding": "24 native SDPA blocks, rank-four query/key/value/mask tensors; window/head axes folded without changing attention math.",
+  "benchmark": {
+    "afterLoadFootprintBytes": 178570176,
+    "afterWarmupFootprintBytes": 682640512,
+    "batch": 8,
+    "batchSeconds": [
+      0.5285089015960693,
+      0.5290910005569458,
+      0.5285300016403198,
+      0.5285279750823975,
+      0.5326800346374512,
+      0.532027006149292,
+      0.5289230346679688,
+      0.5288560390472412,
+      0.5281169414520264,
+      0.5294550657272339,
+      0.5285840034484863,
+      0.5283640623092651,
+      0.5285440683364868,
+      0.5304660797119141,
+      0.5419989824295044
+    ],
+    "beforeLoadFootprintBytes": 11747856,
+    "cacheIntermediates": true,
+    "finalPhysicalFootprintBytes": 634274944,
+    "framesPerSecond": 15.126989973325013,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 0.681689977645874,
+    "medianBatchSeconds": 0.5288560390472412,
+    "peakPhysicalFootprintBytes": 686752896,
+    "probabilityChecksum": 8.518293986145755,
+    "referenceMaximumAbsoluteError": 0.009348422288894653,
+    "referenceTop15Overlap": 15,
+    "repeats": 15,
+    "thermalState": 0,
+    "units": "cpuAndGPU"
+  },
+  "validation": {
+    "computeUnits": "cpuAndGPU",
+    "source": "Original unfused weights with runtime BGR swap",
+    "note": "24 synthetic frames; does not establish quality on a representative natural-image corpus.",
+    "baseline": {
+      "random": {
+        "maximumAbsoluteError": 0.0024964362382888794,
+        "meanAbsoluteError": 1.0193013622483704e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      },
+      "colorsAndGradients": {
+        "maximumAbsoluteError": 0.021378040313720703,
+        "meanAbsoluteError": 1.4369728887686506e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 1
+      },
+      "checkerboards": {
+        "maximumAbsoluteError": 0.0065915584564208984,
+        "meanAbsoluteError": 3.948826815758366e-06,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      }
+    },
+    "candidate": {
+      "random": {
+        "maximumAbsoluteError": 0.0030537843704223633,
+        "meanAbsoluteError": 1.058260659192456e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      },
+      "colorsAndGradients": {
+        "maximumAbsoluteError": 0.01569122076034546,
+        "meanAbsoluteError": 1.385125142405741e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 1
+      },
+      "checkerboards": {
+        "maximumAbsoluteError": 0.005797833204269409,
+        "meanAbsoluteError": 3.5351256428839406e-06,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      }
+    },
+    "candidateWithinNativeTolerance": false,
+    "candidateTop15NoWorseThanBaseline": true
+  },
+  "regressions": {
+    "fullSuitePassed": 198,
+    "failed": 0,
+    "unrelatedSkipped": 4,
+    "concurrentStressBatches": 72,
+    "nativeSequenceReplays": 15,
+    "installedMixedBatches": 6
+  },
+  "assertionInvestigation": {
+    "originalCrashSite": "Core ML Espresso MpsGraphInferenceOperation::EncodeMemoryBuffers -> MPSGraphTensorData initWithMTLBuffer:shape:strides:interleaves:dataType:",
+    "originalError": "shape.count = 0 != strides.count = 2",
+    "rankFiveTrialAlsoPassedLaterReplays": true,
+    "exactOriginalTriggerConfirmed": false,
+    "change": "Removed rank-five SDPA/broadcast view encoding; converter and release staging now require all SDPA inputs/masks to be rank4.",
+    "noExceptionSuppressionOrCPUFallback": true,
+    "assertionRecurrencesInRankFourStress": 0
+  },
+  "installedDirectory": "/Users/henry/Library/Application Support/Waifu/Models/wd-tagger",
+  "configurationFile": "/Users/henry/Library/Application Support/Waifu/Uncover/wd-tagger-model.txt"
+}

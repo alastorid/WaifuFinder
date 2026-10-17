@@ -1,0 +1,11 @@
+{
+  "repository": "alastorid/WD-SwinV2-Tagger-v3-Swift-MLX",
+  "revision": "11d78056b0788a1f3aebe0e92bd0346ecbbdc459",
+  "manifestSHA256": "697fdea9b338a44d8f37f6c455fd3972a737174ce088f4ef9760698518d529d6",
+  "supportFilesSHA256": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "c542c36f54139bf0b26a43310f2f67dc933ce027ccbedf39baace55c25bdbe7a",
+    "README.md": "b8f59007665aafdefd540cdd545388195c9a1510e73886edc933a86e88a7ee41",
+    "validation.json": "675039c185052c2e9659d55eacb24bb697c4b7040fdeb4db4565555fbb20e968"
+  }
+}

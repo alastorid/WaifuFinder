@@ -1,0 +1,206 @@
+name: Build macOS release
+
+on:
+  push:
+    tags:
+      - "v*"
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Build and package without publishing a release
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: waifufinder-release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Check for unreleased commits
+    if: ${{ github.event.deleted != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_release: ${{ steps.release.outputs.should_release }}
+      publish_release: ${{ steps.release.outputs.publish_release }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      target: ${{ steps.release.outputs.target }}
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select release version
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_ONLY: ${{ inputs.build_only }}
+        shell: bash
+        run: |
+          publish_release=true
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$BUILD_ONLY" == "true" ]]; then
+            publish_release=false
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            tag="$GITHUB_REF_NAME"
+            if [[ ! "$tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "Expected a version tag such as v1.2.3, got: $tag" >&2
+              exit 1
+            fi
+            version="${tag#v}"
+            target="$(git rev-parse "${tag}^{commit}")"
+            should_release=true
+          else
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+              echo "Manual releases must run from main." >&2
+              exit 1
+            fi
+            latest_tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+              --json tagName,isDraft,isPrerelease,publishedAt \
+              --jq 'map(select(.isDraft == false and .isPrerelease == false and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")))) | sort_by(.publishedAt) | last | .tagName // ""')"
+            if [[ -z "$latest_tag" ]]; then
+              echo "No published stable release found; create the initial version tag first." >&2
+              exit 1
+            fi
+            if [[ ! "$latest_tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "Latest release tag is not a three-part version: $latest_tag" >&2
+              exit 1
+            fi
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            if ! git merge-base --is-ancestor "$latest_tag" HEAD; then
+              echo "Latest release $latest_tag is not an ancestor of this branch; refusing an automatic release." >&2
+              exit 1
+            fi
+
+            unreleased="$(git rev-list --count "${latest_tag}..HEAD")"
+            if [[ "$unreleased" == "0" ]]; then
+              echo "No commits since $latest_tag; skipping release."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            patch=$((patch + 1))
+            version="${major}.${minor}.${patch}"
+            tag="v${version}"
+            while git show-ref --verify --quiet "refs/tags/$tag"; do
+              patch=$((patch + 1))
+              version="${major}.${minor}.${patch}"
+              tag="v${version}"
+            done
+            target="$(git rev-parse HEAD)"
+            should_release=true
+          fi
+
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+          echo "publish_release=$publish_release" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "Will build $tag from $target."
+
+  release:
+    name: Build Apple silicon DMG
+    needs: plan
+    if: needs.plan.outputs.should_release == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      WAIFU_ARCH: arm64
+      WAIFU_SWIFT_JOBS: 2
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.plan.outputs.target }}
+          fetch-depth: 0
+
+      - name: Cache Swift package sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            Runtime/.build/checkouts
+            Runtime/.build/repositories
+          key: ${{ runner.os }}-${{ runner.arch }}-mlx-${{ hashFiles('Runtime/Package.resolved') }}
+
+      - name: Audit prohibited dependency artifacts
+        run: python3 tools/audit-licenses.py
+
+      - name: Check synthetic website illustration
+        run: node tools/test-visual-sequence.cjs
+
+      - name: Run regression suite
+        run: ./run-tests.sh
+
+      - name: Build app and native workers
+        env:
+          WAIFU_VERSION: ${{ needs.plan.outputs.version }}
+        run: ./build.sh
+
+      - name: Verify PGTFormer catalog and license notices
+        shell: bash
+        run: |
+          resources="dist/WaifuFinder.app/Contents/Resources"
+          test -s "$resources/ModelReleases/pgtformer-release.json"
+          cmp tools/pgtformer-release.json "$resources/ModelReleases/pgtformer-release.json"
+          for notice in \
+            README.md WaifuFinder-LICENSE WaifuFinder-Licensing.md \
+            Apache-2.0-LICENSE MLX-Swift-LICENSE MLX-LICENSE MLX-C-LICENSE \
+            Nlohmann-JSON-LICENSE fmt-LICENSE Metal-CPP-LICENSE \
+            Swift-Numerics-LICENSE INFERKIT-LICENSE FlashVSR-LICENSE \
+            RealESRGAN-LICENSE THIRD_PARTY_LICENSES.md; do
+            test -s "$resources/ThirdPartyLicenses/$notice"
+          done
+
+      - name: Test responsive installation guide
+        run: xcrun swift tools/test-install-guide.swift docs/DMG-Read-Me.html
+
+      - name: Test unattended disk image packaging
+        run: python3 tools/test-dmg-packaging.py
+
+      - name: Package disk image
+        env:
+          WAIFU_VERSION: ${{ needs.plan.outputs.version }}
+        run: ./tools/package-dmg.sh
+
+      - name: Publish GitHub Release
+        if: needs.plan.outputs.publish_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_TARGET: ${{ needs.plan.outputs.target }}
+          WAIFU_VERSION: ${{ needs.plan.outputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          dmg="dist/WaifuFinder-${WAIFU_VERSION}-macos-arm64.dmg"
+          latest="dist/WaifuFinder-macos-arm64.dmg"
+          cp "$dmg" "$latest"
+          shasum -a 256 "$dmg" > "${dmg}.sha256"
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            gh release create "$RELEASE_TAG" \
+              "$dmg" "${dmg}.sha256" "$latest" \
+              --title "WaifuFinder ${WAIFU_VERSION} (non-commercial edition)" \
+              --generate-notes \
+              --verify-tag
+          else
+            gh release create "$RELEASE_TAG" \
+              "$dmg" "${dmg}.sha256" "$latest" \
+              --title "WaifuFinder ${WAIFU_VERSION} (non-commercial edition)" \
+              --generate-notes \
+              --target "$RELEASE_TARGET"
+          fi

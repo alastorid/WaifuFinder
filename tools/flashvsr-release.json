@@ -1,0 +1,11 @@
+{
+  "manifestSHA256": "d8056d0b99fa7c79947406d6a3dbfc15c7a16060f38201e0fb4a6497a0fd2318",
+  "repository": "alastorid/FlashVSR-v1.1-Tiny-Swift-MLX-BF16",
+  "revision": "adb41744788f7b1957b198ed986325bb9f0b6714",
+  "supportFilesSHA256": {
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "NOTICE": "5cfe95727b34354b25e02a2afc604a2e20aa956d5ff237a8edc37983e2edc532",
+    "README.md": "5120400e8463d06f974a9fa8cbc2406d52164b64f0404899dae2558bac2e883c",
+    "validation.json": "eb32c1b7fbe3d4f9e60f77e77f1547c97f6f568eac9234e87c39feb1f78c0e62"
+  }
+}

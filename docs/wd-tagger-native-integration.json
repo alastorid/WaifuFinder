@@ -1,0 +1,117 @@
+{
+  "date": "2026-10-16",
+  "backend": "swinv2-native-metal32-fused-qkv-v2",
+  "batch": 8,
+  "memoryBudgetMiB": 768,
+  "cacheBudgetMiB": 128,
+  "release": "https://huggingface.co/alastorid/WD-SwinV2-Tagger-v3-Swift-MLX",
+  "validation": {
+    "appReleaseBuild": true,
+    "exactCheckpointSourceBuild": true,
+    "nativeAdapterTests": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "ipc": {
+      "frames": 64,
+      "outputBytes": 2780416,
+      "tailPaddingExact": true,
+      "cleanEOF": true,
+      "worker": "/Users/henry/wp/waifu/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-wdtagger"
+    },
+    "parity": {
+      "frames": 64,
+      "byteIdentical": true,
+      "SHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540"
+    },
+    "workerOnlySystemLibraries": true,
+    "newGPUTraces": 0,
+    "publishedInstaller": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 1,
+      "skippedReason": "Unrelated PGTFormer network test was not requested",
+      "nativeReleaseDownloadedVerifiedActivatedAndTagged": true,
+      "repeatedSetupReusesRelease": true,
+      "legacyCoreMLPreserved": true
+    },
+    "anonymousManifestChecksumVerified": true
+  },
+  "scope": "Performance timings are model-only, captured before app integration. Historical benchmark JSON intentionally retains its original status/source hashes.",
+  "sourceSHA256": {
+    "Runtime/Sources/WaifuWDTagger/main.swift": "cfa4cd1baad95cee7fffe068cabec98c2d127f52e0ec90dc45747266d9101caa",
+    "Runtime/Sources/WDTaggerMLX/Kernels.swift": "a5fd2fc09e7af1d5cc410504340da701bcc0236d6237e0131f5ff864e80f5e8c",
+    "Runtime/Sources/WDTaggerMLX/Tagger.swift": "d526f6fb6c88075575f02aa0ef4cd52022df2ac4de2ac3634b50acaa3b0a1f68",
+    "Sources/Waifu/Models/WDTaggerBackend.swift": "7fe4b36975913552afa35bb3ffae5b93b9fc38ee21653182ac149f63d766ae39",
+    "Sources/Waifu/Models/WDTaggerWorker.swift": "0dd364689184e278978903ab1c84696d6e3b9dd756a8443b7b42670c4f2557bc",
+    "tools/wd-tagger-release.json": "4088e10323f56bdd9679594b93cd6b9f042705d19b3d267b5a66784a8d948410"
+  },
+  "localNativeModelActivated": true,
+  "publication": {
+    "url": "https://huggingface.co/alastorid/WD-SwinV2-Tagger-v3-Swift-MLX",
+    "public": true,
+    "target": "98e03f9d88e60b94c1ab3de8cd89c12430ca3b91",
+    "modelPinsVerified": true,
+    "revision": "bc7ff843f6693d1f00150cab6f57ab97d50c14e6",
+    "assets": [
+      {
+        "name": "LICENSE",
+        "bytes": 11358,
+        "SHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "name": "NOTICE",
+        "bytes": 636,
+        "SHA256": "c542c36f54139bf0b26a43310f2f67dc933ce027ccbedf39baace55c25bdbe7a"
+      },
+      {
+        "name": "README.md",
+        "bytes": 1569,
+        "SHA256": "e142520aed541b57c88a509eaafe523e8956f75cdaaa791f51745de5acf22f76"
+      },
+      {
+        "name": "manifest.json",
+        "bytes": 556,
+        "SHA256": "697fdea9b338a44d8f37f6c455fd3972a737174ce088f4ef9760698518d529d6"
+      },
+      {
+        "name": "model.safetensors",
+        "bytes": 224543557,
+        "SHA256": "34fdaae4d72640985f985bb447db27c227288571122ff40cb773f1299074d550"
+      },
+      {
+        "name": "validation.json",
+        "bytes": 232678,
+        "SHA256": "675039c185052c2e9659d55eacb24bb697c4b7040fdeb4db4565555fbb20e968"
+      },
+      {
+        "name": "wd-tagger-labels.csv",
+        "bytes": 308468,
+        "SHA256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217"
+      }
+    ],
+    "runtimeArtifacts": {
+      "repository": "https://huggingface.co/alastorid/WaifuRuntime-Metal",
+      "revision": "603b6b44bbaf4c9c0842b74ff56421b0d8f5b1a1",
+      "note": "Compiled MLX Metal kernels are build artifacts, not weights, so they are published in their own repository and verified by digest during the native build.",
+      "assets": [
+        {
+          "name": "mlx.metallib",
+          "bytes": 107367258,
+          "SHA256": "928bdaf4d28683442b31bf11760f4dec600fe705e2a6367aaa3de0c5801d2066"
+        },
+        {
+          "name": "MLX-LICENSE",
+          "bytes": 1066,
+          "SHA256": "ccfab7ccb2ea306f71531c8ca77bb55507606cd90768b1e32b8b52ab5b48cf01"
+        }
+      ]
+    },
+    "superseded": {
+      "url": "https://github.com/alastorid/WaifuFinder/releases/tag/wdtagger-native-v2",
+      "reason": "GitHub release removed after the weights moved to the Hub. No published app build ever referenced it: the last release, v0.1.2, shipped before this tagger work landed."
+    }
+  },
+  "checkpointCommit": "98e03f9d88e60b94c1ab3de8cd89c12430ca3b91"
+}

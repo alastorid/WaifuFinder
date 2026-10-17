@@ -1,0 +1,423 @@
+{
+  "baseline": [
+    {
+      "batch": 8,
+      "batchSeconds": [
+        0.7531449794769287,
+        0.723686933517456,
+        0.765529990196228,
+        0.7374719381332397,
+        0.6815629005432129,
+        0.6742960214614868,
+        0.7385579347610474,
+        0.735023021697998,
+        0.7050520181655884,
+        0.6787950992584229,
+        0.6803189516067505,
+        0.67296302318573,
+        0.6708850860595703,
+        0.6750019788742065,
+        0.6741509437561035
+      ],
+      "cacheIntermediates": true,
+      "finalPhysicalFootprintBytes": 892044392,
+      "framesPerSecond": 11.737728085880136,
+      "imageSize": [
+        1920,
+        1080
+      ],
+      "loadSeconds": 0.7122639417648315,
+      "medianBatchSeconds": 0.6815629005432129,
+      "peakPhysicalFootprintBytes": 937952360,
+      "probabilityChecksum": 8.512902930919708,
+      "referenceMaximumAbsoluteError": 0.008654594421386719,
+      "referenceTop15Overlap": 15,
+      "repeats": 15,
+      "thermalState": 0,
+      "units": "cpuAndGPU"
+    },
+    {
+      "batch": 8,
+      "batchSeconds": [
+        0.6910079717636108,
+        0.6860519647598267,
+        0.6896559000015259,
+        0.6913150548934937,
+        0.6988070011138916,
+        0.6879400014877319,
+        0.7012389898300171,
+        0.691478967666626,
+        0.6844289302825928,
+        0.6887279748916626,
+        0.6877419948577881,
+        0.6915209293365479,
+        0.7205289602279663,
+        0.6847289800643921,
+        0.7112940549850464
+      ],
+      "cacheIntermediates": true,
+      "finalPhysicalFootprintBytes": 896975952,
+      "framesPerSecond": 11.577290461037903,
+      "imageSize": [
+        1920,
+        1080
+      ],
+      "loadSeconds": 0.497278094291687,
+      "medianBatchSeconds": 0.6910079717636108,
+      "peakPhysicalFootprintBytes": 950781008,
+      "probabilityChecksum": 8.512902930919708,
+      "referenceMaximumAbsoluteError": 0.008654594421386719,
+      "referenceTop15Overlap": 15,
+      "repeats": 15,
+      "thermalState": 0,
+      "units": "cpuAndGPU"
+    }
+  ],
+  "fusedAttention": [
+    {
+      "batch": 8,
+      "batchSeconds": [
+        0.5622459650039673,
+        0.5648529529571533,
+        0.5539530515670776,
+        0.5538409948348999,
+        0.555372953414917,
+        0.5615620613098145,
+        0.5838340520858765,
+        0.5556570291519165,
+        0.5594170093536377,
+        0.5570709705352783,
+        0.5485619306564331,
+        0.553697943687439,
+        0.5615639686584473,
+        0.5599629878997803,
+        0.5774459838867188
+      ],
+      "cacheIntermediates": true,
+      "finalPhysicalFootprintBytes": 704185520,
+      "framesPerSecond": 14.300601995000777,
+      "imageSize": [
+        1920,
+        1080
+      ],
+      "loadSeconds": 1.3373219966888428,
+      "medianBatchSeconds": 0.5594170093536377,
+      "peakPhysicalFootprintBytes": 755877040,
+      "probabilityChecksum": 8.518293986145755,
+      "referenceMaximumAbsoluteError": 0.009348422288894653,
+      "referenceTop15Overlap": 15,
+      "repeats": 15,
+      "thermalState": 0,
+      "units": "cpuAndGPU"
+    },
+    {
+      "batch": 8,
+      "batchSeconds": [
+        0.5608949661254883,
+        0.5620859861373901,
+        0.5577340126037598,
+        0.5713770389556885,
+        0.5637999773025513,
+        0.5567129850387573,
+        0.5525740385055542,
+        0.5690840482711792,
+        0.5759530067443848,
+        0.5692520141601562,
+        0.5759910345077515,
+        0.5671200752258301,
+        0.5634329319000244,
+        0.5683720111846924,
+        0.5692960023880005
+      ],
+      "cacheIntermediates": true,
+      "finalPhysicalFootprintBytes": 645153920,
+      "framesPerSecond": 14.106360098105078,
+      "imageSize": [
+        1920,
+        1080
+      ],
+      "loadSeconds": 0.16365694999694824,
+      "medianBatchSeconds": 0.5671200752258301,
+      "peakPhysicalFootprintBytes": 698156160,
+      "probabilityChecksum": 8.518293986145755,
+      "referenceMaximumAbsoluteError": 0.009348422288894653,
+      "referenceTop15Overlap": 15,
+      "repeats": 15,
+      "thermalState": 0,
+      "units": "cpuAndGPU"
+    }
+  ],
+  "throughputImprovementPercent": 21.83975764780555,
+  "peakMemoryReductionPercent": 23.01543327210387,
+  "baselinePlan": {
+    "cpuAndGPU": {
+      "preferredDeviceCounts": {
+        "unassigned": 1423,
+        "MLGPUComputeDevice": 1012
+      },
+      "operatorsByPreferredDevice": {
+        "unassigned": {
+          "const": 1423
+        },
+        "MLGPUComputeDevice": {
+          "ios18.cast": 2,
+          "ios18.mul": 25,
+          "ios18.sub": 1,
+          "ios18.conv": 1,
+          "ios18.transpose": 100,
+          "ios18.layer_norm": 53,
+          "ios18.reshape": 217,
+          "ios18.linear": 100,
+          "split": 24,
+          "ios18.squeeze": 72,
+          "ios16.reduce_l2_norm": 48,
+          "ios18.maximum": 48,
+          "tile": 48,
+          "ios18.real_div": 48,
+          "ios18.matmul": 48,
+          "ios18.add": 83,
+          "ios18.softmax": 24,
+          "ios18.gelu": 24,
+          "ios18.gather": 44,
+          "ios16.reduce_mean": 1,
+          "ios18.sigmoid": 1
+        }
+      },
+      "deviceTransitionsInListedOperations": 0,
+      "note": "Preferred compiler placement, not measured execution time or kernel count."
+    },
+    "all": {
+      "preferredDeviceCounts": {
+        "unassigned": 1424,
+        "MLGPUComputeDevice": 409,
+        "MLNeuralEngineComputeDevice": 602
+      },
+      "operatorsByPreferredDevice": {
+        "unassigned": {
+          "const": 1423,
+          "ios18.cast": 1
+        },
+        "MLGPUComputeDevice": {
+          "ios18.cast": 1,
+          "ios18.mul": 25,
+          "ios18.sub": 1,
+          "ios16.reduce_l2_norm": 48,
+          "ios18.maximum": 48,
+          "tile": 48,
+          "ios18.real_div": 48,
+          "ios18.matmul": 48,
+          "ios18.add": 35,
+          "ios18.softmax": 24,
+          "ios18.gather": 44,
+          "ios18.reshape": 22,
+          "ios18.layer_norm": 14,
+          "ios18.linear": 3
+        },
+        "MLNeuralEngineComputeDevice": {
+          "ios18.conv": 1,
+          "ios18.transpose": 100,
+          "ios18.layer_norm": 39,
+          "ios18.reshape": 195,
+          "ios18.linear": 97,
+          "split": 24,
+          "ios18.squeeze": 72,
+          "ios18.add": 48,
+          "ios18.gelu": 24,
+          "ios16.reduce_mean": 1,
+          "ios18.sigmoid": 1
+        }
+      },
+      "deviceTransitionsInListedOperations": 99,
+      "note": "Preferred compiler placement, not measured execution time or kernel count."
+    }
+  },
+  "baselineAllMemoryPhases": {
+    "afterLoadFootprintBytes": 280757472,
+    "afterWarmupFootprintBytes": 3516695968,
+    "batch": 8,
+    "batchSeconds": [
+      0.684656023979187,
+      0.5792720317840576,
+      0.7063900232315063,
+      0.6197930574417114,
+      0.6114400625228882,
+      0.6613609790802002,
+      0.7353460788726807
+    ],
+    "beforeLoadFootprintBytes": 11764240,
+    "cacheIntermediates": true,
+    "finalPhysicalFootprintBytes": 3673998776,
+    "framesPerSecond": 12.096268532694726,
+    "imageSize": [
+      1920,
+      1080
+    ],
+    "loadSeconds": 70.22798907756805,
+    "medianBatchSeconds": 0.6613609790802002,
+    "peakPhysicalFootprintBytes": 3820094904,
+    "probabilityChecksum": 8.220947265625,
+    "referenceMaximumAbsoluteError": 0.15370887517929077,
+    "referenceTop15Overlap": 13,
+    "repeats": 7,
+    "thermalState": 0,
+    "units": "all"
+  },
+  "candidateExperiment": {
+    "torchMaximumAbsoluteError": 1.5497207641601562e-06,
+    "torchTop15Overlaps": [
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15
+    ],
+    "operationCounts": {
+      "const": 1322,
+      "cast": 2,
+      "mul": 25,
+      "sub": 1,
+      "conv": 1,
+      "transpose": 100,
+      "layer_norm": 53,
+      "reshape": 239,
+      "linear": 100,
+      "split": 24,
+      "squeeze": 72,
+      "reduce_l2_norm": 48,
+      "maximum": 48,
+      "tile": 48,
+      "real_div": 48,
+      "scaled_dot_product_attention": 24,
+      "add": 48,
+      "gelu": 24,
+      "gather": 44,
+      "reduce_mean": 1,
+      "sigmoid": 1
+    },
+    "packageBytes": 287067492
+  },
+  "status": "Experimental candidate built and tested locally; production release unchanged.",
+  "measurementLimits": [
+    "1920x1080 synthetic gradient, fixed batch8, 15 warm repeats per process; paired order baseline-candidate-candidate-baseline. Hardware-specific; no claim for full-video throughput.",
+    "Native test runner compiled concurrently; one earlier native run hit an MPSGraph assertion. Retrying separately after all benchmarks complete.",
+    "Compute plan is preferred placement; operation counts are not a measured execution trace or allocation attribution.",
+    "Accuracy report covers 24 synthetic frames, not a representative anime-image validation corpus."
+  ],
+  "nativeTests": {
+    "passed": 9,
+    "failed": 0,
+    "isolatedRunSeconds": 3.78,
+    "concurrentRun": "One earlier run aborted inside MPSGraph (shape.count 0 vs strides.count 2). Standalone debug and isolated native suite passed; cause not established."
+  },
+  "accuracy": {
+    "computeUnits": "cpuAndGPU",
+    "source": "Original unfused weights with runtime BGR swap",
+    "note": "24 synthetic frames; does not establish quality on a representative natural-image corpus.",
+    "baseline": {
+      "random": {
+        "maximumAbsoluteError": 0.0024964362382888794,
+        "meanAbsoluteError": 1.0193013622483704e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      },
+      "colorsAndGradients": {
+        "maximumAbsoluteError": 0.021378040313720703,
+        "meanAbsoluteError": 1.4369728887686506e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 1
+      },
+      "checkerboards": {
+        "maximumAbsoluteError": 0.0065915584564208984,
+        "meanAbsoluteError": 3.948826815758366e-06,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      }
+    },
+    "candidate": {
+      "random": {
+        "maximumAbsoluteError": 0.0030537843704223633,
+        "meanAbsoluteError": 1.058260659192456e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      },
+      "colorsAndGradients": {
+        "maximumAbsoluteError": 0.01569122076034546,
+        "meanAbsoluteError": 1.385125142405741e-05,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 1
+      },
+      "checkerboards": {
+        "maximumAbsoluteError": 0.005797833204269409,
+        "meanAbsoluteError": 3.5351256428839406e-06,
+        "top15Overlaps": [
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15,
+          15
+        ],
+        "thresholdClassificationDifferencesAllHeads": 0
+      }
+    },
+    "candidateWithinNativeTolerance": false,
+    "candidateTop15NoWorseThanBaseline": true
+  },
+  "baselinePackageBytes": 231787022,
+  "packageTradeoff": "Folding positional bias plus shift masks increases package size; runtime memory still fell in measured GPU inference.",
+  "memoryExplanation": {
+    "observed": "Baseline all-mode footprint grew from 280.8 MB after load to 3516.7 MB after first prediction.",
+    "inference": "The mixed GPU/ANE plan and device-specific alignment/intermediate buffers likely contribute; no allocation-level trace apportions the increase.",
+    "source": "https://machinelearning.apple.com/research/neural-engine-transformers"
+  }
+}

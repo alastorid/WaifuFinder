@@ -1,0 +1,101 @@
+{
+  "computeUnits": "cpuAndGPU",
+  "source": "Original unfused weights with runtime BGR swap",
+  "note": "24 synthetic frames; does not establish quality on a representative natural-image corpus.",
+  "baseline": {
+    "random": {
+      "maximumAbsoluteError": 0.0024964362382888794,
+      "meanAbsoluteError": 1.0193013622483704e-05,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 0
+    },
+    "colorsAndGradients": {
+      "maximumAbsoluteError": 0.021378040313720703,
+      "meanAbsoluteError": 1.4369728887686506e-05,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 1
+    },
+    "checkerboards": {
+      "maximumAbsoluteError": 0.0065915584564208984,
+      "meanAbsoluteError": 3.948826815758366e-06,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 0
+    }
+  },
+  "candidate": {
+    "random": {
+      "maximumAbsoluteError": 0.0030537843704223633,
+      "meanAbsoluteError": 1.058260659192456e-05,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 0
+    },
+    "colorsAndGradients": {
+      "maximumAbsoluteError": 0.01569122076034546,
+      "meanAbsoluteError": 1.385125142405741e-05,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 1
+    },
+    "checkerboards": {
+      "maximumAbsoluteError": 0.005797833204269409,
+      "meanAbsoluteError": 3.5351256428839406e-06,
+      "top15Overlaps": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+      ],
+      "thresholdClassificationDifferencesAllHeads": 0
+    }
+  },
+  "candidateWithinNativeTolerance": false,
+  "candidateTop15NoWorseThanBaseline": true
+}

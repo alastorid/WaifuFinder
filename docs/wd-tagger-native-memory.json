@@ -1,0 +1,915 @@
+{
+  "date": "2026-10-16",
+  "platform": {
+    "device": "M3 MacBook Air, 16 GB, fanless",
+    "macOS": "26.5.1",
+    "mlxSwift": "0.31.2"
+  },
+  "selected": {
+    "input": "RGBA UInt8 [8,448,448,4]",
+    "protocol": "WDT3",
+    "memoryMiB": 448,
+    "cacheMiB": 64,
+    "fusedQKV": true,
+    "modelWeightFormatUnchanged": true
+  },
+  "method": {
+    "inputs": 64,
+    "repeatsPerProcess": 3,
+    "batch": 8,
+    "metric": "Prediction and GPU completion; excludes input reading, file input, host-app rendering and bulk result decoding",
+    "memory": "Process physical footprint sampled every 10 ms, includes load and warmup",
+    "inputStrategy": "One batch read into private Data at a time for both native and Core ML; old full-corpus-mapping measurements are separate",
+    "startingGate": "Thermal state normal, GPU <=65 C, sampled CPU scaled use <=40%. Default gate of 55 C could not complete amid other desktop builds; all fresh comparisons used the same 65 C bound.",
+    "limitations": [
+      "Active desktop workloads and clocks vary. Small speed differences from the previous native path are not a confirmed additional inference-speed gain.",
+      "Core ML and original native processes bracketed the candidate processes. This is not a within-batch interleaving comparison.",
+      "Worker protocol and host input rendering are functionally tested; these timings do not measure whole-app tagging or combined host-plus-worker memory."
+    ],
+    "defaultsPromotedAfterExplicitBudgetComparisons": true,
+    "newGPUTraces": 0
+  },
+  "summary": {
+    "selectedFPS": [
+      15.522223690148671,
+      15.532151379409889
+    ],
+    "selectedPeakProcessBytes": [
+      665322528,
+      665306168
+    ],
+    "originalFPS": [
+      15.277111889367594,
+      15.505042068917703
+    ],
+    "originalPeakProcessBytes": [
+      998179800,
+      998376456
+    ],
+    "coreMLFPS": [
+      14.243784449327585,
+      14.482865361807324
+    ],
+    "coreMLPeakProcessBytes": [
+      702465176,
+      702497896
+    ],
+    "nativeProcessPeakReductionPercent": 33.353808989792874,
+    "coreMLProcessPeakReductionPercent": 5.2908419787989995,
+    "minimumSpeedLeadOverCoreMLPercent": 7.176468898773525,
+    "maximumSpeedLeadOverCoreMLPercent": 9.045116729094605,
+    "allNativePredictionsByteIdentical": true,
+    "allThermalStatesNormal": true
+  },
+  "verification": {
+    "nativeAdapterTests": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0
+    },
+    "kernelChecks": 139,
+    "exactRGBAFloatPatchParity": true,
+    "selectedWorkerAndAppReleaseBuild": true,
+    "appSigningVerified": true,
+    "packagedWorker": {
+      "frames": 64,
+      "allOutputsByteIdentical": true,
+      "outputBytes": 2780416,
+      "tailPaddingExact": true,
+      "cleanEOF": true,
+      "worker": "/Users/henry/wp/waifu/dist/WaifuFinder-native-wdtagger-v3.app/Contents/Resources/Runtime/waifu-wdtagger"
+    }
+  },
+  "initialSameInputStrategySweep": [
+    {
+      "configuration": {
+        "name": "baseline",
+        "memory": 768,
+        "cache": 128
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 141295616,
+      "cacheLimitBytes": 134217728,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 805306368,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 870869700,
+      "peakPhysicalFootprintBytes": 972833944,
+      "predictionFramesPerSecond": 15.250290475001567,
+      "predictionSweepSeconds": [
+        4.1864766660146415,
+        4.19664137577638,
+        4.251161207910627
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 44.039119720458984,
+        "cpuScaledUsage": 0.20800788700580597
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:18:18.681179+00:00",
+        "gpuTemperatureC": 78.22737884521484,
+        "cpuScaledUsage": 0.17149731516838074,
+        "gpuMHz": 507,
+        "gpuActive": 0.238378643989563,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12619694080,
+          "swap_total": 6442450944,
+          "swap_usage": 4866506752
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "budget512",
+        "memory": 512,
+        "cache": 64
+      },
+      "activeBytes": 232385220,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 536870912,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 578644676,
+      "peakPhysicalFootprintBytes": 755205176,
+      "predictionFramesPerSecond": 15.349912959087593,
+      "predictionSweepSeconds": [
+        4.169404749758542,
+        4.181284875143319,
+        4.157237207982689
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 53.028324127197266,
+        "cpuScaledUsage": 0.3527502715587616
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:18:51.439304+00:00",
+        "gpuTemperatureC": 75.23162841796875,
+        "cpuScaledUsage": 0.43375831842422485,
+        "gpuMHz": 430,
+        "gpuActive": 0.21163016557693481,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12950863872,
+          "swap_total": 6442450944,
+          "swap_usage": 4858118144
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "budget384",
+        "memory": 384,
+        "cache": 64
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 402653184,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 450194116,
+      "peakPhysicalFootprintBytes": 599934056,
+      "predictionFramesPerSecond": 15.023324446496314,
+      "predictionSweepSeconds": [
+        4.257649791426957,
+        4.267513749655336,
+        4.260042457841337
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 51.926876068115234,
+        "cpuScaledUsage": 0.06169838458299637
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:19:24.229771+00:00",
+        "gpuTemperatureC": 73.25774383544922,
+        "cpuScaledUsage": 0.14295944571495056,
+        "gpuMHz": 447,
+        "gpuActive": 0.22333110868930817,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12799557632,
+          "swap_total": 6442450944,
+          "swap_usage": 4858118144
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "fastsync512",
+        "memory": 512,
+        "cache": 64,
+        "env": {
+          "MLX_METAL_FAST_SYNCH": "1"
+        }
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 536870912,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 578644676,
+      "peakPhysicalFootprintBytes": 755385472,
+      "predictionFramesPerSecond": 15.27238036772008,
+      "predictionSweepSeconds": [
+        4.190571375191212,
+        4.236573500558734,
+        4.165993583854288
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 50.54289627075195,
+        "cpuScaledUsage": 0.10559752583503723
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:20:13.737130+00:00",
+        "gpuTemperatureC": 84.23026275634766,
+        "cpuScaledUsage": 0.07333187758922577,
+        "gpuMHz": 405,
+        "gpuActive": 0.18023863434791565,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12823756800,
+          "swap_total": 6442450944,
+          "swap_usage": 4824563712
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "submit16",
+        "memory": 512,
+        "cache": 64,
+        "env": {
+          "MLX_MAX_MB_PER_BUFFER": "16"
+        }
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 536870912,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 578644676,
+      "peakPhysicalFootprintBytes": 759121096,
+      "predictionFramesPerSecond": 15.459354800610777,
+      "predictionSweepSeconds": [
+        4.122164041269571,
+        4.139888166449964,
+        4.14007524959743
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 53.92802047729492,
+        "cpuScaledUsage": 0.07771917432546616
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:20:46.621812+00:00",
+        "gpuTemperatureC": 81.31604766845703,
+        "cpuScaledUsage": 0.0899621918797493,
+        "gpuMHz": 431,
+        "gpuActive": 0.1848863810300827,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12782944256,
+          "swap_total": 6442450944,
+          "swap_usage": 4782620672
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "baseline-confirm",
+        "memory": 768,
+        "cache": 128
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 141295616,
+      "cacheLimitBytes": 134217728,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "memoryLimitBytes": 805306368,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 870869700,
+      "peakPhysicalFootprintBytes": 956318944,
+      "predictionFramesPerSecond": 15.167660115080961,
+      "predictionSweepSeconds": [
+        4.219503833446652,
+        4.212461500428617,
+        4.23669220879674
+      ],
+      "repeats": 3,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "systemBefore": {
+        "gpuTemperatureC": 51.517765045166016,
+        "cpuScaledUsage": 0.11100205034017563
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T04:21:35.870652+00:00",
+        "gpuTemperatureC": 86.2889633178711,
+        "cpuScaledUsage": 0.12820424139499664,
+        "gpuMHz": 445,
+        "gpuActive": 0.2843179404735565,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 12755566592,
+          "swap_total": 6442450944,
+          "swap_usage": 4757389312
+        }
+      }
+    }
+  ],
+  "matchedStreamingComparison": [
+    {
+      "configuration": {
+        "name": "coreml-start",
+        "coreml": true
+      },
+      "afterLoadFootprintBytes": 374834112,
+      "afterWarmupFootprintBytes": 694322328,
+      "batch": 8,
+      "beforeLoadFootprintBytes": 1835440,
+      "checksum": 2038.8825106620789,
+      "compileSeconds": 0.00006008148193359375,
+      "computeUnits": "cpuAndGPU",
+      "fastPrediction": false,
+      "finalPhysicalFootprintBytes": 702465176,
+      "frames": 64,
+      "framesPerSecond": 13.988361594533462,
+      "inputMode": "streamed-tensors",
+      "loadSeconds": 1.0848779678344727,
+      "lowPrecisionAccumulation": false,
+      "medianSweepSeconds": 4.575232028961182,
+      "peakPhysicalFootprintBytes": 702465176,
+      "repeats": 3,
+      "stageSeconds": [
+        {
+          "decode": 0.0000020265579223632812,
+          "prediction": 4.49318790435791,
+          "prepare": 0.056681036949157715,
+          "result": 0.0025010108947753906
+        },
+        {
+          "decode": 0.0000020265579223632812,
+          "prediction": 4.489005208015442,
+          "prepare": 0.08709287643432617,
+          "result": 0.003135204315185547
+        },
+        {
+          "decode": 9.5367431640625e-7,
+          "prediction": 4.495059847831726,
+          "prepare": 0.07574617862701416,
+          "result": 0.004376053810119629
+        }
+      ],
+      "sweepSeconds": [
+        4.55239999294281,
+        4.579277992248535,
+        4.575232028961182
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a5686cdad342e19978ff4d8a77ceb2fa4ae3d9921dd06123922ec37f010a2b33",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 53.992435455322266,
+        "cpuScaledUsage": 0.1593209207057953
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:42:44.905490+00:00",
+        "gpuTemperatureC": 90.51384735107422,
+        "cpuScaledUsage": 0.19997365772724152,
+        "gpuMHz": 432,
+        "gpuActive": 0.20835193991661072,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11778048000,
+          "swap_total": 5368709120,
+          "swap_usage": 4078174208
+        }
+      },
+      "predictionFramesPerSecond": 14.243784449327585
+    },
+    {
+      "configuration": {
+        "name": "current-float",
+        "memory": 768,
+        "cache": 128,
+        "stream": true
+      },
+      "activeBytes": 225405640,
+      "batch": 8,
+      "cacheBytes": 141295616,
+      "cacheLimitBytes": 134217728,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgb-planar-float32",
+      "memoryLimitBytes": 805306368,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 870869704,
+      "peakPhysicalFootprintBytes": 998179800,
+      "predictionFramesPerSecond": 15.277111889367594,
+      "predictionSweepSeconds": [
+        4.189273500349373,
+        4.225816708058119,
+        4.177497583907098
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 64.76152038574219,
+        "cpuScaledUsage": 0.27000144124031067
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:43:50.302753+00:00",
+        "gpuTemperatureC": 83.70980072021484,
+        "cpuScaledUsage": 0.2266576886177063,
+        "gpuMHz": 479,
+        "gpuActive": 0.21341675519943237,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11418419200,
+          "swap_total": 5368709120,
+          "swap_usage": 4044619776
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "rgba512",
+        "memory": 512,
+        "cache": 64,
+        "rgba": true,
+        "stream": true
+      },
+      "activeBytes": 225405640,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgba-uint8",
+      "memoryLimitBytes": 536870912,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 578645192,
+      "peakPhysicalFootprintBytes": 755713056,
+      "predictionFramesPerSecond": 15.359164920243176,
+      "predictionSweepSeconds": [
+        4.166893208865076,
+        4.16224595811218,
+        4.173501500394195
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 57.25117492675781,
+        "cpuScaledUsage": 0.3137454688549042
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:44:55.453455+00:00",
+        "gpuTemperatureC": 80.94098663330078,
+        "cpuScaledUsage": 0.4158072769641876,
+        "gpuMHz": 458,
+        "gpuActive": 0.2498801350593567,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11299078144,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "rgba448",
+        "memory": 448,
+        "cache": 64,
+        "rgba": true,
+        "stream": true
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgba-uint8",
+      "memoryLimitBytes": 469762048,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 565799620,
+      "peakPhysicalFootprintBytes": 665322528,
+      "predictionFramesPerSecond": 15.522223690148671,
+      "predictionSweepSeconds": [
+        4.131078458856791,
+        4.115747542120516,
+        4.123120583593845
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 62.2845573425293,
+        "cpuScaledUsage": 0.3045847713947296
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:46:00.535634+00:00",
+        "gpuTemperatureC": 84.53861236572266,
+        "cpuScaledUsage": 0.3567732274532318,
+        "gpuMHz": 442,
+        "gpuActive": 0.22296816110610962,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11504386048,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "rgba384",
+        "memory": 384,
+        "cache": 64,
+        "rgba": true,
+        "stream": true
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgba-uint8",
+      "memoryLimitBytes": 402653184,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 450194116,
+      "peakPhysicalFootprintBytes": 609862664,
+      "predictionFramesPerSecond": 15.291009717056184,
+      "predictionSweepSeconds": [
+        4.173021500464529,
+        4.20049070706591,
+        4.1854659165255725
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 55.7551383972168,
+        "cpuScaledUsage": 0.35440340638160706
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:46:49.266653+00:00",
+        "gpuTemperatureC": 80.88174438476562,
+        "cpuScaledUsage": 0.3430120646953583,
+        "gpuMHz": 478,
+        "gpuActive": 0.24041017889976501,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11463262208,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "rgba448-confirm",
+        "memory": 448,
+        "cache": 64,
+        "rgba": true,
+        "stream": true
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 70647808,
+      "cacheLimitBytes": 67108864,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgba-uint8",
+      "memoryLimitBytes": 469762048,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 565799620,
+      "peakPhysicalFootprintBytes": 665306168,
+      "predictionFramesPerSecond": 15.532151379409889,
+      "predictionSweepSeconds": [
+        4.117923042271286,
+        4.120485207531601,
+        4.130853292066604
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 59.70281982421875,
+        "cpuScaledUsage": 0.3987545073032379
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:47:21.491687+00:00",
+        "gpuTemperatureC": 83.29680633544922,
+        "cpuScaledUsage": 0.3805338442325592,
+        "gpuMHz": 438,
+        "gpuActive": 0.214742511510849,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11361796096,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "current-float-confirm",
+        "memory": 768,
+        "cache": 128,
+        "stream": true
+      },
+      "activeBytes": 225405636,
+      "batch": 8,
+      "cacheBytes": 141295616,
+      "cacheLimitBytes": 134217728,
+      "compactAttentionBias": false,
+      "compiledWholeModel": true,
+      "frames": 64,
+      "fusedQKV": true,
+      "gemmTile": "32x64x32",
+      "implementation": "swinv2-native-metal32-fused-qkv-v2",
+      "inputLayout": "rgb-planar-float32",
+      "memoryLimitBytes": 805306368,
+      "mlxSwift": "0.31.2",
+      "native": true,
+      "normImplementation": "threadgroup-two-pass",
+      "peakMLXActiveBytes": 870869700,
+      "peakPhysicalFootprintBytes": 998376456,
+      "predictionFramesPerSecond": 15.505042068917703,
+      "predictionSweepSeconds": [
+        4.121728625148535,
+        4.127689542248845,
+        4.1347981239669025
+      ],
+      "repeats": 3,
+      "streamedInput": true,
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "validationOnly": false,
+      "weightFormatVersion": "swinv2-native-metal32-v1",
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a3ea010753ac0ad940cb78538f5393b15a0f8ce012ca51123785d68f69029540",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 60.91171646118164,
+        "cpuScaledUsage": 0.38957124948501587
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:47:54.048184+00:00",
+        "gpuTemperatureC": 98.10794830322266,
+        "cpuScaledUsage": 0.2753843367099762,
+        "gpuMHz": 498,
+        "gpuActive": 0.2722465395927429,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11221450752,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      }
+    },
+    {
+      "configuration": {
+        "name": "coreml-end",
+        "coreml": true
+      },
+      "afterLoadFootprintBytes": 374801320,
+      "afterWarmupFootprintBytes": 695010408,
+      "batch": 8,
+      "beforeLoadFootprintBytes": 1835440,
+      "checksum": 2038.8825106620789,
+      "compileSeconds": 0.000054001808166503906,
+      "computeUnits": "cpuAndGPU",
+      "fastPrediction": false,
+      "finalPhysicalFootprintBytes": 702252136,
+      "frames": 64,
+      "framesPerSecond": 14.353016612010498,
+      "inputMode": "streamed-tensors",
+      "loadSeconds": 1.335121989250183,
+      "lowPrecisionAccumulation": false,
+      "medianSweepSeconds": 4.458992958068848,
+      "peakPhysicalFootprintBytes": 702497896,
+      "repeats": 3,
+      "stageSeconds": [
+        {
+          "decode": 0.0000010728836059570312,
+          "prediction": 4.419015049934387,
+          "prepare": 0.03848886489868164,
+          "result": 0.0014749765396118164
+        },
+        {
+          "decode": 0,
+          "prediction": 4.415491819381714,
+          "prepare": 0.037612199783325195,
+          "result": 0.0010001659393310547
+        },
+        {
+          "decode": 0,
+          "prediction": 4.430623173713684,
+          "prepare": 0.0414729118347168,
+          "result": 0.001076817512512207
+        }
+      ],
+      "sweepSeconds": [
+        4.458992958068848,
+        4.45412003993988,
+        4.473188996315002
+      ],
+      "thermalAfter": 0,
+      "thermalBefore": 0,
+      "probabilitiesByteIdentical": true,
+      "outputSHA256": "a5686cdad342e19978ff4d8a77ceb2fa4ae3d9921dd06123922ec37f010a2b33",
+      "maximumStartingGPUTemperatureC": 65,
+      "systemBefore": {
+        "gpuTemperatureC": 58.750240325927734,
+        "cpuScaledUsage": 0.12223353236913681
+      },
+      "systemAfter": {
+        "timestamp": "2026-10-16T06:48:28.679589+00:00",
+        "gpuTemperatureC": 91.46698760986328,
+        "cpuScaledUsage": 0.34452250599861145,
+        "gpuMHz": 465,
+        "gpuActive": 0.23176293075084686,
+        "memory": {
+          "ram_total": 17179869184,
+          "ram_usage": 11442585600,
+          "swap_total": 5368709120,
+          "swap_usage": 4019453952
+        }
+      },
+      "predictionFramesPerSecond": 14.482865361807324
+    }
+  ],
+  "sourceSHA256": {
+    "Runtime/Sources/WDTaggerMLX/Tagger.swift": "d00920a4b0afbf3e361e9e3b9e96962e0195d266e93d695dae8a9bfd79f65304",
+    "Runtime/Sources/WDTaggerMLX/Kernels.swift": "1352d800ccf9c280e2684386cb2f9e7ed022aae1dd9d9a2e025cbd71f903cdd7",
+    "Runtime/Sources/WDTaggerMLX/Metal/PatchInput.metal": "7042dea0f05b8849a331cded843ddac67261f2b9abd1df74ad10947cd9658b4c",
+    "Runtime/Sources/WaifuWDTagger/main.swift": "063aabb8783faacbf94fd7c4554a1fb747fb881fa18f8bfc1b783cba74955eab",
+    "Runtime/Sources/WaifuWDTaggerValidation/main.swift": "6f1f79ca2851ed3378c63af683b8540973c904d9475107a6f99899b6251dbe92",
+    "Sources/Waifu/Models/WDTaggerBackend.swift": "edf8343f7121b2596c3a2dac5b32398987b0dab05568b4b1e1b204aa039322d5",
+    "Sources/Waifu/Models/WDTaggerWorker.swift": "b70150f60510bdc369922916193737a1118848b834dd0a7465b2b761d1dc1ec2",
+    "tools/run-wd-tagger-native-memory.mjs": "13733e56929e284b12eef516ff816e54d6de3390408251cf00ee676ab0f05ac5",
+    "tools/wd-tagger-shape-benchmark.swift": "fcfc6c7e0813898742941341eb3b7a568af2de6a03f8e2b863ea25507939f3ac"
+  },
+  "publication": {
+    "release": "https://github.com/alastorid/WaifuFinder/releases/tag/wdtagger-native-v3",
+    "weightsAndLabels": "https://github.com/alastorid/WaifuFinder/releases/tag/wdtagger-native-v2",
+    "weightDownloadUnchanged": true
+  }
+}

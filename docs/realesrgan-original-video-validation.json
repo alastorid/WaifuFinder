@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "scope": "Actual native 2x video PNGs versus original FP32 checkpoint with canonical 522 reflection padding",
+  "weightsSHA256": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb",
+  "frames": [
+    {
+      "frame": 0,
+      "maximumAbsoluteError": 0.0034214258193969727,
+      "meanAbsoluteError": 0.0010005399817600846
+    },
+    {
+      "frame": 1,
+      "maximumAbsoluteError": 0.0037658214569091797,
+      "meanAbsoluteError": 0.0009972506668418646
+    },
+    {
+      "frame": 2,
+      "maximumAbsoluteError": 0.0032511353492736816,
+      "meanAbsoluteError": 0.0010040774941444397
+    },
+    {
+      "frame": 3,
+      "maximumAbsoluteError": 0.003156222403049469,
+      "meanAbsoluteError": 0.0010005950462073088
+    },
+    {
+      "frame": 4,
+      "maximumAbsoluteError": 0.0034334659576416016,
+      "meanAbsoluteError": 0.0010053260484710336
+    },
+    {
+      "frame": 5,
+      "maximumAbsoluteError": 0.003657594323158264,
+      "meanAbsoluteError": 0.0010041787754744291
+    },
+    {
+      "frame": 6,
+      "maximumAbsoluteError": 0.0038900673389434814,
+      "meanAbsoluteError": 0.001005176454782486
+    },
+    {
+      "frame": 7,
+      "maximumAbsoluteError": 0.003665834665298462,
+      "meanAbsoluteError": 0.0010054343147203326
+    }
+  ]
+}

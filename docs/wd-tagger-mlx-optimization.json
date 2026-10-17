@@ -1,0 +1,213 @@
+{
+  "date": "2026-10-15",
+  "hardware": "Apple M3 / 16 GB",
+  "native": {
+    "afterLoadFootprintBytes": 375833512,
+    "afterWarmupFootprintBytes": 674874496,
+    "batch": 8,
+    "beforeLoadFootprintBytes": 1819056,
+    "checksum": 2038.8825106620789,
+    "compileSeconds": 1.1086463928222656e-05,
+    "computeUnits": "cpuAndGPU",
+    "fastPrediction": false,
+    "finalPhysicalFootprintBytes": 683541704,
+    "frames": 64,
+    "framesPerSecond": 14.669568897604824,
+    "inputMode": "retained-tensors",
+    "loadSeconds": 1.1429129838943481,
+    "lowPrecisionAccumulation": false,
+    "medianSweepSeconds": 4.362773060798645,
+    "peakPhysicalFootprintBytes": 683705544,
+    "repeats": 3,
+    "stageSeconds": [
+      {
+        "decode": 2.0265579223632812e-06,
+        "prediction": 4.3235228061676025,
+        "prepare": 0.32564103603363037,
+        "result": 0.002586841583251953
+      },
+      {
+        "decode": 2.9802322387695312e-06,
+        "prediction": 4.313907146453857,
+        "prepare": 0.004115939140319824,
+        "result": 0.0010088682174682617
+      },
+      {
+        "decode": 1.9073486328125e-06,
+        "prediction": 4.3544628620147705,
+        "prepare": 0.006021022796630859,
+        "result": 0.002247929573059082
+      }
+    ],
+    "sweepSeconds": [
+      4.651795983314514,
+      4.319061994552612,
+      4.362773060798645
+    ],
+    "thermalAfter": 0,
+    "thermalBefore": 0,
+    "predictionFramesPerSecond": 14.802743704439944,
+    "startGpuTemperatureC": 51.7
+  },
+  "nativeTensorReplayMatchedPreviousProbabilitiesExactly": true,
+  "referenceIdentity": {
+    "inputSHA256": "2cd7f4b946d94f14e224f645de1d50495366f25d232d19e1e5c00c311d7b180a",
+    "weightsSHA256": "39fe04000d5907a0a7616df54af744d43fbd70b5fba7abc3135d3675734c03ef"
+  },
+  "candidates": {
+    "float32-check": {
+      "benchmark": {
+        "mlxVersion": "0.32.4",
+        "machine": "arm64",
+        "precision": "float32",
+        "compiledBlocks": false,
+        "forceFusedSDPA": false,
+        "batch": 2,
+        "frames": 8,
+        "repeats": 1,
+        "warmupSeconds": 1.3797019170597196,
+        "predictionSweepSeconds": [
+          1.492073125205934
+        ],
+        "predictionFramesPerSecond": 5.361667511366677,
+        "peakMLXBytes": 2050129132,
+        "activeMLXBytes": 615381280,
+        "cacheMLXBytes": 2340021196,
+        "peakProcessRSSBytes": 504102912,
+        "timingNote": "Prediction only; file IO, input transfers, preprocessing and initial compilation excluded."
+      },
+      "startGpuTemperatureC": null,
+      "againstReference": {
+        "maximumAbsoluteError": 2.2649765014648438e-06,
+        "meanAbsoluteError": 2.977327717701428e-09,
+        "minimumTop15Overlap": 15,
+        "thresholdDifferencesGeneralHeads": 0,
+        "ratingDifferences": 0
+      },
+      "againstProduction": {
+        "maximumAbsoluteError": 0.009775727987289429,
+        "meanAbsoluteError": 9.012351256387774e-06,
+        "minimumTop15Overlap": 15,
+        "thresholdDifferencesGeneralHeads": 1,
+        "ratingDifferences": 0
+      }
+    },
+    "float16-unpadded": {
+      "benchmark": {
+        "mlxVersion": "0.32.4",
+        "machine": "arm64",
+        "precision": "float16",
+        "compiledBlocks": true,
+        "forceFusedSDPA": false,
+        "paddedHeadDimension": 32,
+        "batch": 8,
+        "frames": 64,
+        "repeats": 3,
+        "warmupSeconds": 1.392965333070606,
+        "predictionSweepSeconds": [
+          6.570555455517024,
+          6.507290625944734,
+          6.594827751163393
+        ],
+        "predictionFramesPerSecond": 9.740424600824554,
+        "peakMLXBytes": 1130576018,
+        "activeMLXBytes": 234338448,
+        "cacheMLXBytes": 2519847322,
+        "peakProcessRSSBytes": 666320896,
+        "timingNote": "Prediction only; file IO, input transfers, preprocessing and initial compilation excluded."
+      },
+      "startGpuTemperatureC": 52.8,
+      "againstReference": {
+        "maximumAbsoluteError": 0.035003721714019775,
+        "meanAbsoluteError": 6.478878276539035e-06,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 2,
+        "ratingDifferences": 0
+      },
+      "againstProduction": {
+        "maximumAbsoluteError": 0.04201754927635193,
+        "meanAbsoluteError": 1.1036768228223082e-05,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 9,
+        "ratingDifferences": 0
+      },
+      "naturalAgainstReference": {
+        "maximumAbsoluteError": 0.009337127208709717,
+        "meanAbsoluteError": 6.12306075709057e-06,
+        "minimumTop15Overlap": 15,
+        "thresholdDifferencesGeneralHeads": 2,
+        "ratingDifferences": 0
+      },
+      "syntheticAgainstReference": {
+        "maximumAbsoluteError": 0.035003721714019775,
+        "meanAbsoluteError": 7.546331744379131e-06,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 0,
+        "ratingDifferences": 0
+      }
+    },
+    "float16-padded-fused": {
+      "benchmark": {
+        "mlxVersion": "0.32.4",
+        "machine": "arm64",
+        "precision": "float16",
+        "compiledBlocks": true,
+        "forceFusedSDPA": true,
+        "paddedHeadDimension": 64,
+        "batch": 8,
+        "frames": 64,
+        "repeats": 3,
+        "warmupSeconds": 0.856261792127043,
+        "predictionSweepSeconds": [
+          6.276797334197909,
+          6.21923612523824,
+          6.420055791269988
+        ],
+        "predictionFramesPerSecond": 10.196282688833755,
+        "peakMLXBytes": 1162804562,
+        "activeMLXBytes": 234339664,
+        "cacheMLXBytes": 2325517276,
+        "peakProcessRSSBytes": 654589952,
+        "peakPhysicalFootprintBytes": 2689566040,
+        "timingNote": "Prediction only; file IO, input transfers, preprocessing and initial compilation excluded."
+      },
+      "startGpuTemperatureC": 54.9,
+      "againstReference": {
+        "maximumAbsoluteError": 0.030732423067092896,
+        "meanAbsoluteError": 6.235109594854293e-06,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 2,
+        "ratingDifferences": 0
+      },
+      "againstProduction": {
+        "maximumAbsoluteError": 0.03774625062942505,
+        "meanAbsoluteError": 1.1487715710245539e-05,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 9,
+        "ratingDifferences": 0
+      },
+      "naturalAgainstReference": {
+        "maximumAbsoluteError": 0.010706722736358643,
+        "meanAbsoluteError": 5.76889715375728e-06,
+        "minimumTop15Overlap": 15,
+        "thresholdDifferencesGeneralHeads": 2,
+        "ratingDifferences": 0
+      },
+      "syntheticAgainstReference": {
+        "maximumAbsoluteError": 0.030732423067092896,
+        "meanAbsoluteError": 7.633749191882089e-06,
+        "minimumTop15Overlap": 14,
+        "thresholdDifferencesGeneralHeads": 0,
+        "ratingDifferences": 0
+      }
+    }
+  },
+  "limitations": [
+    "Prediction-only throughput; no preprocessing or IO.",
+    "Core ML physical footprint and MLX allocator/RSS figures are different metrics; only a recorded physical-footprint value supports a process-footprint comparison.",
+    "Float32 smoke check covers eight inputs, not the full corpus.",
+    "Initial uncooled padded MLX timing overlapped export and is excluded.",
+    "Numerical comparisons do not measure labeled tagging accuracy."
+  ],
+  "decision": "No runtime/model change: neither MLX configuration improved speed."
+}

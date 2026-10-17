@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Start here · WaifuFinder</title>
+  <style>
+    :root { color-scheme: light; font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #302b42; background: #f5f2fa; }
+    * { box-sizing: border-box; }
+    body { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+    main { min-width: 0; background: white; padding: 36px; border: 1px solid #e6dfef; border-radius: 24px; box-shadow: 0 16px 60px #45345d0c; }
+    .eyebrow { color: #77628f; font-size: 12px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { font-size: clamp(26px, 5vw, 34px); line-height: 1.15; margin: 10px 0 14px; letter-spacing: -.04em; }
+    .intro, footer { color: #70677d; }
+    ol { list-style: none; padding: 0; counter-reset: step; }
+    li { position: relative; padding-left: 46px; margin-top: 28px; counter-increment: step; }
+    li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; background: #ede6f7; color: #694990; text-align: center; font-weight: 700; }
+    h2 { font-size: 19px; margin: 0 0 4px; }
+    p { margin: 0 0 12px; }
+    .explanation { background: #f7f6f9; border-left: 3px solid #b5a1d0; padding: 14px 16px 2px; margin: 16px 0; font-size: 15px; }
+    .explanation strong + p { margin-top: 8px; }
+    code { overflow-wrap: anywhere; font-size: .88em; }
+    details { font-size: 15px; }
+    summary { cursor: pointer; color: #694990; }
+    .command { background: #f5f2fa; border: 1px solid #e6dfef; border-radius: 12px; padding: 16px; margin-top: 14px; }
+    .command-label { font-size: 12px; font-weight: 700; color: #70677d; margin-bottom: 8px; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #282238; color: #fff; border-radius: 8px; padding: 14px; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; margin: 0 0 14px; -webkit-user-select: all; user-select: all; }
+    pre code { display: block; font: inherit; color: inherit; }
+    .copy-help { font-size: 14px; color: #70677d; margin: 0; }
+    footer { margin-top: 24px; font-size: 13px; }
+    a { color: #694990; }
+    @media (max-width: 520px) { body { padding: 12px; } main { padding: 22px 18px; } li { padding-left: 0; } li::before { position: static; display: block; margin-bottom: 8px; } .command { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">WaifuFinder · First-time setup</div>
+    <h1>Install WaifuFinder on your Mac.</h1>
+    <p class="intro">For Apple silicon Macs with macOS 15 or later.</p>
+    <ol>
+      <li><h2>Drag the app to Applications</h2><p>In the disk image window, drag <strong>WaifuFinder</strong> onto <strong>Applications</strong>. Wait for the copy to finish.</p></li>
+      <li><h2>Sign your copy on this Mac</h2>
+        <p>WaifuFinder’s developer does not have an Apple Developer ID certificate, so this release cannot include an Apple-verified developer signature. macOS may block it when you first open it.</p>
+        <p>This one-time setup uses tools already on your Mac to apply a <strong>local signature</strong> to your installed copy. It needs no Apple developer account.</p>
+        <div class="explanation">
+          <strong>What you are allowing</strong>
+          <p><code>xattr</code> removes the download quarantine flag from WaifuFinder. <code>codesign</code> replaces its existing signature with a local one, including its bundled components. Both target only <code>/Applications/WaifuFinder.app</code>.</p>
+          <p>These commands do not download a script, upload your files, or open the app. They do remove this app’s download protection. <strong>A local signature is not a safety check or approval from Apple.</strong> Continue only if you trust the <a href="https://github.com/alastorid/WaifuFinder/releases/latest">official download</a>; you can also inspect the <a href="https://github.com/alastorid/WaifuFinder">source code</a>.</p>
+        </div>
+        <p><strong>Copy the command:</strong> drag across all the text in the dark command block below to select it, then press <strong>⌘C</strong> (Command-C).</p>
+        <div class="command">
+          <div class="command-label">TERMINAL COMMAND</div>
+          <pre aria-label="Command to paste into Terminal"><code class="language-bash" id="command" tabindex="0">xattr -dr com.apple.quarantine "/Applications/WaifuFinder.app" &amp;&amp; codesign --force --deep --sign - "/Applications/WaifuFinder.app"</code></pre>
+          <p class="copy-help">Copy the entire command, even if it wraps onto several lines in this window.</p>
+        </div>
+        <p style="margin-top: 16px"><strong>Paste into Terminal:</strong> press <strong>⌘ Space</strong>, type <strong>Terminal</strong>, and press <strong>Return</strong>. In the Terminal window, press <strong>⌘V</strong> (Command-V) to paste the command, then press <strong>Return</strong> to run it.</p>
+      </li>
+      <li><h2>Open WaifuFinder</h2><p>When Terminal finishes without an error, open <strong>Applications</strong> and double-click <strong>WaifuFinder</strong>. You can now eject the disk image. Next time, open the app as usual.</p>
+        <details><summary>If setup shows an error</summary><p>“No such file” means the app has not finished copying to Applications. A missing quarantine attribute can mean that flag is already cleared; you can run just the <code>codesign</code> part. For other errors, <a href="https://github.com/alastorid/WaifuFinder/issues">report the message</a> rather than adding extra commands or administrator access.</p></details>
+      </li>
+    </ol>
+    <footer>This release is not signed with Apple Developer ID or notarized by Apple. <a href="https://support.apple.com/en-us/102445">Apple explains these protections</a>. If macOS reports malware, do not use these steps to override that warning.</footer>
+  </main>
+
+</body>
+</html>
