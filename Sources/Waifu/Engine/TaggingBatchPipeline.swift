@@ -4,11 +4,13 @@ import Foundation
 /// batch; remote inference uses an ordered window of asynchronous requests.
 enum TaggingBatchPipeline {
     /// Keeps a bounded window of asynchronous operations alive, committing their
-    /// results in input order. Preparation stays serial because `next` owns the
+    /// results in input order by default, or on completion for independent updates.
+    /// Preparation stays serial because `next` owns the
     /// mutable source queue. Empty decisions wait for all commits, so newly added
     /// candidates are not mistaken for a completed run.
     static func runPipelined<Element: Sendable, Output: Sendable>(
         maximumInFlight: Int,
+        commitInOrder: Bool = true,
         next: @escaping @Sendable () async throws -> [Element]?,
         whenEmpty: @escaping @Sendable () async -> Bool,
         process: @escaping @Sendable ([Element]) async throws -> Output,
@@ -50,8 +52,16 @@ enum TaggingBatchPipeline {
                 }
                 if committed < submitted {
                     guard let (index, result) = try await group.next() else { return }
-                    ready[index] = result
-                    while let result = ready.removeValue(forKey: committed) {
+                    if commitInOrder {
+                        ready[index] = result
+                        while let result = ready.removeValue(forKey: committed) {
+                            try Task.checkCancellation()
+                            try await commit(result.get())
+                            committed += 1
+                        }
+                    } else {
+                        // Frame updates are independent. Retire completed batches immediately
+                        // so faster workers can refill their queues behind a slower worker.
                         try Task.checkCancellation()
                         try await commit(result.get())
                         committed += 1

@@ -7,7 +7,9 @@ struct TaggingPanelStatus: View {
     @AppStorage("settingsTab") private var settingsTab = "general"
     @AppStorage("settingsModelFocus") private var settingsModelFocus = ""
     /// Observed so the ᴿ mark appears and disappears as the connection changes.
-    @ObservedObject private var remote = RemoteClient.shared
+    @ObservedObject private var remote = RemoteInferencePool.shared
+
+    @State private var optionHeld = false
 
     var body: some View {
         Group {
@@ -47,10 +49,11 @@ struct TaggingPanelStatus: View {
             } else {
                 VStack(spacing: 6) {
                     Button {
-                        Task { await session.startTagging(from: panel) }
+                        let includeLocal = remote.offersRemoteTagging && NSEvent.modifierFlags.contains(.option)
+                        Task { await session.startTagging(from: panel, includeLocal: includeLocal) }
                     } label: {
-                        Text("Start tagging")
-                            .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
+                        TaggingActionLabel(remote: remote.offersRemoteTagging, includeLocal: optionHeld,
+                                           serverNames: remote.serverNames)
                     }
                     .buttonStyle(.borderedProminent)
                     Text(session.photosAlbumURL == nil
@@ -62,6 +65,8 @@ struct TaggingPanelStatus: View {
                 }
             }
         }
+        .onAppear { optionHeld = NSEvent.modifierFlags.contains(.option) }
+        .onModifierKeysChanged(mask: .option) { _, flags in optionHeld = flags.contains(.option) }
         .frame(maxWidth: .infinity, minHeight: 76, alignment: .center)
         .padding(.vertical, 4)
     }
@@ -111,7 +116,9 @@ struct TaggingStartButton: View {
     @Environment(\.openSettings) private var openSettings
     @AppStorage("settingsTab") private var settingsTab = "general"
     @AppStorage("settingsModelFocus") private var settingsModelFocus = ""
-    @ObservedObject private var remote = RemoteClient.shared
+    @ObservedObject private var remote = RemoteInferencePool.shared
+
+    @State private var optionHeld = false
 
     var body: some View {
         Group {
@@ -124,11 +131,12 @@ struct TaggingStartButton: View {
                             settingsTab = "models"
                             openSettings()
                         } else {
-                            Task { await session.startTagging(from: panel) }
+                            let includeLocal = remote.offersRemoteTagging && NSEvent.modifierFlags.contains(.option)
+                            Task { await session.startTagging(from: panel, includeLocal: includeLocal) }
                         }
                     } label: {
-                        Text("Start tagging")
-                            .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
+                        TaggingActionLabel(remote: remote.offersRemoteTagging, includeLocal: optionHeld,
+                                           serverNames: remote.serverNames)
                     }
                     .buttonStyle(.borderless)
                     .help(session.tagVocabulary == nil && remote.remoteVocabulary == nil
@@ -141,5 +149,28 @@ struct TaggingStartButton: View {
                 .padding(.top, 4)
             }
         }
+        .onAppear { optionHeld = NSEvent.modifierFlags.contains(.option) }
+        .onModifierKeysChanged(mask: .option) { _, flags in optionHeld = flags.contains(.option) }
+    }
+}
+
+private struct TaggingActionLabel: View {
+    let remote: Bool
+    let includeLocal: Bool
+    let serverNames: String
+
+    var body: some View {
+        HStack(spacing: 1) {
+            Text(remote && includeLocal ? "Start Tagger" : "Start tagging")
+            if remote {
+                Text(includeLocal ? "R+L" : "R")
+                    .font(.system(size: 9, weight: .semibold))
+                    .baselineOffset(5)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .help(remote ? (includeLocal
+            ? "Tag using this Mac and \(serverNames)"
+            : "Tag using \(serverNames). Hold Option to include this Mac.") : "Tag using this Mac")
     }
 }

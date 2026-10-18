@@ -7,6 +7,66 @@ import Foundation
 func registerTagResultMemoryTests() {
     let suite = "Tag result memory"
 
+    Registry.shared.add(suite: suite, TestCase(name: "scores rounded across the sparse threshold survive a restart", knownBug: nil) {
+        let vocabulary = try tagVocabularyFixture()
+        let directory = try Temporary.directory("tag-result-threshold")
+        let fileURL = directory.appendingPathComponent("tag-results.db")
+        let memory = await MainActor.run { TagResultMemory(disk: TagResultDiskCache(fileURL: fileURL)) }
+        let identity = TagResultCacheIdentity(
+            photosAssetKey: PhotosMedia.AssetCacheKey(identifier: "threshold-photo", modifiedMilliseconds: 1_000,
+                                                      pixelWidth: 4_000, pixelHeight: 3_000),
+            vocabulary: vocabulary)!
+        let keys = TagResultCacheKeys(source: nil, bySampleIndex: [0: identity])
+        let blank = AnalyzedFrame(sampleIndex: 0, timeSeconds: 0, artScore: 0, faceScore: nil, faceCount: 0,
+                                  faceAreaFraction: nil, featurePrint: nil)
+        let boundaryScores: [Float] = [Float(0.35).nextUp, 0.3501, 0.351, 0.359, 0.36, 0.375, 0.9, 1]
+        let indices = Array(vocabulary.generalIndices.prefix(boundaryScores.count + 2))
+        var probabilities = [Float](repeating: 0, count: TagVocabulary.headCount)
+        probabilities[1] = 0.9
+        for (index, score) in zip(indices, boundaryScores) { probabilities[index] = score }
+        probabilities[indices[boundaryScores.count]] = 0.35
+        probabilities[indices[boundaryScores.count + 1]] = 0.3499
+        var tagged = blank
+        tagged.tagProbabilities = TagProbabilityCodec.encode(probabilities)
+        tagged.tagVocabularyFingerprint = vocabulary.cacheFingerprint
+        await memory.remember(frames: [tagged], keys: keys)
+
+        // A new cache actor must rebuild the index and read the on-disk payload.
+        let reopened = await MainActor.run { TagResultMemory(disk: TagResultDiskCache(fileURL: fileURL)) }
+        let restored = await reopened.restore([blank], keys: keys, vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(restored.restoredCount, 1, "one rounded score must not discard the photo's entire result")
+        check(restored.frames[0].hasTaggingResult, "the restored photo does not need tagging again")
+        let decoded = restored.frames[0].tagProbabilities.flatMap { TagProbabilityCodec.decode($0) }
+        checkNotNil(decoded, "restored runtime probabilities are valid")
+        guard let decoded else { return }
+        for index in indices.prefix(boundaryScores.count) {
+            check(decoded[index] > 0.35, "every retained score stays above the sparse threshold")
+            check(restored.frames[0].topTags?.contains(vocabulary.labels[index].name) == true,
+                  "a retained tag remains visible after restart")
+        }
+        for index in indices.suffix(2) {
+            checkEqual(decoded[index], 0, "scores at or below the threshold remain omitted")
+        }
+        checkEqual(restored.frames[0].tagRating, TagRating.allCases[1], "the photo's rating is also restored")
+
+        // Older payloads have the same compressed body without the size field.
+        let cached = await reopened.cachedResults(for: keys)
+        guard let payload = cached[identity]?[0] else {
+            check(false, "the photo's saved payload exists")
+            return
+        }
+        var legacyPayload = Data("WDF8".utf8)
+        legacyPayload.append(payload.dropFirst(6))
+        let legacyDisk = TagResultDiskCache(fileURL: directory.appendingPathComponent("legacy.db"))
+        _ = try await legacyDisk.remember(
+            [TagResultMemoryRecord(sampleIndex: 0, compressedSparseScores: legacyPayload)],
+            for: identity, retentionDays: 30)
+        let legacyMemory = await MainActor.run { TagResultMemory(disk: legacyDisk) }
+        let legacy = await legacyMemory.restore([blank], keys: keys, vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(legacy.restoredCount, 1, "existing WDF8 results also recover without retagging")
+        checkEqual(legacy.frames[0].topTags, restored.frames[0].topTags, "both formats recover the same tags")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "photo keys ignore album order and membership", knownBug: nil) {
         let vocabulary = try tagVocabularyFixture()
         let first = PhotosMedia.AssetCacheKey(identifier: "asset-A", modifiedMilliseconds: 1_000,

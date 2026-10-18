@@ -3,7 +3,7 @@
 A Mac can share its installed tagging and reconstruction models with one other Mac.
 The client owns browsing, Apple Vision analysis, grouping, source media, compositing
 and export. The server executes model inference. Settings → Remote controls both
-roles independently; enabling a role is an explicit action in the current app session.
+roles independently. Client server entries retain their address and enabled state.
 
 ## Integration
 
@@ -12,6 +12,17 @@ roles independently; enabling a role is an explicit action in the current app se
 server advertises the relevant capability, and otherwise selects the local backend.
 An Uncover workspace captures its backend choices when opened, so a running job does
 not change machines when capabilities change. Reopen the workspace to choose again.
+
+`RemoteInferencePool` owns one independently authenticated `RemoteClient` per configured
+server. The primary connection also serves Uncover. Tagging snapshots connected,
+deduplicated endpoints with the selected vocabulary fingerprint; incompatible labels
+are excluded. `BalancedTaggerBackend` reserves the least-loaded lane before sending
+a batch, counting requests through preparation, transport and completion. Equal depths
+rotate fairly. Each remote lane has an eight-batch window. Option-start adds a local
+lane with capacity one, after verifying that local labels match. Each frame is inferred
+once. Completed frame updates commit immediately so a slow server cannot hold up
+refilling a faster server's queue. Follow-up tagging preserves the local participation
+choice; cancellation joins in-flight tasks before releasing local model resources.
 
 The server sends full Float32 tagging probabilities. The client applies its threshold
 with `TagVocabulary.result`, preserving the normal tagging cache format. The remote

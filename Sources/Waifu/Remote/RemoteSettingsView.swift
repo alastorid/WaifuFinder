@@ -9,16 +9,43 @@ import SwiftUI
 /// client half is the borrower.
 struct RemoteSettingsView: View {
     @ObservedObject private var server = RemoteServer.shared
-    @ObservedObject private var client = RemoteClient.shared
+    @ObservedObject private var pool = RemoteInferencePool.shared
     @State private var rotateConfirmation = false
     @State private var revealKey = false
+    @State private var addingID: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 serverSection
                 Divider()
-                clientSection
+                Text("Inference servers").font(.headline)
+                Text("Tagging balances queued batches across connected servers with matching tag labels. Hold Option when starting to include this Mac. The primary server also provides Uncover.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(pool.entries.filter { !$0.client.manualAddress.isEmpty && $0.id != addingID }) { entry in
+                    RemoteServerCard(client: entry.client,
+                                     vocabularyFingerprint: pool.remoteVocabulary?.cacheFingerprint,
+                                     remove: { pool.remove(entry.id) })
+                }
+                if let entry = pool.entries.first(where: { $0.id == addingID }) {
+                    GroupBox {
+                        RemoteClientSettingsView(client: entry.client,
+                            added: {
+                                pool.finishAdding(entry.id)
+                                addingID = nil
+                            },
+                            cancel: {
+                                pool.remove(entry.id)
+                                addingID = nil
+                            })
+                    }
+                } else {
+                    Button("Add inference server") {
+                        let entry = pool.beginAdding()
+                        addingID = entry.id
+                        entry.client.setEnabled(true)
+                    }
+                }
             }
             .padding(.top, 4)
         }
@@ -146,34 +173,43 @@ struct RemoteSettingsView: View {
         Binding(get: { isServing }, set: { $0 ? server.start() : server.stop() })
     }
 
-    // MARK: Client
+    private func labelled<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title).font(.caption).frame(width: 70, alignment: .trailing)
+            content()
+            Spacer()
+        }
+    }
 
-    private var clientSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func statusRow(_ text: String, isActive: Bool) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(isActive ? Color.green : Color.secondary).frame(width: 8, height: 8)
+            Text(text).font(.caption).foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+}
+
+private struct RemoteClientSettingsView: View {
+    @ObservedObject var client: RemoteClient
+    let added: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Use an inference server").font(.headline)
-                    Text("Borrow tagging and Uncover from another Mac while keeping this one in charge of the video.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Text("Add inference server").font(.headline)
                 Spacer()
-                Toggle("Use a server", isOn: Binding(get: { client.isEnabled },
-                                                     set: { client.setEnabled($0) }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
+                Button("Cancel", action: cancel).controlSize(.small)
             }
-            HStack {
-                statusRow(client.status.label, isActive: client.status.isConnected)
-                if client.status.isConnected {
-                    Button("Disconnect") { client.disconnect() }.controlSize(.small)
-                }
+            discoveredServers
+            manualAddress
+            if !client.status.isConnected {
+                Text(client.status.label).font(.caption).foregroundStyle(.secondary)
             }
-
-            if client.isEnabled {
-                discoveredServers
-                manualAddress
-                capabilitiesSummary
-            }
+        }
+        .onChange(of: client.status) { _, status in
+            if status.isConnected { added() }
         }
     }
 
@@ -212,7 +248,7 @@ struct RemoteSettingsView: View {
                 }
                 Spacer()
                 Text(keyLabel(server)).font(.caption).foregroundStyle(.secondary)
-                Button("Connect") { client.connect(to: server.address) }
+                Button("Add") { client.connect(to: server.address) }
                     .controlSize(.small)
                     .disabled(server.busy && client.status.isConnected)
                 Button { client.forget(address: server.address) } label: {
@@ -234,7 +270,7 @@ struct RemoteSettingsView: View {
                 TextField("host:port", text: $client.manualAddress)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 240)
-                Button("Connect") { client.connect(manual: true) }
+                Button("Add server") { client.connect(manual: true) }
                     .disabled(RemoteAddress.parse(client.manualAddress) == nil)
             }
             HStack(spacing: 8) {
@@ -243,63 +279,11 @@ struct RemoteSettingsView: View {
                     .textContentType(nil)
                     .autocorrectionDisabled()
                     .frame(maxWidth: 420)
-                Text("Paste the server’s key, then Connect").font(.caption).foregroundStyle(.secondary)
+                Text("Paste the server’s key, then Add server").font(.caption).foregroundStyle(.secondary)
             }
             if let message = client.keyMessage {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var capabilitiesSummary: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("On this server").font(.callout.weight(.medium))
-            if let capabilities = client.capabilities {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 4) {
-                        capabilityRow("Tagging",
-                                      ready: capabilities.offersRemoteTagging,
-                                      detail: capabilities.tagger == nil
-                                        ? "Not installed on the server"
-                                        : "Ready · \(capabilities.tagger?.headCount.formatted() ?? "") heads")
-                        ForEach(capabilities.uncover, id: \.algorithm) { entry in
-                            capabilityRow(UncoverAlgorithm(rawValue: entry.algorithm)?.label ?? entry.algorithm,
-                                          ready: entry.available,
-                                          detail: entry.available ? entry.message : entry.message)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            } else {
-                Text("Not connected, so nothing is known about the server's models.")
-                    .font(.caption).foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private func capabilityRow(_ title: String, ready: Bool, detail: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: ready ? "checkmark.circle.fill" : "circle.dashed")
-                .foregroundStyle(ready ? Color.green : Color.secondary).imageScale(.small)
-            Text(title).font(.caption)
-            Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            Spacer()
-        }
-    }
-
-    private func labelled<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title).font(.caption).frame(width: 70, alignment: .trailing)
-            content()
-            Spacer()
-        }
-    }
-
-    private func statusRow(_ text: String, isActive: Bool) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(isActive ? Color.green : Color.secondary).frame(width: 8, height: 8)
-            Text(text).font(.caption).foregroundStyle(.secondary)
-            Spacer()
         }
     }
 }

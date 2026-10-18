@@ -384,8 +384,13 @@ private enum TagResultCacheProbabilityCodec {
             guard index > previousIndex, index < probabilities.count, offset < raw.count else { return nil }
             let fp8 = raw[offset]
             offset += 1
-            guard let ratio = decodeE4M3(fp8), ratio > threshold else { return nil }
-            probabilities[index] = ratio
+            guard let ratio = decodeE4M3(fp8),
+                  ratio > threshold || fp8 == encodeE4M3(threshold.nextUp) else { return nil }
+            // Inclusion in the sparse vector proves the original score exceeded
+            // the threshold. E4M3 can round it below that boundary (0.3501 becomes
+            // 0.34375). Preserve that fact when restoring, including old WDF8/9
+            // records, instead of rejecting the entire photo's saved result.
+            probabilities[index] = max(ratio, threshold.nextUp)
             previousIndex = index
         }
         return probabilities

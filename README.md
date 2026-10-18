@@ -51,6 +51,20 @@ access key. On the other Mac, enable **Use an inference server**, enter that add
 paste the key, and connect. Nearby servers also appear automatically when the network
 allows discovery. Allow local-network access when macOS asks.
 
+Use **Add inference server** in the same Remote panel to configure more servers,
+with a separate address and access key for each. Once connected, each server appears
+as a compact card above the add-server form, with its capabilities and an on/off switch.
+Swipe a card left to reveal **Disconnect**, which removes it. An off switch shows
+“Swipe left to disconnect” as its tooltip. Switching off retains the card and its
+last known capabilities. Tagging sends
+each batch to the connected server with the smallest outstanding batch queue.
+Servers with different tag labels are excluded from that run. The primary server
+continues to provide remote reconstruction.
+
+Hold **Option** to change the tagging action to **Start Taggerᴿ⁺ᴸ** and include
+this Mac’s local WD Tagger alongside the remote servers. The local model must be
+installed and use the same tag labels. Each frame is tagged once, by one worker.
+
 A raised **R** beside tagging or reconstruction means that operation will run on the
 connected server. The server must have the corresponding model installed; the client
 can tag without downloading the model. Tag thresholds, Apple Vision analysis,

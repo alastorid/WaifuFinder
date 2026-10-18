@@ -53,14 +53,22 @@ final class RemoteClient: ObservableObject {
 
     @Published private(set) var status: Status = .off
     @Published private(set) var servers: [DiscoveredServer] = []
-    @Published private(set) var capabilities: RemoteCapabilities?
+    @Published private(set) var capabilities: RemoteCapabilities? {
+        didSet {
+            if let capabilities {
+                lastKnownCapabilities = capabilities
+                defaults.set(try? JSONEncoder().encode(capabilities), forKey: capabilitiesDefaultsKey)
+            }
+        }
+    }
+    @Published private(set) var lastKnownCapabilities: RemoteCapabilities?
     @Published private(set) var isEnabled = false
     /// The tag vocabulary the server supplied, once downloaded.
     @Published private(set) var remoteVocabulary: TagVocabulary?
 
     @Published var manualAddress: String {
         didSet {
-            defaults.set(manualAddress, forKey: "remoteClientAddress")
+            defaults.set(manualAddress, forKey: addressDefaultsKey)
             objectWillChange.send()
         }
     }
@@ -72,6 +80,9 @@ final class RemoteClient: ObservableObject {
     private let vocabularyCacheDirectory: URL?
     private let discoveryEnabled: Bool
     private var lastPong = Date()
+    private let capabilitiesDefaultsKey: String
+    private let addressDefaultsKey: String
+    private let enabledDefaultsKey: String
     private let defaults: UserDefaults
     private let cache: RemoteBeaconCache
     private var receiver: RemoteBeaconReceiver?
@@ -97,17 +108,34 @@ final class RemoteClient: ObservableObject {
 
     init(defaults: UserDefaults = .standard,
          keyStore: (any RemoteKeyStore)? = nil, discoveryEnabled: Bool = true,
-         vocabularyCacheDirectory: URL? = nil) {
+         vocabularyCacheDirectory: URL? = nil, configurationID: String? = nil) {
         self.vocabularyCacheDirectory = vocabularyCacheDirectory
         self.discoveryEnabled = discoveryEnabled
         self.defaults = defaults
+        addressDefaultsKey = configurationID.map { "remoteClientAddress.\($0)" } ?? "remoteClientAddress"
+        enabledDefaultsKey = configurationID.map { "remoteClientEnabled.\($0)" } ?? "remoteClientEnabled"
+        capabilitiesDefaultsKey = "remoteClientCapabilities.\(configurationID ?? "primary")"
+        lastKnownCapabilities = defaults.data(forKey: capabilitiesDefaultsKey)
+            .flatMap { try? JSONDecoder().decode(RemoteCapabilities.self, from: $0) }
         keyStoreBox.value = keyStore
-        manualAddress = defaults.string(forKey: "remoteClientAddress") ?? ""
+        manualAddress = defaults.string(forKey: addressDefaultsKey) ?? ""
         cache = RemoteBeaconCache()
         // The receiver is created lazily in `setEnabled`: binding the beacon port
         // triggers a local-network permission prompt, and that must not happen
         // merely because a settings pane was built.
     }
+
+    func clearConfiguration() {
+        setEnabled(false)
+        disconnect()
+        manualAddress = ""
+        manualKey = ""
+        keyMessage = nil
+        lastKnownCapabilities = nil
+        defaults.removeObject(forKey: capabilitiesDefaultsKey)
+    }
+
+    func restoreEnabled() { setEnabled(defaults.bool(forKey: enabledDefaultsKey)) }
 
     // MARK: Keys
 
@@ -159,7 +187,7 @@ final class RemoteClient: ObservableObject {
     func setEnabled(_ enabled: Bool) {
         guard enabled != isEnabled else { return }
         isEnabled = enabled
-        defaults.set(enabled, forKey: "remoteClientEnabled")
+        defaults.set(enabled, forKey: enabledDefaultsKey)
         if enabled {
             status = .discovering
             startReceiving()

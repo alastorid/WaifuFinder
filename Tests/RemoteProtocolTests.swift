@@ -523,6 +523,76 @@ func registerRemoteProtocolTests() {
               "the server sends the model precisely the RGBA bytes prepared by the client")
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "multiple configured servers and a local lane share tagging", knownBug: nil) {
+        try await Task { @MainActor in
+            let vocabulary = try VocabularyFixture.make()
+            let key = remoteTestKey()
+            let firstTagger = StubTagger(vocabulary: vocabulary)
+            let secondTagger = StubTagger(vocabulary: vocabulary)
+            let localTagger = StubTagger(vocabulary: vocabulary)
+            let first = try LoopbackPair(catalog: StubCatalog.tagging(firstTagger, vocabulary: vocabulary), key: key)
+            let second = try LoopbackPair(catalog: StubCatalog.tagging(secondTagger, vocabulary: vocabulary), key: key)
+            defer { first.tearDown(); second.tearDown() }
+            check(await first.connect(), "first server connects")
+            check(await second.connect(), "second server connects")
+            let suiteName = "waifu.multi.remote.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let pool = RemoteInferencePool(defaults: defaults, primary: first.client, discoveryEnabled: false)
+            pool.add()
+            let extra = pool.entries[1].client
+            // Reuse the fixture's key store, with a distinct authenticated client.
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let store = RemoteFileKeyStore(url: root.appendingPathComponent("key"))
+            try store.saveKey(key)
+            extra.replaceKeyStore(store)
+            let address = second.client.manualAddress
+            second.client.disconnect()
+            // A server frees its single-client slot asynchronously after disconnect.
+            let deadline = Date().addingTimeInterval(5)
+            while second.server.client != nil && Date() < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            extra.manualAddress = address
+            extra.setEnabled(true)
+            defer { extra.setEnabled(false) }
+            let connectDeadline = Date().addingTimeInterval(5)
+            while !extra.status.isConnected && Date() < connectDeadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            check(extra.status.isConnected, "configured additional server connects")
+            _ = await pool.loadVocabularyIfNeeded()
+            let clients = pool.taggingClients(matching: vocabulary.cacheFingerprint)
+            checkEqual(clients.count, 2, "both compatible connections are eligible")
+            checkEqual(pool.taggingClients(matching: 0).count, 0, "different labels are excluded")
+            guard clients.count == 2 else { return }
+            var lanes = clients.map { BalancedTaggerBackend.Lane(
+                backend: RemoteTaggerBackend(client: $0, threshold: 0.35,
+                    vocabularyFingerprint: vocabulary.cacheFingerprint), capacity: 8) }
+            lanes.append(.init(backend: localTagger, capacity: 1))
+            let backend = BalancedTaggerBackend(lanes: lanes)
+            let image = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
+            for _ in 0..<6 {
+                let results = try await backend.tag(batch: [image])
+                checkEqual(results.count, 1, "one result per input")
+                checkEqual(results.first?.probabilities.count, TagVocabulary.headCount, "full tag row survives")
+            }
+            checkEqual(firstTagger.batches, 2, "first remote receives work")
+            checkEqual(secondTagger.batches, 2, "second remote receives work")
+            checkEqual(localTagger.batches, 2, "local receives work too")
+            let remembered = extra.capabilities
+            extra.setEnabled(false)
+            checkNil(extra.capabilities, "disabled connection no longer advertises live capabilities")
+            checkEqual(extra.lastKnownCapabilities, remembered, "off card retains capability details")
+            let restoredClient = RemoteClient(defaults: defaults, discoveryEnabled: false,
+                configurationID: pool.entries[1].id)
+            checkEqual(restoredClient.lastKnownCapabilities, remembered, "card capabilities survive relaunch")
+            pool.remove(pool.entries[1].id)
+            checkNil(extra.lastKnownCapabilities, "removing the card clears remembered capabilities")
+        }.value
+    })
+
     registerRemoteEndToEndTests(suite: suite)
 }
 

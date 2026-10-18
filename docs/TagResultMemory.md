@@ -104,6 +104,12 @@ when restored. The threshold is the fixed default used by the cache. E4M3 rounds
 the retained probability to FP8 precision, so restored scores are compact
 approximations rather than the original Float32 values.
 
+A retained score just above 0.35 can round down to 0.34375 in E4M3. The reader
+accepts that boundary value and restores it to the smallest Float32 above 0.35,
+because its presence in the sparse vector proves the original exceeded the
+threshold. This also recovers existing `WDF8` and `WDF9` records without retagging.
+Lower encoded scores are still rejected as malformed.
+
 Each frame payload is compressed independently. A result with no scores above
 the threshold still has a valid payload with a zero pair count.
 Older `WDF8` payloads remain readable; their decompression buffer grows only as
