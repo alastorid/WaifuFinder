@@ -625,6 +625,11 @@ released per frame, and Core Image does not cache intermediates from unrelated f
 
 Compressed thumbnails use a 64 MiB in-memory LRU; evicted frames are regenerated from
 the source when requested. Decoded thumbnail images have a separate 64 MiB cache budget.
+Grid cells reveal their image and controls together after the pixels are decoded,
+without a grey loading tile or spinner. Initial and nearby rows are prefetched.
+Visible cells retain their decoded pixels independently of cache eviction; a brief
+250 ms release delay keeps view re-entry and cell moves stable, then releases images
+that remain offscreen. Generation and request checks discard obsolete completions.
 
 What stays in memory per frame is a timecode, the two scores and the FeaturePrint. The
 compressed thumbnail JPEGs are held only in the bounded LRU and the UI decodes them on

@@ -70,8 +70,99 @@ private func checkInvalidKeyRefusal(_ error: Error?, _ what: String) {
     check(false, "\(what): expected .invalidKey, got \(storeError)")
 }
 
+@MainActor
+private final class ThumbnailReadGate {
+    private var continuation: CheckedContinuation<CGImage?, Never>?
+    var isWaiting: Bool { continuation != nil }
+    func read() async -> CGImage? {
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func finish(_ image: CGImage?) {
+        continuation?.resume(returning: image)
+        continuation = nil
+    }
+}
+
 func registerThumbnailCacheTests() {
     let suite = "thumbnail cache"
+    Registry.shared.add(suite: suite, TestCase(name: "cells publish only decoded images and preserve them through brief disappearance", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
+        await Task { @MainActor in
+            let identity = UUID().uuidString
+            let presentation = GridThumbnailPresentation(identity: identity, releaseDelay: .milliseconds(20))
+            let gate = ThumbnailReadGate()
+            let loading = Task { await presentation.prepare(identity: identity) { await gate.read() } }
+            while !gate.isWaiting { await Task.yield() }
+            checkNil(presentation.ready, "fetching bytes exposes no partially prepared cell")
+            gate.finish(pixels)
+            await loading.value
+            let ready = presentation.image(for: identity)
+            checkEqual(ready?.size, NSSize(width: 64, height: 48), "publication includes decoded geometry")
+            presentation.disappear(identity: identity)
+            check(presentation.image(for: identity) === ready, "a transient disappearance does not blank the cell")
+            await presentation.prepare(identity: identity) {
+                check(false, "a ready cell must not fetch or decode again")
+                return nil
+            }
+            try? await Task.sleep(for: .milliseconds(40))
+            check(presentation.image(for: identity) === ready, "re-entry cancels release and retains the same image")
+            presentation.disappear(identity: identity)
+            for _ in 0..<100 where presentation.ready != nil {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            checkNil(presentation.ready, "offscreen cells eventually release their strong image")
+            checkNil(GridThumbnailLoader.shared.cachedImage(identity: identity), "the visibility lease is also released")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "late and canceled thumbnail results cannot paint a replacement cell", knownBug: nil) {
+        let oldPixels = try ImageFixture.cgImage(width: 32, height: 24, gray: 0.2)
+        let newPixels = try ImageFixture.cgImage(width: 96, height: 64, gray: 0.8)
+        await Task { @MainActor in
+            let oldIdentity = UUID().uuidString, newIdentity = UUID().uuidString
+            let presentation = GridThumbnailPresentation(identity: oldIdentity)
+            let gate = ThumbnailReadGate()
+            let old = Task { await presentation.prepare(identity: oldIdentity) { await gate.read() } }
+            while !gate.isWaiting { await Task.yield() }
+            await presentation.prepare(identity: newIdentity) { newPixels }
+            let ready = presentation.image(for: newIdentity)
+            gate.finish(oldPixels)
+            await old.value
+            check(presentation.image(for: newIdentity) === ready, "out-of-order completion preserves the replacement")
+            checkNil(presentation.image(for: oldIdentity), "an old album identity never borrows new pixels")
+
+            let canceledIdentity = UUID().uuidString
+            let cancelGate = ThumbnailReadGate()
+            let canceled = Task { await presentation.prepare(identity: canceledIdentity) { await cancelGate.read() } }
+            while !cancelGate.isWaiting { await Task.yield() }
+            canceled.cancel()
+            cancelGate.finish(oldPixels)
+            await canceled.value
+            checkNil(presentation.image(for: canceledIdentity), "a canceled fetch cannot reveal a cell")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "visible image leases survive cell handoff and release each owner independently", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
+        let loader = GridThumbnailLoader.shared
+        let identity = UUID().uuidString, first = UUID(), second = UUID()
+        loader.retainVisibleImage(pixels, identity: identity, owner: first)
+        loader.retainVisibleImage(pixels, identity: identity, owner: second)
+        loader.releaseVisibleImage(identity: identity, owner: first)
+        check(loader.cachedImage(identity: identity) === pixels, "another visible cell keeps the exact decoded pixels")
+        loader.releaseVisibleImage(identity: identity, owner: second)
+        checkNil(loader.cachedImage(identity: identity), "last owner releases uncached pixels")
+        await Task { @MainActor in
+            var presentation: GridThumbnailPresentation? = GridThumbnailPresentation(identity: identity)
+            await presentation?.prepare(identity: identity) { pixels }
+            var fetched = false
+            let replacement = GridThumbnailPresentation(identity: identity)
+            checkNotNil(replacement.image(for: identity), "newly mounted cell starts ready from the live lease")
+            presentation = nil
+            await replacement.prepare(identity: identity) { fetched = true; return nil }
+            check(!fetched, "cell handoff performs no fetch")
+            checkNotNil(replacement.image(for: identity), "old cell destruction cannot blank its replacement")
+        }.value
+        checkNil(loader.cachedImage(identity: identity), "destroyed presentations release their leases")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "grid thumbnail loads reuse decoded pixels and new analyses invalidate cached images", knownBug: nil) {
         let directory = try Temporary.directory("grid-thumbnail")
         let url = directory.appendingPathComponent("frame.png")
