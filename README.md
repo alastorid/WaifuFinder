@@ -380,7 +380,11 @@ focused frame in motion.
   in their own inset group, and the group's label collapses it again. Click a chip to
   require its trait, click it again to sort the grid by that trait's confidence, and
   right-click to exclude frames carrying it. The traits offered track the frames shown,
-  so the list narrows as the grid does.
+  so the list narrows as the grid does. Available traits rank by their average
+  confidence among values strictly above the tag threshold. Summary work runs in
+  the background and reuses cached vectors on Metal for larger selections, with
+  the same average on the CPU for small selections or when Metal is unavailable.
+  See [tag summary computation](docs/Tag-summary.md) for caching and fallback rules.
 - **Grouping** (right, off by default) — the FeaturePrint distance within which two frames are the same
   shot, as a live slider: tighter makes more, smaller groups, looser makes fewer, larger
   ones. It re-groups when released (drag) or on each step (←/→), without re-scoring.

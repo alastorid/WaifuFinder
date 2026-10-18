@@ -49,6 +49,7 @@ while index < arguments.count {
 // Model and settings.
 registerFrameArrangementTests()
 registerMinimalVisualDistanceOrderTests()
+registerTagSummaryTests()
 registerCuOptMetalTSPTests()
 registerFrameSelectionTests()
 registerProcessingReviewTests()

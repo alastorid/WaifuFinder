@@ -24,6 +24,7 @@ extension RemoteServerSession {
     func handleTagBatch(_ envelope: RemoteEnvelope) async {
         await resources.touch()
         do {
+            try Task.checkCancellation()
             var reader = WireReader(envelope.payload)
             let batchCount = Int(try reader.u8())
             guard let codec = RemoteTagImageCodec(rawValue: try reader.u8()), try reader.u16() == 0 else {
@@ -38,6 +39,7 @@ extension RemoteServerSession {
             guard await ModelLibrary.shared.active == nil else { throw RemoteError.busy }
             let backend = try await catalog.tagger()
             let rows = try await backend.probabilityRows(batch: images)
+            try Task.checkCancellation()
             guard rows.count == batchCount else { throw TaggerError.invalidProbabilities }
 
             var payload = WireWriter(capacity: 9 + batchCount * TagVocabulary.headCount * 4)
@@ -50,6 +52,7 @@ extension RemoteServerSession {
             }
             try await connection.send(.tagResult, payload: payload.bytes, streamID: envelope.streamID)
         } catch {
+            guard !Task.isCancelled else { return }
             try? await connection.sendError(envelope, Self.describe(error))
         }
     }

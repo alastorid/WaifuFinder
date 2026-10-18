@@ -53,6 +53,65 @@ private actor TagBatchPipelineProbe {
     }
 }
 
+/// Holds the first wave until the entire window has arrived, then lets its
+/// first batch finish last. Deadlines turn a serial implementation into a
+/// clear failure instead of hanging the regression runner.
+private actor TagWindowProbe {
+    var fetched = 0
+    var active = 0
+    var peakActive = 0
+    var peakRetained = 0
+    var finished: [Int] = []
+    var committed: [Int] = []
+    var drainedAfterCommit = false
+    let window: Int
+    var total: Int
+    let failFetch: Int?
+    let growWhenEmpty: Bool
+    private var didGrow = false
+
+    init(window: Int = 8, total: Int = 25, failFetch: Int? = nil, growWhenEmpty: Bool = false) {
+        self.window = window
+        self.total = total
+        self.failFetch = failFetch
+        self.growWhenEmpty = growWhenEmpty
+    }
+    func next() throws -> [Int]? {
+        if fetched == failFetch { throw TaggerError.preprocessing }
+        guard fetched < total else { return [] }
+        let index = fetched
+        fetched += 1
+        peakRetained = max(peakRetained, fetched - committed.count)
+        return [index]
+    }
+    func process(_ batch: [Int]) async throws -> Int {
+        let index = batch[0]
+        active += 1
+        peakActive = max(peakActive, active)
+        defer { active -= 1 }
+        let deadline = Date().addingTimeInterval(5)
+        if failFetch == nil {
+            while peakActive < window || (index == 0 && finished.count < window - 1) {
+                try Task.checkCancellation()
+                guard Date() < deadline else { throw TaggerError.invalidBatch }
+                try await Task.sleep(for: .milliseconds(1))
+            }
+        }
+        finished.append(index)
+        return index
+    }
+    func commit(_ index: Int) { committed.append(index) }
+    func empty() -> Bool {
+        if growWhenEmpty && !didGrow {
+            didGrow = true
+            total += 5
+            return true
+        }
+        drainedAfterCommit = committed.count == total && active == 0
+        return false
+    }
+}
+
 private actor TagPhotoRenditionProbe {
     let images: [CGImage]
     let failFirst: Bool
@@ -141,6 +200,38 @@ func registerWDTaggerContractTests() {
             }
         }
         check(exact, "448px content and white padding are pixel exact")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "remote tagging pipelines a bounded window and commits reordered replies in input order", knownBug: nil) {
+        for window in [4, 8] {
+            let probe = TagWindowProbe(window: window)
+            try await TaggingBatchPipeline.runPipelined(maximumInFlight: window,
+                next: { try await probe.next() }, whenEmpty: { await probe.empty() },
+                process: { try await probe.process($0) }, commit: { await probe.commit($0) })
+            checkEqual(await probe.peakActive, window, "the full request window overlaps")
+            checkEqual(await probe.peakRetained, window, "out-of-order results cannot grow the window")
+            checkEqual(await probe.committed, Array(0..<25), "every result is committed in source order")
+            check(await probe.finished.first != 0, "the test actually exercises reordered replies")
+            check(await probe.drainedAfterCommit, "queue completion waits for the final result")
+        }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "remote tagging rechecks work added after its queued batches drain", knownBug: nil) {
+        let probe = TagWindowProbe(window: 4, total: 4, growWhenEmpty: true)
+        try await TaggingBatchPipeline.runPipelined(maximumInFlight: 4,
+            next: { try await probe.next() }, whenEmpty: { await probe.empty() },
+            process: { try await probe.process($0) }, commit: { await probe.commit($0) })
+        checkEqual(await probe.committed, Array(0..<9), "new candidates extend the same ordered run")
+        check(await probe.drainedAfterCommit, "the extended queue finishes after its final commit")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "remote tagging commits submitted results before a later preparation failure", knownBug: nil) {
+        let probe = TagWindowProbe(failFetch: 3)
+        do {
+            try await TaggingBatchPipeline.runPipelined(maximumInFlight: 8,
+                next: { try await probe.next() }, whenEmpty: { await probe.empty() },
+                process: { try await probe.process($0) }, commit: { await probe.commit($0) })
+            check(false, "preparation failure propagates")
+        } catch TaggerError.preprocessing {} catch { throw error }
+        checkEqual(await probe.committed, [0, 1, 2], "completed submitted work survives the fetch failure")
+        checkEqual(await probe.active, 0, "all submitted tasks have joined")
     })
     Registry.shared.add(suite: suite, TestCase(name: "tagging prefetch overlaps one fetch and drains only after committing ordered results", knownBug: nil) {
         let probe = TagBatchPipelineProbe()

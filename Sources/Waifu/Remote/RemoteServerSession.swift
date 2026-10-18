@@ -1,8 +1,7 @@
 import Foundation
 import Network
 
-/// The per-connection state: the handshake, then the serial loop that runs the
-/// client's requests in arrival order.
+/// The per-connection state: the handshake and bounded asynchronous requests.
 actor RemoteServerSession {
     /// Everything the handshake needs from the serving app, read in one hop.
     struct ServerInfo: Sendable {
@@ -27,6 +26,7 @@ actor RemoteServerSession {
     private var serverNonce = Data()
     private var sessionID = ""
     private var handshakeTask: Task<Void, Never>?
+    private var taggingTasks: [UInt32: Task<Void, Never>] = [:]
     let resources = RemoteServerResources()
     let catalog: RemoteModelCatalog
 
@@ -75,6 +75,12 @@ actor RemoteServerSession {
         handshakeTask?.cancel()
         handshakeTask = nil
         authenticated = false
+        let pendingTags = Array(taggingTasks.values)
+        taggingTasks.removeAll()
+        for task in pendingTags { task.cancel() }
+        await connection.stop()
+        for task in pendingTags { await task.value }
+        if !pendingTags.isEmpty { await catalog.releaseTagger() }
         await resources.releaseAll()
         await link.close(reason: reason)
         // The reference is read here, on this actor, and the hop to the main
@@ -221,7 +227,17 @@ actor RemoteServerSession {
         while authenticated {
             guard let envelope = await connection.nextAny() else { return }
             switch envelope.opcode {
-            case .tagBatch: await handleTagBatch(envelope)
+            case .tagBatch:
+                guard taggingTasks.count < RemoteLimits.taggingBatchWindow,
+                      taggingTasks[envelope.streamID] == nil else {
+                    try? await connection.sendError(envelope, .busy)
+                    continue
+                }
+                taggingTasks[envelope.streamID] = Task { [weak self] in
+                    guard let self else { return }
+                    await self.handleTagBatch(envelope)
+                    await self.tagBatchFinished(envelope.streamID)
+                }
             case .vocabularyRequest: await handleVocabularyRequest(envelope)
             case .uncoverBegin: await handleUncover(envelope)
             default:
@@ -230,6 +246,10 @@ actor RemoteServerSession {
             }
             await resources.releaseIfIdle()
         }
+    }
+
+    private func tagBatchFinished(_ streamID: UInt32) {
+        taggingTasks[streamID] = nil
     }
 
     /// Pushes a fresh capability snapshot, so the client's ᴿ markers follow

@@ -19,6 +19,8 @@ struct RemoteModelCatalog: Sendable {
     var vocabularyFingerprint: @Sendable () async throws -> UInt64
     /// What this Mac can currently do.
     var capabilities: @Sendable (String, String, String?) async -> RemoteCapabilities
+    /// A cancelled native worker cannot be reused on the next connection.
+    var releaseTagger: @Sendable () async -> Void = {}
 
     static let local = RemoteModelCatalog(
         tagger: { try await RemoteServerResources.shared.tagger() },
@@ -33,7 +35,8 @@ struct RemoteModelCatalog: Sendable {
         capabilities: { appVersion, serverName, sessionID in
             await RemoteCapabilities.current(appVersion: appVersion, serverName: serverName,
                                              sessionID: sessionID)
-        })
+        },
+        releaseTagger: { await RemoteServerResources.shared.releaseTagger() })
 }
 
 /// Everything a serving WaifuFinder holds on behalf of a remote client.
@@ -127,12 +130,18 @@ actor RemoteServerResources {
         await ModelLibrary.shared.releaseTagger()
     }
 
+    func releaseTagger() async {
+        idleTask?.cancel()
+        idleTask = nil
+        await releaseTagSession()
+    }
+
     // MARK: Jobs
 
     /// Records that a stream is in flight, so a `cancelJob` arriving before the
     /// work starts is still honoured.
     func reserve(streamID: UInt32) throws {
-        guard reserved.count < RemoteLimits.maximumOutstandingRequests, !reserved.contains(streamID) else { throw RemoteError.busy }
+        guard reserved.count < RemoteLimits.maximumOutstandingJobs, !reserved.contains(streamID) else { throw RemoteError.busy }
         cancelled.remove(streamID)
         reserved.insert(streamID)
         jobs[streamID] = nil

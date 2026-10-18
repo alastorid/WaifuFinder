@@ -600,23 +600,37 @@ final class RemoteClient: ObservableObject {
     func tag(images: [CGImage], codec: RemoteTagImageCodec) async throws -> [[Float]] {
         guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
         guard (1...WDTaggerBackend.batchSize).contains(images.count) else { throw TaggerError.invalidBatch }
+        let payload = try await Self.encodeTagBatch(images, codec: codec)
+        let reply = try await connection.request(.tagBatch, payload: payload)
+        let expected = capabilities?.tagger?.vocabularyFingerprint
+        return try await Self.decodeTagResult(reply, count: images.count, fingerprint: expected)
+    }
+
+    // Nonisolated async helpers run image conversion and probability decoding
+    // off the UI actor while other batches are travelling or running remotely.
+    private nonisolated static func encodeTagBatch(_ images: [CGImage], codec: RemoteTagImageCodec) async throws -> [UInt8] {
         var payload = WireWriter()
         payload.u8(UInt8(images.count))
         payload.u8(codec.rawValue)
         payload.u16(0)
         for image in images {
+            try Task.checkCancellation()
             switch codec {
             case .encoded: payload.data(try ThumbnailCache.encodeJPEG(image))
             case .rgba8: payload.raw(try RemoteTagImageDecoder.encodeRGBA8(image))
             }
         }
-        let reply = try await connection.request(.tagBatch, payload: payload.bytes)
+        return payload.bytes
+    }
+
+    private nonisolated static func decodeTagResult(_ reply: RemoteEnvelope, count expectedCount: Int,
+                                                    fingerprint expected: UInt64?) async throws -> [[Float]] {
+        try Task.checkCancellation()
         var reader = WireReader(reply.payload)
         let count = Int(try reader.u8())
         let fingerprint = try reader.u64()
-        guard count == images.count else { throw TaggerError.invalidProbabilities }
-        if let capabilities = capabilities,
-           let expected = capabilities.tagger?.vocabularyFingerprint, expected != fingerprint {
+        guard reply.opcode == .tagResult, count == expectedCount else { throw TaggerError.invalidProbabilities }
+        if let expected, expected != fingerprint {
             // A server that changed its labels mid-session would otherwise have
             // its rows cached under the old vocabulary index order.
             throw RemoteError.modelUnavailable("The server changed its tag vocabulary. Reconnect to resync.")

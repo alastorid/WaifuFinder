@@ -65,6 +65,13 @@ seed/native fallback. Dense search uses at most 128 iterations. Each job owns it
 buffers and checks cancellation between GPU commands. Sorting happens off the UI
 thread; the inline ring remains visible until the current job finishes or is canceled.
 
+The session also retains the filtered, score-ranked and capped photos before visual
+sequencing. Switching visual order on/off, reversing it and publishing a completed
+route reuse that snapshot and its tag summaries. These operations do not decode
+the album's tagging vectors again on the UI thread. Frame and filter changes rebuild
+the snapshot; starting a route leaves the existing grid mounted when its displayed
+sequence and layout are unchanged.
+
 These cutoffs were chosen for this first implementation, not imposed by cuOpt or
 Metal. A 200,000-frame input is not rejected: it uses the CPU fallback. Sequencing
 at that scale has not been benchmarked. A dense matrix would need roughly 149 GiB;
@@ -75,8 +82,10 @@ scalable GPU work should use bounded candidates, tiles and an explicit memory bu
 `./run-tests.sh --only 'frame arrangement'` includes solver permutation/objective
 checks, small instances checked against brute-force open-path optima, real Vision
 metric checks, CPU/Metal parity, bounded-memory candidate mode, invalid inputs,
-cancellation and session/filter/reversal checks. All 38 targeted checks passed on
-the available M3, including a 513-photo integration check. These are background compute tests
+cancellation and session/filter/reversal checks. All 47 targeted checks passed on
+the available M3, including a 513-photo integration check and a tagged 1,800-photo
+control responsiveness regression, plus the [tag summary checks](Tag-summary.md).
+These are background compute tests
 and do not operate the user's UI.
 
 `./tools/benchmark-visual-sort.sh` builds an optimized standalone benchmark using

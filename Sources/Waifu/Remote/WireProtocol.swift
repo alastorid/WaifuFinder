@@ -64,10 +64,11 @@ enum RemoteLimits {
     static let defaultPort: UInt16 = 47410
     static let beaconPort: UInt16 = 42888
     static let beaconGroup = "239.255.42.99"
-    /// One request may be followed by exactly one prefetch. `TaggingBatchPipeline`
-    /// fetches the next batch while consuming the current one, so two is the
-    /// design's window; a third is refused rather than silently queued.
-    static let maximumOutstandingRequests = 2
+    /// Tagging keeps eight batches in flight, bounded separately from buffered
+    /// bytes. Leave two request slots for vocabulary and other control work.
+    static let taggingBatchWindow = 8
+    static let maximumOutstandingRequests = taggingBatchWindow + 2
+    static let maximumOutstandingJobs = 2
     static let handshakeTimeout: TimeInterval = 10
     static let idleTimeout: TimeInterval = 60
     static let pingInterval: TimeInterval = 15

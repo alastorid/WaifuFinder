@@ -5,9 +5,8 @@ import CryptoKit
 ///
 /// Frames arrive in order and carry the `streamID` of the request they belong
 /// to, so a client can keep more than one request in flight without a second
-/// connection. That matters for tagging: `TaggingBatchPipeline` fetches the next
-/// batch while the current one is being consumed, so exactly two requests are
-/// outstanding by construction.
+/// connection. Remote tagging keeps a bounded window of batches in flight while
+/// preparation and result commits overlap server inference.
 ///
 /// Everything is expressed as **one primitive** — "the next message on this
 /// stream". A one-shot request/response is that primitive read once; a

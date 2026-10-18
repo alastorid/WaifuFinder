@@ -125,6 +125,12 @@ private struct VisualOrderInput: Equatable, Sendable {
     let featurePrint: Data?
 }
 
+private struct TagSummaryInput: Equatable, Sendable {
+    let ids: Set<FrameID>
+    let revision: UInt64
+    let threshold: Float
+}
+
 /// Frame IDs are the identity used by both the grid and its caches. Keep the
 /// first occurrence if an upstream refresh ever repeats one, so a duplicate
 /// cannot be counted twice, rendered twice, or trap a dictionary initializer.
@@ -178,6 +184,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     @Published private(set) var frames: [AnalyzedFrame] = [] {
         didSet {
+            visualOrderBaseFrames = nil
+            invalidateTagSummaries()
             displayFilterResults.removeAll()
             let isTagUpdate = incrementallyTaggedFrames != nil
             if isTagUpdate {
@@ -193,11 +201,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             cachedLimitBounds = nil
             if let incrementallyTaggedFrames {
                 for frame in incrementallyTaggedFrames { frameByID[frame.id] = frame }
-                updateTagFacetIndex(for: incrementallyTaggedFrames)
                 self.incrementallyTaggedFrames = nil
             } else {
                 frameByID = Dictionary(uniqueKeysWithValues: frames.map { ($0.id, $0) })
-                rebuildTagFacetIndex(force: true)
             }
             taggedFrameCount = frames.reduce(into: 0) { count, frame in
                 if frame.tagRating != nil { count += 1 }
@@ -210,13 +216,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingCandidateResults = FrameIndexResultCache<TaggingCandidateCacheKey>()
     private var cachedLimitBoundsKey: FrameLimitBoundsCacheKey?
     private var cachedLimitBounds: FrameLimitBounds?
-    /// General-tag head indices above the current threshold, decoded once per frame
-    /// instead of decompressing every probability vector on each filter interaction.
-    private var tagFacetIndicesByFrame: [FrameID: [Int]] = [:]
-    private var tagFacetIndexThreshold: Float?
-    private var tagFacetIndexGeneration = UUID()
-    private var tagFacetIndexTask: Task<[FrameID: [Int]], Never>?
-    private var tagFacetIndexPatch: [FrameID: [Int]] = [:]
+    private let tagSummaryComputer = TagSummaryComputer()
+    private var tagSummaryRevision: UInt64 = 0
+    private var tagSummaryGeneration = UUID()
+    private var tagSummaryTask: Task<TagSummary.Labels?, Never>?
+    private var pendingTagSummaryInput: TagSummaryInput?
+    private var completedTagSummaryInput: TagSummaryInput?
+    private var completedTagSummaryLabels: TagSummary.Labels?
     private var incrementallyTaggedFrames: [AnalyzedFrame]?
     private var displayedIndex: [FrameID: Int] = [:]
     private var visualOrderTask: Task<[FrameID]?, Never>?
@@ -224,6 +230,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var pendingVisualOrderInput: [VisualOrderInput]?
     private var completedVisualOrderInput: [VisualOrderInput]?
     private var visualOrderIDs: [FrameID] = []
+    /// Score-ranked, filtered and capped photos before visual sequencing. A
+    /// visual toggle/reversal changes only their order, so it must not decode
+    /// every tagging vector or rebuild the tag summaries on the UI actor.
+    private var visualOrderBaseFrames: [AnalyzedFrame]?
     @Published private(set) var isSortingVisualDistance = false
     private var rowPosition: [FrameID: (row: Int, position: Int)] = [:]
     private var rowHeightRatios: [String: Double] = [:]
@@ -313,7 +323,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     /// Visual continuity, followed by independent score signals for representatives and ties.
     @Published var frameOrder: FrameOrder = .everything {
-        didSet { recomputeDisplayedFrames() }
+        didSet {
+            guard frameOrder != oldValue else { return }
+            var previous = oldValue
+            previous.minimalVisualDistance = frameOrder.minimalVisualDistance
+            if previous == frameOrder {
+                recomputeVisualOrder()
+            } else {
+                recomputeDisplayedFrames()
+            }
+        }
     }
 
     /// Filters Photos items by the app's private "Sync order" marker.
@@ -438,6 +457,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published private(set) var tagFacetTags: [String] = []
     /// Tags present on every frame currently shown in the grid.
     @Published private(set) var tagCommonTags: [String] = []
+    @Published private(set) var isSummarizingTags = false
 
     /// The same frames split into grid lines — one per group, plus a final line for
     /// the frames in no group. Used when `groupRows` is on.
@@ -577,7 +597,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var thumbnailRequests: [String: ThumbnailRequest] = [:]
     private let settingsURL: URL
     /// A supplied settings file keeps session-level regression fixtures isolated.
-    init(settingsURL: URL? = nil) {
+    init(settingsURL: URL? = nil, vocabulary: TagVocabulary? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let file = settingsURL ?? support.appendingPathComponent("Waifu", isDirectory: true)
             .appendingPathComponent("settings.json")
@@ -585,7 +605,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.settingsURL = file
         loadSettings()
-        tagVocabulary = RemoteClient.shared.remoteVocabulary ?? TagVocabulary.loadAvailable()
+        tagVocabulary = vocabulary ?? RemoteClient.shared.remoteVocabulary ?? TagVocabulary.loadAvailable()
         remoteVocabularyChanges = RemoteClient.shared.$remoteVocabulary
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -595,7 +615,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     guard let updated = vocabulary ?? TagVocabulary.loadAvailable() else { return }
                     self.tagVocabulary = updated
                     self.clearTagResultsNotMatching(updated.cacheFingerprint)
-                    self.rebuildTagFacetIndex(force: true)
+                    self.invalidateTagSummaries()
                     self.recomputeDisplayedFrames()
                     self.restoreRememberedTagResults()
                 }
@@ -611,7 +631,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                        previousFingerprint != updatedVocabulary.cacheFingerprint {
                         self?.clearTagResultsNotMatching(updatedVocabulary.cacheFingerprint)
                     }
-                    self?.rebuildTagFacetIndex(force: true)
+                    self?.invalidateTagSummaries()
                     self?.recomputeDisplayedFrames()
                     self?.restoreRememberedTagResults()
                 }
@@ -731,7 +751,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
         tagVocabulary = vocabulary
         clearTagResultsNotMatching(vocabulary.cacheFingerprint)
-        rebuildTagFacetIndex(force: true)
+        invalidateTagSummaries()
         recomputeDisplayedFrames()
 
         let cacheKeys = TagResultCacheKeys.make(videoURL: video.url, frames: frames, vocabulary: vocabulary,
@@ -757,7 +777,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                   !taggingProgress.isRunning else { return }
             if restored.restoredCount > 0 {
                 frames = restored.frames
-                rebuildTagFacetIndex(force: true)
+                invalidateTagSummaries()
                 recomputeDisplayedFrames()
                 await TagResultMemory.shared.remember(frames: frames, keys: cacheKeys)
             }
@@ -856,13 +876,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 acquired = true
                 tagger = try WDTaggerBackend(directory: config.directory, generalThreshold: threshold)
             }
-            try await TaggingBatchPipeline.run(next: { () async throws -> [PreparedTagFrame]? in
+            let next: @Sendable () async throws -> [PreparedTagFrame]? = {
                 guard let batch = try await self.nextTaggingBatch(token: token) else { return nil }
                 let images = try await TaggingImageLoader.load(batch.map(\.source))
                 return zip(batch, images).map { PreparedTagFrame(frame: $0.frame, image: $1) }
-            }, whenEmpty: {
+            }
+            let whenEmpty: @Sendable () async -> Bool = {
                 await self.finishTaggingIfDrained(token: token, elapsed: Date().timeIntervalSince(started))
-            }, consume: { batch in
+            }
+            let process: @Sendable ([PreparedTagFrame]) async throws -> [AnalyzedFrame] = { batch in
                 try Task.checkCancellation()
                 let results = try await tagger.tag(batch: batch.map(\.image))
                 guard results.count == batch.count else {
@@ -883,10 +905,20 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     frame.tagGeneralScore = result.generalScore
                     updates.append(frame)
                 }
-                let elapsed = Date().timeIntervalSince(started)
-                await self.acceptTaggedFrames(updates, token: token, elapsed: elapsed,
+                return updates
+            }
+            let commit: @Sendable ([AnalyzedFrame]) async -> Void = { updates in
+                await self.acceptTaggedFrames(updates, token: token, elapsed: Date().timeIntervalSince(started),
                                               cacheKeys: cacheKeys)
-            })
+            }
+            if remote != nil {
+                try await TaggingBatchPipeline.runPipelined(maximumInFlight: RemoteLimits.taggingBatchWindow,
+                    next: next, whenEmpty: whenEmpty, process: process, commit: commit)
+            } else {
+                try await TaggingBatchPipeline.run(next: next, whenEmpty: whenEmpty, consume: { batch in
+                    await commit(try await process(batch))
+                })
+            }
         } catch {
             let elapsed = Date().timeIntervalSince(started)
             await failTagging(error, token: token, elapsed: elapsed)
@@ -1506,7 +1538,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                   !self.taggingProgress.isRunning else { return }
             if restored.restoredCount > 0 {
                 self.frames = restored.frames
-                self.rebuildTagFacetIndex(force: true)
+                self.invalidateTagSummaries()
                 self.recomputeDisplayedFrames()
             }
             await TagResultMemory.shared.remember(frames: restored.frames, keys: keys)
@@ -1564,7 +1596,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Rebuilds `displayedFrames`, `displayedRows`, `limitBounds` and
     /// `beyondCapByGroup` from the current arrangement.
     private func recomputeDisplayedFrames() {
-        rebuildTagFacetIndexIfNeeded()
         let grouping = settings.grouping.validated()
         let taggingSelection = taggingCandidates(grouping)
         let taggingCandidates = taggingSelection.frames
@@ -1634,48 +1665,38 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             filteredCandidates: displayCandidates,
             applyingVisualOrder: false
         )
-        displayedFrames = visuallyOrderedFrames(uniqueFramesByID(arrangement.visible))
-        let selectedTags = Set(tagFilter.requiredTags)
-        var availableTagIndices = Set<Int>()
-        var commonTagIndices: Set<Int>?
-        for frame in displayedFrames {
-            let frameIndices = Set(tagFacetIndicesByFrame[frame.id] ?? [])
-            availableTagIndices.formUnion(frameIndices)
-            if let current = commonTagIndices {
-                commonTagIndices = current.intersection(frameIndices)
-            } else {
-                commonTagIndices = frameIndices
-            }
+        let baseFrames = uniqueFramesByID(arrangement.visible)
+        visualOrderBaseFrames = baseFrames
+        displayedFrames = visuallyOrderedFrames(baseFrames)
+        scheduleTagSummary()
+        rebuildDisplayedLayout()
+        beyondCapByGroup = arrangement.beyondCapByGroup
+        var earliestByGroup: [FrameGroupID: Double] = [:]
+        for group in groups where arrangement.beyondCapByGroup[group.id] != nil {
+            earliestByGroup[group.id] = members(of: group).lazy.map(\.timeSeconds).min()
         }
-        let commonIndices = commonTagIndices ?? []
-        tagCommonTags = commonIndices.compactMap { index in
-            tagVocabulary?.labels.indices.contains(index) == true ? tagVocabulary?.labels[index].name : nil
-        }.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        let commonTags = Set(tagCommonTags)
-        var scoreSums: [Int: Double] = [:]
-        var scoreCounts: [Int: Int] = [:]
-        for frame in displayedFrames {
-            guard let data = frame.tagProbabilities,
-                  let probabilities = TagProbabilityCodec.decode(data) else { continue }
-            for index in tagFacetIndicesByFrame[frame.id] ?? [] where probabilities.indices.contains(index) {
-                scoreSums[index, default: 0] += Double(probabilities[index])
-                scoreCounts[index, default: 0] += 1
-            }
+        cappedGroupSummaries = arrangement.beyondCapByGroup.map { id, count in
+            CappedGroupSummary(id: id, count: count,
+                               label: earliestByGroup[id].map(timecode) ?? id.raw)
+        }.sorted { $0.count == $1.count ? $0.id.raw < $1.id.raw : $0.count > $1.count }
+    }
+
+    /// Visual order cannot change membership, representatives, score bounds or
+    /// tag summaries. Reuse those results both for controls and route completion.
+    private func recomputeVisualOrder() {
+        guard let baseFrames = visualOrderBaseFrames else {
+            recomputeDisplayedFrames()
+            return
         }
-        tagFacetTags = availableTagIndices.compactMap { index in
-            tagVocabulary?.labels.indices.contains(index) == true ? tagVocabulary?.labels[index].name : nil
-        }
-            .filter { !selectedTags.contains($0) && !commonTags.contains($0) }
-            .sorted { left, right in
-                let leftIndex = tagVocabulary?.index(for: left) ?? -1
-                let rightIndex = tagVocabulary?.index(for: right) ?? -1
-                let leftMean = scoreCounts[leftIndex, default: 0] > 0
-                    ? scoreSums[leftIndex, default: 0] / Double(scoreCounts[leftIndex, default: 1]) : -1
-                let rightMean = scoreCounts[rightIndex, default: 0] > 0
-                    ? scoreSums[rightIndex, default: 0] / Double(scoreCounts[rightIndex, default: 1]) : -1
-                if leftMean != rightMean { return leftMean > rightMean }
-                return left.localizedStandardCompare(right) == .orderedAscending
-            }
+        let ordered = visuallyOrderedFrames(baseFrames)
+        // Starting a background job often leaves the current sequence unchanged.
+        // Avoid making SwiftUI diff the entire album just to show the spinner.
+        guard groupingEnabled || ordered.map(\.id) != displayedFrames.map(\.id) else { return }
+        displayedFrames = ordered
+        rebuildDisplayedLayout()
+    }
+
+    private func rebuildDisplayedLayout() {
         displayedRows = FrameArrangement.rows(of: displayedFrames)
         displayOrderFrames = groupingEnabled && !frameOrder.minimalVisualDistance.enabled
             ? displayedRows.flatMap(\.frames) : displayedFrames
@@ -1695,15 +1716,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             rowHeightRatios[value.id] = heightRatio
         }
-        beyondCapByGroup = arrangement.beyondCapByGroup
-        var earliestByGroup: [FrameGroupID: Double] = [:]
-        for group in groups where arrangement.beyondCapByGroup[group.id] != nil {
-            earliestByGroup[group.id] = members(of: group).lazy.map(\.timeSeconds).min()
-        }
-        cappedGroupSummaries = arrangement.beyondCapByGroup.map { id, count in
-            CappedGroupSummary(id: id, count: count,
-                               label: earliestByGroup[id].map(timecode) ?? id.raw)
-        }.sorted { $0.count == $1.count ? $0.id.raw < $1.id.raw : $0.count > $1.count }
         gridRevision &+= 1
     }
 
@@ -1751,7 +1763,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 guard let ids else { return }
                 self.completedVisualOrderInput = input
                 self.visualOrderIDs = ids
-                self.recomputeDisplayedFrames()
+                self.recomputeVisualOrder()
             }
         } else if completedVisualOrderInput == input, visualOrderTask != nil {
             // A pending filter change may have been undone before it finished.
@@ -1768,79 +1780,86 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         return frameOrder.minimalVisualDistance.ascending ? ordered : Array(ordered.reversed())
     }
 
-    /// Cache the exact tags that can be selected from each frame at the active
-    /// threshold. Older frames without probability data use their saved top tags.
-    private func rebuildTagFacetIndexIfNeeded() {
-        guard tagFacetIndexThreshold != settings.taggerThreshold else { return }
-        rebuildTagFacetIndex(force: true)
+    /// Vectors remain cached in the worker. Only metadata/vocabulary changes
+    /// invalidate an input revision; ordering is deliberately absent from the key.
+    private func invalidateTagSummaries() {
+        tagSummaryRevision &+= 1
+        tagSummaryGeneration = UUID()
+        tagSummaryTask?.cancel()
+        tagSummaryTask = nil
+        pendingTagSummaryInput = nil
+        completedTagSummaryInput = nil
+        completedTagSummaryLabels = nil
+        if isSummarizingTags { isSummarizingTags = false }
     }
 
-    private func rebuildTagFacetIndex(force: Bool) {
-        let threshold = settings.taggerThreshold
-        guard force || tagFacetIndexThreshold != threshold else { return }
-        tagFacetIndexThreshold = threshold
-        tagFacetIndexTask?.cancel()
-        tagFacetIndexPatch = [:]
-        let generation = UUID()
-        tagFacetIndexGeneration = generation
-
-        guard let vocabulary = tagVocabulary, !frames.isEmpty else {
-            tagFacetIndicesByFrame = [:]
-            tagFacetIndexTask = nil
+    private func scheduleTagSummary() {
+        guard let vocabulary = tagVocabulary, !displayedFrames.isEmpty else {
+            tagSummaryGeneration = UUID()
+            tagSummaryTask?.cancel()
+            tagSummaryTask = nil
+            pendingTagSummaryInput = nil
+            completedTagSummaryInput = nil
+            completedTagSummaryLabels = nil
+            if !tagFacetTags.isEmpty { tagFacetTags = [] }
+            if !tagCommonTags.isEmpty { tagCommonTags = [] }
+            if isSummarizingTags { isSummarizingTags = false }
             return
         }
-
-        let frames = frames
-        // Show the saved top tags immediately while the full thresholded index is
-        // built away from the UI thread.
-        tagFacetIndicesByFrame = Dictionary(uniqueKeysWithValues: frames.map { frame in
-            (frame.id, (frame.topTags ?? []).compactMap { vocabulary.index(for: $0) })
-        })
-
-        let buildTask = Task.detached(priority: .userInitiated) { () -> [FrameID: [Int]] in
-            var indexByFrame: [FrameID: [Int]] = [:]
-            indexByFrame.reserveCapacity(frames.count)
-            for frame in frames {
-                if Task.isCancelled { break }
-                let indices: [Int]
-                if let data = frame.tagProbabilities, let probabilities = TagProbabilityCodec.decode(data) {
-                    indices = vocabulary.generalIndices.filter {
-                        probabilities.indices.contains($0) && probabilities[$0] > threshold
-                    }
-                } else {
-                    indices = (frame.topTags ?? []).compactMap { vocabulary.index(for: $0) }
-                }
-                indexByFrame[frame.id] = indices
+        let input = TagSummaryInput(ids: Set(displayedFrames.map(\.id)), revision: tagSummaryRevision,
+                                    threshold: settings.taggerThreshold)
+        if input == completedTagSummaryInput, let labels = completedTagSummaryLabels {
+            if pendingTagSummaryInput != nil {
+                tagSummaryGeneration = UUID()
+                tagSummaryTask?.cancel()
+                tagSummaryTask = nil
+                pendingTagSummaryInput = nil
+                isSummarizingTags = false
             }
-            return indexByFrame
+            publishTagSummary(labels)
+            return
         }
-        tagFacetIndexTask = buildTask
-        Task { [weak self] in
-            var index = await buildTask.value
-            guard let self, self.tagFacetIndexGeneration == generation else { return }
-            for (id, indices) in self.tagFacetIndexPatch { index[id] = indices }
-            self.tagFacetIndexPatch = [:]
-            self.tagFacetIndexTask = nil
-            self.tagFacetIndicesByFrame = index
-            self.recomputeDisplayedFrames()
+        guard input != pendingTagSummaryInput else { return }
+        tagSummaryTask?.cancel()
+        let generation = UUID()
+        tagSummaryGeneration = generation
+        pendingTagSummaryInput = input
+        if !tagFacetTags.isEmpty { tagFacetTags = [] }
+        if !tagCommonTags.isEmpty { tagCommonTags = [] }
+        isSummarizingTags = true
+        let shown = displayedFrames
+        let sourceIDs = Set(frames.map(\.id))
+        let computer = tagSummaryComputer
+        let task = Task.detached(priority: .utility) { () -> TagSummary.Labels? in
+            do {
+                let summary = try await computer.summarize(shown, vocabulary: vocabulary,
+                                                          threshold: input.threshold, retaining: sourceIDs)
+                try Task.checkCancellation()
+                return summary.labels(using: vocabulary)
+            } catch {
+                return nil
+            }
+        }
+        tagSummaryTask = task
+        Task(priority: .utility) { [weak self] in
+            let labels = await task.value
+            guard let self, self.tagSummaryGeneration == generation else { return }
+            self.tagSummaryTask = nil
+            self.pendingTagSummaryInput = nil
+            self.isSummarizingTags = false
+            guard let labels else { return }
+            self.completedTagSummaryInput = input
+            self.completedTagSummaryLabels = labels
+            // Publishing a tag result must not re-rank/rebuild the photo grid.
+            self.publishTagSummary(labels)
         }
     }
 
-    private func updateTagFacetIndex(for taggedFrames: [AnalyzedFrame]) {
-        guard let vocabulary = tagVocabulary else { return }
-        let threshold = settings.taggerThreshold
-        for frame in taggedFrames {
-            let indices: [Int]
-            if let data = frame.tagProbabilities, let probabilities = TagProbabilityCodec.decode(data) {
-                indices = vocabulary.generalIndices.filter {
-                    probabilities.indices.contains($0) && probabilities[$0] > threshold
-                }
-            } else {
-                indices = (frame.topTags ?? []).compactMap { vocabulary.index(for: $0) }
-            }
-            tagFacetIndicesByFrame[frame.id] = indices
-            if tagFacetIndexTask != nil { tagFacetIndexPatch[frame.id] = indices }
-        }
+    private func publishTagSummary(_ labels: TagSummary.Labels) {
+        let common = Set(labels.common)
+        let available = labels.ranked.filter { !common.contains($0) && !tagFilter.requiredTags.contains($0) }
+        if tagCommonTags != labels.common { tagCommonTags = labels.common }
+        if tagFacetTags != available { tagFacetTags = available }
     }
 
     // MARK: - Grouping

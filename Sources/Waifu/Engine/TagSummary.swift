@@ -1,0 +1,378 @@
+import Foundation
+import Metal
+
+struct TagSummary: Sendable {
+    struct Tag: Sendable {
+        let index: Int
+        let matchingFrames: Int
+        let scoredFrames: Int
+        let mean: Double?
+    }
+
+    struct Labels: Sendable {
+        let common: [String]
+        let ranked: [String]
+    }
+
+    let frameCount: Int
+    let tags: [Tag]
+    let gpuChunks: Int
+
+    func labels(using vocabulary: TagVocabulary) -> Labels {
+        let common = tags.filter { $0.matchingFrames == frameCount }.map { vocabulary.labels[$0.index].name }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let ranked = tags.sorted { left, right in
+            let lhs = left.mean ?? -1, rhs = right.mean ?? -1
+            if lhs != rhs { return lhs > rhs }
+            return vocabulary.labels[left.index].name.localizedStandardCompare(vocabulary.labels[right.index].name) == .orderedAscending
+        }.map { vocabulary.labels[$0.index].name }
+        return Labels(common: common, ranked: ranked)
+    }
+}
+
+enum TagSummaryError: Error {
+    case invalidInput, metalUnavailable, allocationFailed, commandFailed
+}
+
+/// Owns decoded general-tag vectors independently of display order and threshold.
+/// All decoding, matrix packing and reductions execute on this actor, away from UI.
+actor TagSummaryComputer {
+    enum Backend: Sendable { case automatic, cpu, metal }
+
+    private struct Row {
+        let source: Data?
+        let savedTags: [String]?
+        let hasProbabilities: Bool
+        let values: [Float]
+    }
+    private var rows: [FrameID: Row] = [:]
+    private var cachedBytes = 0
+    private struct Slot { let chunk: Int; let row: Int }
+    private struct Chunk {
+        let buffer: any MTLBuffer
+        let capacity: Int
+        var used: Int = 0
+    }
+    private var metalOwner: MetalTagSummary?
+    private var metalChunks: [Chunk] = []
+    private var metalSlots: [FrameID: Slot] = [:]
+    private var freeMetalSlots: [Slot] = []
+    private var dirtyMetalRows: Set<FrameID> = []
+    private var metalBytes = 0
+    private var vocabularyFingerprint: UInt64?
+    private let cacheByteLimit: Int
+    private let chunkByteLimit: Int
+    private let metalProvider: @Sendable () -> MetalTagSummary?
+    private(set) var decodedVectorCount = 0
+    private(set) var uploadedVectorCount = 0
+
+    init(cacheByteLimit: Int = 64 * 1_024 * 1_024, chunkByteLimit: Int = 8 * 1_024 * 1_024,
+         metalProvider: @escaping @Sendable () -> MetalTagSummary? = { MetalTagSummary.shared }) {
+        self.cacheByteLimit = max(0, cacheByteLimit)
+        self.chunkByteLimit = max(4, chunkByteLimit)
+        self.metalProvider = metalProvider
+    }
+
+    func summarize(_ frames: [AnalyzedFrame], vocabulary: TagVocabulary, threshold: Float,
+                   retaining sourceIDs: Set<FrameID>? = nil, backend: Backend = .automatic) throws -> TagSummary {
+        try Task.checkCancellation()
+        guard threshold.isFinite, (0...1).contains(threshold), Set(frames.map(\.id)).count == frames.count
+        else { throw TagSummaryError.invalidInput }
+        let fingerprint = vocabulary.cacheFingerprint
+        if vocabularyFingerprint != fingerprint {
+            rows.removeAll()
+            cachedBytes = 0
+            clearMetalCache()
+            vocabularyFingerprint = fingerprint
+        }
+        if let sourceIDs {
+            for id in Array(rows.keys) where !sourceIDs.contains(id) {
+                cachedBytes -= rows.removeValue(forKey: id)!.values.count * 4
+                if let slot = metalSlots.removeValue(forKey: id) { freeMetalSlots.append(slot) }
+                dirtyMetalRows.remove(id)
+            }
+        }
+        let columns = vocabulary.generalIndices.count
+        guard !frames.isEmpty, columns > 0 else {
+            return TagSummary(frameCount: frames.count, tags: [], gpuChunks: 0)
+        }
+        let rowsWithTagData = frames.reduce(0) { $0 + ($1.tagProbabilities != nil || !($1.topTags ?? []).isEmpty ? 1 : 0) }
+        // Optimized M3 measurements include row selection and dispatch. Small
+        // selections finish faster on CPU even with an already-uploaded matrix.
+        let metal = backend == .cpu || (backend == .automatic && rowsWithTagData < 1_536)
+            ? nil : metalProvider()
+        if backend == .metal, metal == nil { throw TagSummaryError.metalUnavailable }
+        if let metal {
+            do {
+                let totals = try reduceOnMetal(frames, vocabulary: vocabulary, threshold: threshold, metal: metal)
+                return try summary(totals, vocabulary: vocabulary, frameCount: frames.count)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                clearMetalCache()
+                if backend == .metal { throw error }
+            }
+        }
+        var totals = Totals(columns: columns)
+        // Legacy rows contribute membership only. Completely untagged photos
+        // contribute no scores, but still count in the common-tag denominator.
+        for frame in frames where frame.tagProbabilities != nil || !(frame.topTags ?? []).isEmpty {
+            try Task.checkCancellation()
+            let values = row(for: frame, vocabulary: vocabulary)
+            for column in 0..<columns {
+                let value = values[column]
+                if value > threshold {
+                    totals.sums[column] += Double(value)
+                    totals.scored[column] += 1
+                    totals.present[column] += 1
+                } else if value == -2 {
+                    totals.present[column] += 1
+                }
+            }
+        }
+        return try summary(totals, vocabulary: vocabulary, frameCount: frames.count)
+    }
+
+    private struct Totals {
+        var sums: [Double]
+        var scored: [Int]
+        var present: [Int]
+        var gpuChunks = 0
+
+        init(columns: Int) {
+            sums = [Double](repeating: 0, count: columns)
+            scored = [Int](repeating: 0, count: columns)
+            present = [Int](repeating: 0, count: columns)
+        }
+
+        mutating func add(_ partial: [MetalTagSummary.Total]) {
+            for column in partial.indices {
+                sums[column] += Double(partial[column].sum)
+                scored[column] += Int(partial[column].scored)
+                present[column] += Int(partial[column].present)
+            }
+            gpuChunks += 1
+        }
+    }
+
+    private func summary(_ totals: Totals, vocabulary: TagVocabulary, frameCount: Int) throws -> TagSummary {
+        try Task.checkCancellation()
+        let tags = vocabulary.generalIndices.indices.filter { totals.present[$0] > 0 }.map { column in
+            TagSummary.Tag(index: vocabulary.generalIndices[column], matchingFrames: totals.present[column],
+                           scoredFrames: totals.scored[column],
+                           mean: totals.scored[column] > 0 ? totals.sums[column] / Double(totals.scored[column]) : nil)
+        }
+        return TagSummary(frameCount: frameCount, tags: tags, gpuChunks: totals.gpuChunks)
+    }
+
+    private func clearMetalCache() {
+        metalChunks = []
+        metalSlots = [:]
+        freeMetalSlots = []
+        dirtyMetalRows = []
+        metalBytes = 0
+    }
+
+    private func reduceOnMetal(_ frames: [AnalyzedFrame], vocabulary: TagVocabulary, threshold: Float,
+                               metal: MetalTagSummary) throws -> Totals {
+        if metalOwner !== metal { clearMetalCache(); metalOwner = metal }
+        let columns = vocabulary.generalIndices.count
+        let rowsPerChunk = max(1, chunkByteLimit / (columns * 4))
+        var masks: [Int: [UInt32]] = [:]
+        var transient: [Float] = []
+        var totals = Totals(columns: columns)
+        for frame in frames where frame.tagProbabilities != nil || !(frame.topTags ?? []).isEmpty {
+            try Task.checkCancellation()
+            let values = row(for: frame, vocabulary: vocabulary)
+            if rows[frame.id] != nil {
+                let slot: Slot
+                if let existing = metalSlots[frame.id] {
+                    slot = existing
+                } else {
+                    if let free = freeMetalSlots.popLast() {
+                        slot = free
+                    } else {
+                        if metalChunks.isEmpty || metalChunks.last!.used == metalChunks.last!.capacity {
+                            let capacity = min(rowsPerChunk, (cacheByteLimit - metalBytes) / (columns * 4))
+                            guard capacity > 0 else { throw TagSummaryError.allocationFailed }
+                            let buffer = try metal.matrixBuffer(rows: capacity, columns: columns)
+                            metalChunks.append(Chunk(buffer: buffer, capacity: capacity))
+                            metalBytes += capacity * columns * 4
+                        }
+                        let chunk = metalChunks.count - 1
+                        slot = Slot(chunk: chunk, row: metalChunks[chunk].used)
+                        metalChunks[chunk].used += 1
+                    }
+                    metalSlots[frame.id] = slot
+                    dirtyMetalRows.insert(frame.id)
+                }
+                if dirtyMetalRows.contains(frame.id) {
+                    values.withUnsafeBytes { bytes in
+                        metalChunks[slot.chunk].buffer.contents().advanced(by: slot.row * columns * 4)
+                            .copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+                    }
+                    dirtyMetalRows.remove(frame.id)
+                    uploadedVectorCount += 1
+                }
+                masks[slot.chunk, default: [UInt32](repeating: 0, count: metalChunks[slot.chunk].capacity)][slot.row] = 1
+            } else {
+                transient.append(contentsOf: values)
+                if transient.count / columns == rowsPerChunk {
+                    totals.add(try metal.reduce(transient, rows: rowsPerChunk, columns: columns, threshold: threshold))
+                    transient.removeAll(keepingCapacity: true)
+                }
+            }
+        }
+        if !transient.isEmpty {
+            totals.add(try metal.reduce(transient, rows: transient.count / columns, columns: columns, threshold: threshold))
+        }
+        for chunk in masks.keys.sorted() {
+            try Task.checkCancellation()
+            totals.add(try metal.reduce(metalChunks[chunk].buffer, rows: metalChunks[chunk].used,
+                                       columns: columns, included: masks[chunk]!, threshold: threshold))
+        }
+        return totals
+    }
+
+    private func row(for frame: AnalyzedFrame, vocabulary: TagVocabulary) -> [Float] {
+        if let cached = rows[frame.id], cached.source == frame.tagProbabilities,
+           cached.hasProbabilities || cached.savedTags == frame.topTags {
+            return cached.values
+        }
+        let values: [Float]
+        let hasProbabilities: Bool
+        if let data = frame.tagProbabilities, let probabilities = TagProbabilityCodec.decode(data) {
+            decodedVectorCount += 1
+            hasProbabilities = true
+            values = vocabulary.generalIndices.map { probabilities[$0] }
+        } else {
+            hasProbabilities = false
+            let saved = Set((frame.topTags ?? []).compactMap { vocabulary.index(for: $0) })
+            values = vocabulary.generalIndices.map { saved.contains($0) ? -2 : -1 }
+        }
+        if let old = rows.removeValue(forKey: frame.id) { cachedBytes -= old.values.count * 4 }
+        let bytes = values.count * 4
+        // Admit only rows that fit. Larger albums retain a stable bounded cache,
+        // rather than evicting every earlier row while scanning the next chunk.
+        if cachedBytes + bytes <= cacheByteLimit {
+            rows[frame.id] = Row(source: frame.tagProbabilities, savedTags: frame.topTags,
+                                 hasProbabilities: hasProbabilities, values: values)
+            cachedBytes += bytes
+            dirtyMetalRows.insert(frame.id)
+        }
+        return values
+    }
+}
+
+/// A separate queue from visual routing. Input buffers belong to the worker actor;
+/// each reduction owns its selection mask and output buffer.
+final class MetalTagSummary: @unchecked Sendable {
+    static let shared: MetalTagSummary? = try? MetalTagSummary()
+
+    struct Total {
+        var sum: Float
+        var scored: UInt32
+        var present: UInt32
+    }
+    private struct Parameters {
+        var rows: UInt32
+        var columns: UInt32
+        var threshold: Float
+    }
+    private let device: any MTLDevice
+    private let queue: any MTLCommandQueue
+    private let pipeline: any MTLComputePipelineState
+
+    init() throws {
+        guard let device = MTLCreateSystemDefaultDevice(), device.hasUnifiedMemory,
+              let queue = device.makeCommandQueue() else { throw TagSummaryError.metalUnavailable }
+        let options = MTLCompileOptions()
+        options.mathMode = .safe
+        let library = try device.makeLibrary(source: Self.source, options: options)
+        guard let function = library.makeFunction(name: "summarize_tags") else { throw TagSummaryError.metalUnavailable }
+        self.device = device
+        self.queue = queue
+        self.pipeline = try device.makeComputePipelineState(function: function)
+    }
+
+    func reduce(_ values: [Float], rows: Int, columns: Int, threshold: Float) throws -> [Total] {
+        try Task.checkCancellation()
+        guard rows > 0, columns > 0, rows <= Int(UInt32.max), columns <= Int(UInt32.max),
+              rows <= Int.max / columns, values.count == rows * columns,
+              values.count <= device.maxBufferLength / 4 else { throw TagSummaryError.invalidInput }
+        let input = values.withUnsafeBytes { bytes in
+            device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared)
+        }
+        guard let input else { throw TagSummaryError.allocationFailed }
+        return try reduce(input, rows: rows, columns: columns, included: [UInt32](repeating: 1, count: rows), threshold: threshold)
+    }
+
+    func matrixBuffer(rows: Int, columns: Int) throws -> any MTLBuffer {
+        guard rows > 0, columns > 0, rows <= Int.max / columns,
+              rows * columns <= device.maxBufferLength / 4,
+              let buffer = device.makeBuffer(length: rows * columns * 4, options: .storageModeShared)
+        else { throw TagSummaryError.allocationFailed }
+        return buffer
+    }
+
+    func reduce(_ input: any MTLBuffer, rows: Int, columns: Int, included: [UInt32], threshold: Float) throws -> [Total] {
+        try Task.checkCancellation()
+        guard rows > 0, columns > 0, rows <= Int(UInt32.max), columns <= Int(UInt32.max),
+              rows <= Int(UInt32.max) / columns, rows * columns <= input.length / 4,
+              included.count >= rows, threshold.isFinite, (0...1).contains(threshold),
+              columns <= device.maxBufferLength / MemoryLayout<Total>.stride
+        else { throw TagSummaryError.invalidInput }
+        let mask = included.withUnsafeBytes { bytes in
+            device.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared)
+        }
+        guard let mask, let output = device.makeBuffer(length: columns * MemoryLayout<Total>.stride, options: .storageModeShared)
+        else { throw TagSummaryError.allocationFailed }
+        guard let command = queue.makeCommandBuffer(), let encoder = command.makeComputeCommandEncoder()
+        else { throw TagSummaryError.commandFailed }
+        var parameters = Parameters(rows: UInt32(rows), columns: UInt32(columns), threshold: threshold)
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(input, offset: 0, index: 0)
+        encoder.setBuffer(output, offset: 0, index: 1)
+        encoder.setBuffer(mask, offset: 0, index: 2)
+        encoder.setBytes(&parameters, length: MemoryLayout<Parameters>.stride, index: 3)
+        encoder.dispatchThreads(MTLSize(width: columns, height: 1, depth: 1),
+                                threadsPerThreadgroup: MTLSize(width: min(128, pipeline.maxTotalThreadsPerThreadgroup), height: 1, depth: 1))
+        encoder.endEncoding()
+        try Task.checkCancellation()
+        command.commit()
+        command.waitUntilCompleted()
+        try Task.checkCancellation()
+        guard command.status == .completed else { throw command.error ?? TagSummaryError.commandFailed }
+        return Array(UnsafeBufferPointer(start: output.contents().bindMemory(to: Total.self, capacity: columns), count: columns))
+    }
+
+    private static let source = #"""
+    #include <metal_stdlib>
+    using namespace metal;
+    struct Params { uint rows, columns; float threshold; };
+    struct Total { float sum; uint scored, present; };
+    kernel void summarize_tags(device const float* values [[buffer(0)]], device Total* totals [[buffer(1)]],
+                               device const uint* included [[buffer(2)]], constant Params& p [[buffer(3)]],
+                               uint tag [[thread_position_in_grid]]) {
+        if (tag >= p.columns) return;
+        float sum = 0, correction = 0;
+        uint scored = 0, present = 0;
+        for (uint row = 0; row < p.rows; ++row) {
+            if (!included[row]) continue;
+            float value = values[row * p.columns + tag];
+            if (value > p.threshold) {
+                // Compensated summation keeps large albums close to CPU Double
+                // means while adjacent lanes read adjacent tag probabilities.
+                float adjusted = value - correction;
+                float next = sum + adjusted;
+                correction = (next - sum) - adjusted;
+                sum = next;
+                ++scored; ++present;
+            } else if (value == -2.0f) {
+                ++present;
+            }
+        }
+        totals[tag] = {sum, scored, present};
+    }
+    """#
+}

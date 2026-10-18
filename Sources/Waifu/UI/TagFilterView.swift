@@ -86,7 +86,7 @@ struct TagFilterView: View {
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if tags.isEmpty {
-                    Text(session.frames.isEmpty
+                    Text(session.isSummarizingTags ? "Updating tags…" : session.frames.isEmpty
                          ? "Tags will appear after a video is analyzed."
                          : "No tags among the frames currently shown.")
                         .font(.caption)
@@ -155,7 +155,7 @@ struct TagFilterView: View {
                             .foregroundStyle(.tertiary)
                     }
 
-                    Text("Required tags must match; unwanted tags remove matching frames. Available tags update with the frames shown.")
+                    Text("Required tags must match; unwanted tags remove matching frames. Available tags update with the frames shown and rank by average confidence above the threshold.")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)

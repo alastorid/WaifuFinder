@@ -99,8 +99,11 @@ Connection control uses stream zero. Requests use nonzero client-assigned stream
 responses and progress use the same ID. Protocol cancellation can refer to the request
 ID on stream zero. App-side task cancellation closes the current connection, waking
 all its readers and cancelling server work; normal transient reconnect can follow.
-The client allows two outstanding requests. Buffered messages are capped at 64 MiB
-and 1,024 envelopes. Model work runs in arrival order on one serial executor.
+Remote tagging keeps up to eight batches (64 images) in flight. Image preparation,
+upload, server inference and result delivery overlap; the client commits results in
+source order. The server bounds tagging tasks to eight and the model serializes GPU
+access. Two additional request slots allow control work. Buffered messages remain
+capped at 64 MiB and 1,024 envelopes. Cancelling the pipeline joins pending work.
 
 JSON encodes control values, including Codable handshake nonces and proofs. Media,
 probability rows and compressed vocabulary travel as binary payloads, never JSON.
@@ -142,7 +145,6 @@ busy rejection of a second client, kick and reconnect. These tests validate
 the transport and integration; they do not measure hardware model accuracy or LAN
 multicast routing. Run `./run-tests.sh --only remote` or the full `./run-tests.sh`.
 
-The app links only Apple frameworks for this feature: Network, CryptoKit, Compression
-and Security. No third-party dependency or media executable is added. Interactive
+The app links only Apple frameworks for this feature: Network, CryptoKit and Compression. No third-party dependency or media executable is added. Interactive
 Settings checks must use `./run-ui-tests.sh SCRIPT [ARGUMENTS...]` as required by
 `AGENTS.md`.

@@ -111,6 +111,73 @@ func registerMinimalVisualDistanceOrderTests() {
         checkEqual(reverse.beyondCapByGroup, forward.beyondCapByGroup, "direction never changes group representatives")
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "visual controls keep a tagged album off the synchronous rebuild path", knownBug: nil) {
+        let directory = try Temporary.directory("visual-toggle-responsiveness")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time, .ratingGeneral])
+            var probabilities = (0..<TagVocabulary.headCount).map { Float($0 % 101) / 10_100 }
+            probabilities[0] = 0.95
+            if let generalIndex = session.tagVocabulary?.generalIndices.first {
+                probabilities[generalIndex] = 0.9
+            }
+            let payload = TagProbabilityCodec.encode(probabilities)!
+            let frames = (0..<1_800).map { index in
+                var frame = FrameFixture.make(id: String(format: "f%06d", index), time: Double(index), artScore: 1)
+                frame.tagProbabilities = payload
+                return frame
+            }
+            session.updateAnalyzedFrames(frames)
+            // A locally available vocabulary also starts a separate facet-index
+            // job. Let that fixture setup publish before measuring visual work.
+            if session.tagVocabulary != nil {
+                for _ in 0..<500 {
+                    if !session.tagCommonTags.isEmpty { break }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                check(!session.tagCommonTags.isEmpty, "the fixture's shared tag is indexed")
+            }
+            let clock = ContinuousClock()
+            // Compare against an ordinary rebuild on the same machine. The full
+            // tagging vectors make accidental per-photo decoding observable even
+            // without a window, PhotoKit access, or a wall-clock speed assumption.
+            let rebuildStart = clock.now
+            session.faceFilter = .all
+            let rebuildTime = rebuildStart.duration(to: clock.now)
+            let revision = session.gridRevision
+            let commonTags = session.tagCommonTags
+            let facetTags = session.tagFacetTags
+            let toggleStart = clock.now
+            session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
+            let toggleTime = toggleStart.duration(to: clock.now)
+            print("    tagged album rebuild: \(rebuildTime); visual toggle: \(toggleTime)")
+            check(toggleTime * 4 < rebuildTime, "enabling visual order must avoid the expensive album rebuild")
+            checkEqual(session.gridRevision, revision, "starting work keeps an unchanged grid mounted")
+            check(session.isSortingVisualDistance, "the route is scheduled after the checkbox handler returns")
+            for _ in 0..<250 {
+                if !session.isSortingVisualDistance { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            check(!session.isSortingVisualDistance, "background route completes")
+            checkEqual(session.displayedFrames.map(\.id), frames.map(\.id), "missing features retain every photo in score order")
+            checkEqual(session.gridRevision, revision, "an unchanged route does not rebuild the grid on completion")
+            checkEqual(session.tagCommonTags, commonTags, "visual routing reuses common tags")
+            checkEqual(session.tagFacetTags, facetTags, "visual routing reuses tag summaries")
+            let reverseStart = clock.now
+            session.frameOrder.toggleDirection(of: .minimalVisualDistance)
+            check(reverseStart.duration(to: clock.now) * 4 < rebuildTime, "reverse avoids decoding the tagging vectors")
+            checkEqual(session.displayOrderFrames.map(\.id), frames.reversed().map(\.id), "navigation reverses with the cached route")
+            let disableStart = clock.now
+            session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
+            check(disableStart.duration(to: clock.now) * 4 < rebuildTime, "disabling visual order avoids the album rebuild")
+            checkEqual(session.displayOrderFrames.map(\.id), frames.map(\.id), "disabling restores score order")
+            session.updateAnalyzedFrames(Array(frames.suffix(7)))
+            session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
+            checkEqual(Set(session.displayedFrames.map(\.id)), Set(frames.suffix(7).map(\.id)), "frame replacement invalidates the cached album")
+            session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "session publishes only the current shown set and reverses its cached route", knownBug: nil) {
         let directory = try Temporary.directory("visual-order")
         let payloadA = try JSONEncoder().encode(await makeFeaturePrintObservation(0))

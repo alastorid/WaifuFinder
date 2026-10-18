@@ -25,18 +25,46 @@ import Network
 /// Rows are derived from the head index and the batch position, so a mis-ordered
 /// response is visible rather than plausible — a stub that returned the same row
 /// for every frame would pass a test that a real out-of-order bug could not.
+private actor RemoteTagWindowProbe {
+    var arrived = 0
+    var completed = 0
+    var released = false
+    let waitForCancellation: Bool
+    init(waitForCancellation: Bool = false) { self.waitForCancellation = waitForCancellation }
+    func noteReleased() { released = true }
+    func enter() async throws {
+        arrived += 1
+        defer { completed += 1 }
+        if waitForCancellation {
+            try await Task.sleep(for: .seconds(30))
+            return
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while arrived < 8 {
+            try Task.checkCancellation()
+            guard Date() < deadline else { throw TaggerError.invalidBatch }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+    }
+}
+
 private final class StubTagger: TaggerBackend, @unchecked Sendable {
     let vocabulary: TagVocabulary?
     private let lock = NSLock()
     private var batchCount = 0
+    private let windowProbe: RemoteTagWindowProbe?
 
-    init(vocabulary: TagVocabulary?) { self.vocabulary = vocabulary }
+    init(vocabulary: TagVocabulary?, windowProbe: RemoteTagWindowProbe? = nil) {
+        self.vocabulary = vocabulary
+        self.windowProbe = windowProbe
+    }
 
     var batches: Int { lock.withLock { batchCount } }
 
     func probabilityRows(batch: [CGImage]) async throws -> [[Float]] {
         guard vocabulary != nil else { throw TaggerError.invalidModel("stub has no vocabulary") }
         lock.withLock { batchCount += 1 }
+        try await windowProbe?.enter()
         return batch.enumerated().map { position, _ in
             [Float]((0..<TagVocabulary.headCount).map { index in
                 Float((index * 31 + position * 7) % 1_000) / 4_000
@@ -720,6 +748,14 @@ private func registerRemoteEndToEndTests(suite: String) {
         try await taggingCase(vocabulary: vocabulary)
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "eight tagging batches reach the server before any result completes", knownBug: nil) {
+        try await queuedTaggingCase()
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "cancelling queued tagging joins all server tasks and releases the cancelled model", knownBug: nil) {
+        try await queuedTaggingCancellationCase()
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "the vocabulary transfer is checked against the fingerprint it claims", knownBug: nil) {
         let vocabulary = try VocabularyFixture.make()
         try await vocabularyCase(vocabulary: vocabulary)
@@ -841,6 +877,73 @@ private func taggingCase(vocabulary: TagVocabulary) async throws {
     checkEqual(encoded.count, images.count, "the encoded codec also returns one row per image")
     check(encoded.allSatisfy { $0.count == TagVocabulary.headCount }, "and every row is complete")
     checkEqual(tagger.batches, 4, "the third batch reached the server too")
+}
+
+@MainActor
+private func queuedTaggingCase() async throws {
+    let vocabulary = try VocabularyFixture.make()
+    let probe = RemoteTagWindowProbe()
+    let tagger = StubTagger(vocabulary: vocabulary, windowProbe: probe)
+    let pair = try LoopbackPair(catalog: StubCatalog.tagging(tagger, vocabulary: vocabulary), key: remoteTestKey())
+    defer { pair.tearDown() }
+    check(await pair.connect(), "the loopback pair is connected")
+    let image = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
+    let counts = try await withThrowingTaskGroup(of: Int.self) { group in
+        for count in 1...8 {
+            group.addTask {
+                let rows = try await pair.client.tag(images: Array(repeating: image, count: count), codec: .rgba8)
+                guard rows.count == count else { throw TaggerError.invalidProbabilities }
+                for (position, row) in rows.enumerated() {
+                    guard row.count == TagVocabulary.headCount,
+                          row[7] == Float((7 * 31 + position * 7) % 1_000) / 4_000 else {
+                        throw TaggerError.invalidProbabilities
+                    }
+                }
+                return count
+            }
+        }
+        var results: [Int] = []
+        for try await count in group { results.append(count) }
+        return results.sorted()
+    }
+    checkEqual(counts, Array(1...8), "stream IDs route every different-sized reply to its request")
+    checkEqual(await probe.arrived, 8, "all eight requests arrive while the first model call is suspended")
+    checkEqual(tagger.batches, 8, "each batch executes once")
+}
+
+@MainActor
+private func queuedTaggingCancellationCase() async throws {
+    let vocabulary = try VocabularyFixture.make()
+    let probe = RemoteTagWindowProbe(waitForCancellation: true)
+    let tagger = StubTagger(vocabulary: vocabulary, windowProbe: probe)
+    var catalog = StubCatalog.tagging(tagger, vocabulary: vocabulary)
+    catalog.releaseTagger = { await probe.noteReleased() }
+    let pair = try LoopbackPair(catalog: catalog, key: remoteTestKey())
+    defer { pair.tearDown() }
+    check(await pair.connect(), "the loopback pair is connected")
+    let image = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
+    let requests = Task {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask { _ = try await pair.client.tag(images: [image], codec: .rgba8) }
+            }
+            try await group.waitForAll()
+        }
+    }
+    let startedDeadline = Date().addingTimeInterval(5)
+    while await probe.arrived < 8, Date() < startedDeadline {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    checkEqual(await probe.arrived, 8, "all eight batches are awaiting inference")
+    requests.cancel()
+    do { try await requests.value; check(false, "cancelled requests must end with an error") }
+    catch {}
+    let stoppedDeadline = Date().addingTimeInterval(5)
+    while !(await probe.released), Date() < stoppedDeadline {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    checkEqual(await probe.completed, 8, "shutdown joins every cancelled batch")
+    check(await probe.released, "a cancelled worker is discarded before reconnecting")
 }
 
 @MainActor
