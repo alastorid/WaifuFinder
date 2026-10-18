@@ -17,6 +17,8 @@ final class ModelLibrary: ObservableObject {
     @Published private(set) var entries = ManagedModel.offered.map { ModelLibraryEntry(model: $0) }
     @Published private(set) var active: ManagedModel?
     @Published private(set) var status = ""
+    @Published private(set) var batchStatus = ""
+    @Published private(set) var isDownloadingAll = false
     @Published private(set) var fraction: Double?
     @Published var error: String?
     @Published private(set) var inUse: [ManagedModel: Int] = [:]
@@ -40,6 +42,7 @@ final class ModelLibrary: ObservableObject {
     func acquireTagger() { inUse[.tagger, default: 0] += 1 }
     func releaseTagger() { inUse[.tagger] = max(0, (inUse[.tagger] ?? 0) - 1) }
     var totalBytes: Int64 { entries.reduce(0) { $0 + $1.bytes } }
+    var canDownloadAll: Bool { entries.contains { !$0.ready } }
     func isManaged(_ entry: ModelLibraryEntry) -> Bool {
         guard let location = entry.location,
               let owned = defaults.string(forKey: "ownedModel.\(entry.id)") else { return false }
@@ -107,35 +110,105 @@ final class ModelLibrary: ObservableObject {
         start(model, download: false, directory: folder)
     }
     func download(_ model: ManagedModel) { start(model, download: true, directory: storage) }
+    func downloadAll() {
+        guard active == nil, !isDownloadingAll else { return }
+        error = nil
+        batchStatus = "Preparing all models…"
+        isDownloadingAll = true
+        let token = UUID()
+        generation = token
+        operation = Task {
+            var completed = 0
+            var total = 0
+            do {
+                await refreshTask?.value
+                try Task.checkCancellation()
+                let pending = entries.filter { !$0.ready }
+                total = pending.count
+                guard total > 0 else {
+                    batchStatus = "All models are already ready"
+                    status = "All models are ready"
+                    finishOperation(token: token)
+                    return
+                }
+                for (index, entry) in pending.enumerated() {
+                    try Task.checkCancellation()
+                    let model = entry.model
+                    guard (inUse[model] ?? 0) == 0 else {
+                        throw ModelInstaller.fail("\(model.name) is currently in use and cannot be set up.")
+                    }
+                    batchStatus = "Downloading and configuring all models · \(index + 1) of \(total) · \(model.name)"
+                    let directory = entry.location ?? storage
+                    try await performSetup(model, download: entry.location == nil, directory: directory, token: token)
+                    completed += 1
+                    active = nil
+                    fraction = nil
+                }
+                batchStatus = "All models are downloaded and configured"
+                status = "All models are ready"
+            } catch {
+                if Task.isCancelled {
+                    batchStatus = completed == 0 ? "Stopped" : "Stopped · \(completed) of \(total) models completed"
+                    status = "Cancelled. Downloaded files are kept for retry."
+                } else {
+                    self.error = error.localizedDescription
+                    batchStatus = "Setup stopped · \(completed) of \(total) models completed"
+                    status = "Setup failed"
+                }
+            }
+            finishOperation(token: token)
+        }
+    }
     private func start(_ model: ManagedModel, download: Bool, directory: URL) {
-        guard active == nil, (inUse[model] ?? 0) == 0 else { return }
-        active = model; error = nil; status = "Preparing \(model.name)"; fraction = nil
+        guard active == nil, !isDownloadingAll, (inUse[model] ?? 0) == 0 else { return }
+        active = model; error = nil; batchStatus = ""; isDownloadingAll = false; status = "Preparing \(model.name)"; fraction = nil
         let token = UUID(); generation = token
+        operation = Task {
+            do {
+                try await performSetup(model, download: download, directory: directory, token: token)
+            } catch {
+                if Task.isCancelled { status = "Cancelled. Downloaded files are kept for retry." }
+                else { self.error = error.localizedDescription; status = "Setup failed" }
+            }
+            finishOperation(token: token)
+        }
+    }
+    private func performSetup(_ model: ManagedModel, download: Bool, directory: URL, token: UUID) async throws {
+        active = model
+        error = nil
+        status = "Preparing \(model.name)"
+        fraction = nil
         let callback: ModelInstaller.Progress = { [weak self] message, value in
             Task { @MainActor in
                 guard let self, self.generation == token, self.active == model else { return }
                 self.status = message; self.fraction = value
             }
         }
-        operation = Task {
-            do {
-                if download {
-                    let installed = try await ModelInstaller.shared.install(model, root: directory, progress: callback)
-                    defaults.set(installed.path, forKey: "ownedModel.\(model.id)")
-                } else {
-                    try await ModelInstaller.shared.configure(model, directory: directory, progress: callback)
-                }
-                status = "\(model.name) is ready"
-                NotificationCenter.default.post(name: .waifuModelsChanged, object: nil)
-            } catch {
-                if Task.isCancelled { status = "Cancelled. Downloaded files are kept for retry." }
-                else { self.error = error.localizedDescription; status = "Setup failed" }
-            }
-            active = nil; fraction = nil; operation = nil
-            refresh()
+        if download {
+            let installed = try await ModelInstaller.shared.install(model, root: directory, progress: callback)
+            defaults.set(installed.path, forKey: "ownedModel.\(model.id)")
+        } else {
+            try await ModelInstaller.shared.configure(model, directory: directory, progress: callback)
         }
+        try Task.checkCancellation()
+        status = "\(model.name) is ready"
+        NotificationCenter.default.post(name: .waifuModelsChanged, object: nil)
     }
-    func cancel() { operation?.cancel() }
+    private func finishOperation(token: UUID) {
+        guard generation == token else { return }
+        active = nil
+        fraction = nil
+        operation = nil
+        isDownloadingAll = false
+        refresh()
+    }
+    func cancel() {
+        if isDownloadingAll {
+            batchStatus = "Stopping…"
+            refreshTask?.cancel()
+        }
+        operation?.cancel()
+    }
     func remove(_ entry: ModelLibraryEntry) {
         guard active == nil, (inUse[entry.model] ?? 0) == 0 else { return }
         let owned = isManaged(entry)

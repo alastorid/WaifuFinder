@@ -175,9 +175,26 @@ struct ModelSettingsView: View {
                     Text("Model Library").font(.title2.bold())
                     Text("\(library.entries.filter(\.ready).count) ready · \(ByteCountFormatter.string(fromByteCount: library.totalBytes, countStyle: .file)) on disk")
                         .foregroundStyle(.secondary).font(.callout)
+                    if !library.batchStatus.isEmpty {
+                        HStack(spacing: 5) {
+                            if library.isDownloadingAll { ProgressView().controlSize(.small) }
+                            Text(library.batchStatus).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
                 }
                 Spacer()
-                Button { library.refresh() } label: { Image(systemName: "arrow.clockwise") }.help("Refresh model status")
+                Button {
+                    if library.isDownloadingAll { library.cancel() }
+                    else { library.downloadAll() }
+                } label: {
+                    Image(systemName: library.isDownloadingAll ? "hand.raised.fill" : "arrow.down.circle")
+                }
+                .accessibilityLabel(library.isDownloadingAll ? "Stop downloading all models" : "Download all models")
+                .help(library.isDownloadingAll ? "Stop downloading and configuring models" : "Download and configure all models")
+                .disabled(!library.isDownloadingAll && (library.active != nil || !library.canDownloadAll))
+                Button { library.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .help("Refresh model status")
+                    .disabled(library.active != nil || library.isDownloadingAll)
             }
             GroupBox {
                 HStack(alignment: .top) {
@@ -188,7 +205,7 @@ struct ModelSettingsView: View {
                         Text("Changing this folder applies to future downloads. Existing models stay where they are.").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Change…") { library.chooseStorage() }.disabled(library.active != nil)
+                    Button("Change…") { library.chooseStorage() }.disabled(library.active != nil || library.isDownloadingAll)
                 }.padding(5)
             }
             ScrollViewReader { proxy in
@@ -274,7 +291,7 @@ struct ModelSettingsView: View {
                         else { ProgressView().controlSize(.small) }
                         Text(library.status).font(.caption).lineLimit(1)
                         Spacer()
-                        Button("Cancel") { library.cancel() }
+                        Button(library.isDownloadingAll ? "Stop all" : "Cancel") { library.cancel() }
                     }
                 } else {
                     HStack {
@@ -290,7 +307,7 @@ struct ModelSettingsView: View {
                             Button(entry.pending == nil ? "Download" : "Retry Download") { library.download(entry.model) }.buttonStyle(.borderedProminent)
                         }
                         Button("Choose Existing…") { library.chooseExisting(entry.model) }
-                    }.disabled(library.active != nil || (library.inUse[entry.model] ?? 0) > 0)
+                    }.disabled(library.active != nil || library.isDownloadingAll || (library.inUse[entry.model] ?? 0) > 0)
                 }
             }.padding(6)
         }
