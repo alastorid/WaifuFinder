@@ -9,8 +9,8 @@ enum GridThumbnailLayout {
     }
 }
 
-/// A decoded image with an explicit compositor animation. A prefetched image
-/// can be present in makeNSView; it still fades on its first viewport entry.
+/// Ready pixels paint immediately. Only pixels missing their visible entrance
+/// receive a compositor fade when they arrive.
 struct GridThumbnailImage: NSViewRepresentable {
     let image: CGImage?
     let identity: String
@@ -39,6 +39,7 @@ final class GridThumbnailImageView: NSView {
     private var image: CGImage?
     private var revealed = false
     private var wasVisible = false
+    private var missedVisiblePixels = false
 
     init(frame: NSRect, loader: GridThumbnailLoader = .shared,
          mediaTime: @escaping () -> CFTimeInterval = CACurrentMediaTime) {
@@ -73,15 +74,25 @@ final class GridThumbnailImageView: NSView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             picture.backgroundColor = NSColor.windowBackgroundColor.cgColor
         }
+        if self.identity != identity {
+            missedVisiblePixels = false
+            wasVisible = false
+        }
         if self.identity != identity || self.image !== image {
             picture.removeAnimation(forKey: "thumbnailReveal")
             self.identity = identity
             self.image = image
             revealed = false
             picture.contents = image
-            picture.opacity = 0
+            picture.opacity = image == nil ? 0 : 1
         }
-        if !isVisible { picture.removeAnimation(forKey: "thumbnailReveal") }
+        if image != nil, loader.activeRevealStart(identity: identity, at: mediaTime()) == nil {
+            picture.removeAnimation(forKey: "thumbnailReveal")
+        }
+        if !isVisible {
+            picture.removeAnimation(forKey: "thumbnailReveal")
+            missedVisiblePixels = false
+        } else if image == nil { missedVisiblePixels = true }
         let firstVisiblePixels = isVisible && image != nil && (!revealed || !wasVisible)
         wasVisible = isVisible
         if firstVisiblePixels {
@@ -92,8 +103,11 @@ final class GridThumbnailImageView: NSView {
 
         guard firstVisiblePixels else { return }
         let now = mediaTime()
-        let start = loader.revealStart(identity: identity, at: now)
-        guard now - start < 0.33 else { return }
+        let start = missedVisiblePixels
+            ? loader.beginLateReveal(identity: identity, at: now)
+            : loader.activeRevealStart(identity: identity, at: now)
+        missedVisiblePixels = false
+        guard let start, now - start < 0.33 else { return }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = Float(0)
         fade.toValue = Float(1)

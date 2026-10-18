@@ -54,16 +54,30 @@ final class GridThumbnailLoader: @unchecked Sendable {
         }
     }
 
-    /// Start the reveal only when pixels reach the viewport. Recreated cells
-    /// share its clock, so a handoff during the fade cannot jump to full opacity.
-    /// This record lives with the bounded decoded cache/visibility lease.
-    func revealStart(identity: String, at time: TimeInterval) -> TimeInterval {
+    /// Only a missed viewport entrance starts a fade. Cached ready pixels can
+    /// resume an unfinished handoff, but never start a new animation themselves.
+    func beginLateReveal(identity: String, at time: TimeInterval) -> TimeInterval {
         visibleLock.withLock {
             guard let entry = visibleImages[identity]?.entry
                     ?? cache.object(forKey: identity as NSString) else { return time }
-            if let start = entry.firstPresentationTime { return start }
+            if let start = entry.firstPresentationTime, time - start < 0.33 { return start }
             entry.firstPresentationTime = time
             return time
+        }
+    }
+
+    func activeRevealStart(identity: String, at time: TimeInterval) -> TimeInterval? {
+        visibleLock.withLock {
+            guard let start = (visibleImages[identity]?.entry
+                ?? cache.object(forKey: identity as NSString))?.firstPresentationTime,
+                time - start < 0.33 else { return nil }
+            return start
+        }
+    }
+
+    func finishReveal(identity: String) {
+        visibleLock.withLock {
+            (visibleImages[identity]?.entry ?? cache.object(forKey: identity as NSString))?.firstPresentationTime = nil
         }
     }
 

@@ -22,6 +22,13 @@ struct TaggingPanelStatus: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            } else if session.restoringTagMemory {
+                VStack(spacing: 7) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking saved tags")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else if session.tagVocabulary == nil {
                 Button("Set up WD Tagger in Settings…", action: openTaggerSettings)
                     .font(.caption)
@@ -107,29 +114,32 @@ struct TaggingStartButton: View {
     @ObservedObject private var remote = RemoteClient.shared
 
     var body: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button {
-                if session.tagVocabulary == nil && remote.remoteVocabulary == nil {
-                    settingsModelFocus = ManagedModel.tagger.rawValue
-                    settingsTab = "models"
-                    openSettings()
-                } else {
-                    Task { await session.startTagging(from: panel) }
+        Group {
+            if session.untaggedFrameCountForTagging > 0 && !session.restoringTagMemory {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        if session.tagVocabulary == nil && remote.remoteVocabulary == nil {
+                            settingsModelFocus = ManagedModel.tagger.rawValue
+                            settingsTab = "models"
+                            openSettings()
+                        } else {
+                            Task { await session.startTagging(from: panel) }
+                        }
+                    } label: {
+                        Text("Start tagging")
+                            .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(session.tagVocabulary == nil && remote.remoteVocabulary == nil
+                          ? "Open Settings to download and set up WD Tagger, or connect to a server that has it."
+                          : session.photosAlbumURL == nil
+                            ? "Tag the additional frames admitted by the current filters."
+                            : "Tag every untagged photo in this album using thumbnails.")
+                    Spacer(minLength: 0)
                 }
-            } label: {
-                Text("Start tagging")
-                    .remoteMark(remote.offersRemoteTagging, serverName: remote.capabilities?.serverName)
+                .padding(.top, 4)
             }
-            .buttonStyle(.borderless)
-            .disabled(session.tagVocabulary != nil && session.untaggedFrameCountForTagging == 0)
-            .help(session.tagVocabulary == nil && remote.remoteVocabulary == nil
-                  ? "Open Settings to download and set up WD Tagger, or connect to a server that has it."
-                  : session.photosAlbumURL == nil
-                    ? "Tag the additional frames admitted by the current filters."
-                    : "Tag every untagged photo in this album using thumbnails.")
-            Spacer(minLength: 0)
         }
-        .padding(.top, 4)
     }
 }

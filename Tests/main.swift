@@ -63,6 +63,7 @@ registerVideoDropTests()
 registerVideoProbeTests()
 registerFrameSamplerTests()
 registerThumbnailCacheTests()
+registerGridThumbnailStageTests()
 
 // Vision.
 registerFeaturePrintCodecTests()

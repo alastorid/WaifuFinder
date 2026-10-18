@@ -140,6 +140,12 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
     /// Sum of the highest 15 general probabilities above the saved threshold.
     var tagGeneralScore: Float?
 
+    /// Whether this frame already has usable tagger output, including partial
+    /// results restored from an older analysis snapshot.
+    var hasTaggingResult: Bool {
+        tagProbabilities != nil || tagRating != nil || !(topTags?.isEmpty ?? true) || tagGeneralScore != nil
+    }
+
     init(sampleIndex: Int,
          timeSeconds: Double,
          artScore: Float,

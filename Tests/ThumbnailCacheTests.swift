@@ -86,7 +86,7 @@ private final class ThumbnailReadGate {
 
 func registerThumbnailCacheTests() {
     let suite = "thumbnail cache"
-    Registry.shared.add(suite: suite, TestCase(name: "prefetched Photos thumbnails fade on first viewport entry, not during prefetch", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "prefetched Photos thumbnails appear stable; only late arrivals fade", knownBug: nil) {
         let directory = try Temporary.directory("thumbnail-prefetched-reveal")
         let url = directory.appendingPathComponent("photo.png")
         let identity = UUID().uuidString
@@ -102,10 +102,13 @@ func registerThumbnailCacheTests() {
             view.configure(image: presentation.image(for: identity), identity: identity, cropToFill: false, isVisible: false)
             guard let layer = checkNotNil(view.layer?.sublayers?.first, "the native image has a compositor layer") else { return }
             checkNil(layer.animation(forKey: "thumbnailReveal"), "offscreen prefetch must not spend the reveal")
-            checkEqual(layer.opacity, Float(0), "prefetched pixels wait for viewport entry")
+            checkEqual(layer.opacity, Float(1), "ready pixels are stable before viewport entry")
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            checkNil(layer.animation(forKey: "thumbnailReveal"), "ready Photos pixels do not fade at viewport entry")
+            view.configure(image: nil, identity: identity, cropToFill: false, isVisible: true)
             view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
             guard let fade = checkNotNil(layer.animation(forKey: "thumbnailReveal") as? CABasicAnimation,
-                                        "already-loaded Photos pixels receive an explicit fade") else { return }
+                                        "pixels missing the visible entrance receive an explicit fade") else { return }
             checkEqual(fade.keyPath, "opacity", "the compositor animates only opacity")
             checkEqual((fade.fromValue as? NSNumber)?.floatValue, Float(0), "first visible frame starts transparent")
             checkEqual((fade.toValue as? NSNumber)?.floatValue, Float(1), "the fade ends fully visible")
@@ -123,11 +126,15 @@ func registerThumbnailCacheTests() {
                        "a cell handoff shares the existing fade instead of jumping or restarting")
             checkEqual(replacementLayer?.opacity, Float(1), "the model layer keeps the final opacity while the compositor continues the fade")
 
+            GridThumbnailLoader.shared.finishReveal(identity: identity)
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            checkNil(layer.animation(forKey: "thumbnailReveal"), "a prepared batch settles an existing late fade immediately")
+
             let viewedIdentity = UUID().uuidString, owner = UUID()
             let loader = GridThumbnailLoader.shared
             loader.retainVisibleImage(pixels, identity: viewedIdentity, owner: owner)
             defer { loader.releaseVisibleImage(identity: viewedIdentity, owner: owner) }
-            _ = loader.revealStart(identity: viewedIdentity, at: time - 1)
+            _ = loader.beginLateReveal(identity: viewedIdentity, at: time - 1)
             let viewed = GridThumbnailImageView(frame: view.frame, mediaTime: { time })
             viewed.configure(image: pixels, identity: viewedIdentity, cropToFill: false, isVisible: true)
             checkNil(viewed.layer?.sublayers?.first?.animation(forKey: "thumbnailReveal"),
@@ -148,6 +155,19 @@ func registerThumbnailCacheTests() {
             checkNil(layer?.animation(forKey: "thumbnailReveal"), "switching source removes the previous reveal")
             checkNil(layer?.contents, "the replacement cell cannot show stale pixels")
             checkEqual(layer?.opacity, Float(0), "a replacement waits transparently for its own pixels")
+        }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "pixels completed offstage never fade on a later scroll entrance", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 64, height: 48)
+        await MainActor.run {
+            let identity = UUID().uuidString
+            let view = GridThumbnailImageView(frame: NSRect(x: 0, y: 0, width: 160, height: 120))
+            view.configure(image: nil, identity: identity, cropToFill: false, isVisible: true)
+            view.configure(image: nil, identity: identity, cropToFill: false, isVisible: false)
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: false)
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            checkNil(view.layer?.sublayers?.first?.animation(forKey: "thumbnailReveal"), "leaving the viewport ends the missed entrance episode")
+            checkEqual(view.layer?.sublayers?.first?.opacity, Float(1), "a prepared scroll entrance is immediately stable")
         }
     })
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail LRU promotes hits and accounts for replacement bytes", knownBug: nil) {

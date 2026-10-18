@@ -179,6 +179,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published private(set) var matchedFrameCountForTagging = 0
     @Published private(set) var untaggedFrameCountForTagging = 0
     @Published private(set) var taggedFrameCount = 0
+    @Published private(set) var restoringTagMemory = false
 
     // MARK: Analysis results
 
@@ -206,7 +207,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 frameByID = Dictionary(uniqueKeysWithValues: frames.map { ($0.id, $0) })
             }
             taggedFrameCount = frames.reduce(into: 0) { count, frame in
-                if frame.tagRating != nil { count += 1 }
+                if frame.hasTaggingResult { count += 1 }
             }
             if !taggingProgress.isRunning || !isTagUpdate { recomputeDisplayedFrames() }
         }
@@ -581,17 +582,21 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingTask: Task<Void, Never>?
     private var taggingGeneration = UUID()
     private var taggingDemandActive = false
+    private var taggingDemandGeneration = UUID()
     private var lastTaggingOrigin: TaggingPanel = .tags
     private var lastTaggingCandidateIDs: Set<FrameID>?
     private var taggingQueue: [FrameID] = []
     private var taggingQueueIndex = 0
     private var taggingQueuedIDs = Set<FrameID>()
+    private var pendingTaggingRestoreFrames: [FrameID: AnalyzedFrame] = [:]
+    private var taggingCandidateRestoreTask: Task<Void, Never>?
+    private var taggingCandidateRestoreToken = UUID()
+    private var tagMemoryRestoreOperations = Set<UUID>()
     private var pendingTaggedFrames: [FrameID: AnalyzedFrame] = [:]
     private var tagMemoryCancellationFlushPending = false
     private var taggingCacheKeys = TagResultCacheKeys.none
     private var taggingVocabularyFingerprint: UInt64?
     private var lastTaggingCandidateKey: TaggingCandidateCacheKey?
-    private var restoringTagMemory = false
     private var tagMemoryRestoreToken = UUID()
     private var analysisCacheIdentity: AnalysisResultCacheIdentity?
     nonisolated private let thumbnailCache = ThumbnailCache()
@@ -766,9 +771,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingCacheKeys = cacheKeys
         taggingVocabularyFingerprint = vocabulary.cacheFingerprint
         if !cacheKeys.isEmpty {
-            restoringTagMemory = true
             let restoreToken = UUID()
             tagMemoryRestoreToken = restoreToken
+            beginTagMemoryRestore(restoreToken)
             let token = analysisGeneration
             let snapshot = frames
             let restored = await TagResultMemory.shared.restore(
@@ -778,7 +783,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 threshold: settings.taggerThreshold
             )
             guard tagMemoryRestoreToken == restoreToken else { return }
-            restoringTagMemory = false
+            endTagMemoryRestore(restoreToken)
             guard token == analysisGeneration, self.video?.url == video.url,
                   !taggingProgress.isRunning else { return }
             if restored.restoredCount > 0 {
@@ -790,9 +795,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
 
         let candidates = taggingCandidates().frames
-        let newCandidates = candidates.filter { $0.tagRating == nil }
+        let newCandidates = candidates.filter { !$0.hasTaggingResult }
         guard !newCandidates.isEmpty else { return }
 
+        taggingDemandGeneration = UUID()
         taggingDemandActive = true
         lastTaggingOrigin = panel
         lastTaggingCandidateIDs = Set(candidates.map(\.id))
@@ -812,6 +818,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let keys = taggingCacheKeys
         let snapshot = frames + Array(pendingTaggedFrames.values)
         taggingDemandActive = false
+        taggingDemandGeneration = UUID()
         if keepingCompletedResults { publishPendingTaggedFrames() }
         else { pendingTaggedFrames.removeAll() }
         taggingGeneration = UUID()
@@ -938,7 +945,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         while taggingQueueIndex < taggingQueue.count && batch.count < WDTaggerBackend.batchSize {
             let id = taggingQueue[taggingQueueIndex]
             taggingQueueIndex += 1
-            guard let frame = frameByID[id], frame.tagRating == nil else { continue }
+            guard let frame = frameByID[id], !frame.hasTaggingResult else { continue }
             if let photoURL = PhotosMedia.shared.photoItemURL(for: video.url, seconds: frame.timeSeconds) {
                 // Ask PhotoKit for model-sized pixels; do not encode and decode
                 // the scoring/grid JPEG or shrink its 512px rendition again.
@@ -1007,6 +1014,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func failTagging(_ error: Error, token: UUID, elapsed: TimeInterval) {
         guard token == taggingGeneration else { return }
         taggingDemandActive = false
+        taggingDemandGeneration = UUID()
         publishPendingTaggedFrames()
         taggingProgress.isRunning = false
         taggingProgress.elapsed = elapsed
@@ -1040,7 +1048,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if let exact = taggingCandidateResults.exact(key) {
             let candidates = frames(forCachedIndices: exact.indices)
             let untaggedCount = exact.untaggedCount ?? candidates.reduce(into: 0) { count, frame in
-                if frame.tagRating == nil { count += 1 }
+                if !frame.hasTaggingResult { count += 1 }
             }
             taggingCandidateResults.store(exact.indices, untaggedCount: untaggedCount, for: key)
             return TaggingCandidateSelection(key: key, frames: candidates, untaggedCount: untaggedCount)
@@ -1072,7 +1080,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 && candidateLimits.admitsForTagging(frame, grouping: grouping)
         }
         let untaggedCount = candidates.reduce(into: 0) { count, frame in
-            if frame.tagRating == nil { count += 1 }
+            if !frame.hasTaggingResult { count += 1 }
         }
         taggingCandidateResults.store(candidates.map(\.id.sampleIndex), untaggedCount: untaggedCount, for: key)
         return TaggingCandidateSelection(key: key, frames: candidates, untaggedCount: untaggedCount)
@@ -1127,20 +1135,117 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     private func appendTaggingCandidates(_ additions: [AnalyzedFrame]) {
+        guard taggingDemandActive, let sourceURL = video?.url else { return }
         let newFrames = additions.filter { frame in
-            frame.tagRating == nil && taggingQueuedIDs.insert(frame.id).inserted
+            !frame.hasTaggingResult && taggingQueuedIDs.insert(frame.id).inserted
         }
         guard !newFrames.isEmpty else { return }
-        taggingQueue.append(contentsOf: newFrames.map(\.id))
+
+        for frame in newFrames { pendingTaggingRestoreFrames[frame.id] = frame }
+        guard taggingCandidateRestoreTask == nil else { return }
+
+        let restoreToken = UUID()
+        taggingCandidateRestoreToken = restoreToken
+        let analysisToken = analysisGeneration
+        let demandToken = taggingDemandGeneration
+        beginTagMemoryRestore(restoreToken)
+        taggingCandidateRestoreTask = Task { [weak self] in
+            await self?.restorePendingTaggingCandidates(token: restoreToken,
+                                                        analysisToken: analysisToken,
+                                                        demandToken: demandToken,
+                                                        sourceURL: sourceURL)
+        }
+    }
+
+    private func restorePendingTaggingCandidates(token: UUID, analysisToken: UUID,
+                                                 demandToken: UUID, sourceURL: URL) async {
+        defer {
+            if taggingCandidateRestoreToken == token {
+                for frame in pendingTaggingRestoreFrames.values { taggingQueuedIDs.remove(frame.id) }
+                pendingTaggingRestoreFrames.removeAll(keepingCapacity: true)
+                taggingCandidateRestoreTask = nil
+                endTagMemoryRestore(token)
+            }
+        }
+
+        while !Task.isCancelled, taggingCandidateRestoreToken == token,
+              !pendingTaggingRestoreFrames.isEmpty {
+            let candidates = pendingTaggingRestoreFrames.values.sorted { $0.id.sampleIndex < $1.id.sampleIndex }
+            pendingTaggingRestoreFrames.removeAll(keepingCapacity: true)
+            guard let video, video.url == sourceURL, let vocabulary = tagVocabulary else {
+                for frame in candidates { taggingQueuedIDs.remove(frame.id) }
+                continue
+            }
+
+            let keys = TagResultCacheKeys.make(videoURL: video.url, frames: frames,
+                                               vocabulary: vocabulary,
+                                               analysisWidth: settings.analysisWidth,
+                                               analysisMode: settings.analysisMode)
+            taggingCacheKeys = keys
+            taggingVocabularyFingerprint = vocabulary.cacheFingerprint
+            let restored = await TagResultMemory.shared.restore(
+                candidates,
+                keys: keys,
+                vocabulary: vocabulary,
+                threshold: settings.taggerThreshold
+            )
+            guard !Task.isCancelled, taggingCandidateRestoreToken == token,
+                  analysisGeneration == analysisToken, self.video?.url == sourceURL,
+                  tagVocabulary?.cacheFingerprint == vocabulary.cacheFingerprint else {
+                for frame in candidates { taggingQueuedIDs.remove(frame.id) }
+                return
+            }
+
+            var updatedFrames = frames
+            let frameIndices = Dictionary(uniqueKeysWithValues: updatedFrames.enumerated().map { ($0.element.id, $0.offset) })
+            var didRestore = false
+            for restoredFrame in restored.frames where restoredFrame.hasTaggingResult {
+                guard let index = frameIndices[restoredFrame.id],
+                      !updatedFrames[index].hasTaggingResult else { continue }
+                updatedFrames[index] = restoredFrame
+                didRestore = true
+            }
+            if didRestore { frames = updatedFrames }
+
+            let canQueue = taggingDemandActive && taggingDemandGeneration == demandToken
+            var untaggedFrames: [AnalyzedFrame] = []
+            for candidate in candidates {
+                guard let current = frameByID[candidate.id], !current.hasTaggingResult else {
+                    taggingQueuedIDs.remove(candidate.id)
+                    continue
+                }
+                if canQueue {
+                    taggingQueuedIDs.insert(candidate.id)
+                    untaggedFrames.append(current)
+                } else {
+                    taggingQueuedIDs.remove(candidate.id)
+                }
+            }
+            enqueueTaggingFrames(untaggedFrames)
+        }
+
+    }
+
+    private func enqueueTaggingFrames(_ newFrames: [AnalyzedFrame]) {
+        guard !newFrames.isEmpty, taggingDemandActive else {
+            for frame in newFrames { taggingQueuedIDs.remove(frame.id) }
+            return
+        }
+
         if taggingProgress.isRunning {
+            taggingQueue.append(contentsOf: newFrames.map(\.id))
             taggingProgress.total += newFrames.count
-        } else if taggingDemandActive {
+        } else {
             // Follow-up batches for frames that arrived mid-run. The backend is
             // chosen the same way the first run chose it, including the remote
             // case, so a run does not silently switch machines halfway through.
             let config = WDTaggerConfiguration.load()
             let remote = RemoteClient.shared.offersRemoteTagging ? RemoteClient.shared : nil
-            guard config != nil || remote != nil else { return }
+            guard config != nil || remote != nil else {
+                for frame in newFrames { taggingQueuedIDs.remove(frame.id) }
+                return
+            }
+            taggingQueue.append(contentsOf: newFrames.map(\.id))
             taggingProgress = TaggingProgress(isRunning: true, origin: lastTaggingOrigin,
                                               processed: 0, total: newFrames.count, elapsed: 0)
             taggingGeneration = UUID()
@@ -1393,7 +1498,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Keep tagger output and selection stable as the scored prefix grows.
     private func preservingLiveTags(_ incoming: [AnalyzedFrame]) -> [AnalyzedFrame] {
         incoming.map { frame in
-            guard let previous = frameByID[frame.id], previous.tagProbabilities != nil || previous.tagRating != nil else { return frame }
+            guard let previous = frameByID[frame.id], previous.hasTaggingResult else { return frame }
             var copy = frame
             copy.tagProbabilities = previous.tagProbabilities
             copy.tagVocabularyFingerprint = previous.tagVocabularyFingerprint
@@ -1439,12 +1544,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var completedFrames = frames
         if !cacheKeys.isEmpty, let vocabulary = tagVocabulary,
            TagResultMemory.shared.rememberTaggingResults {
+            let restoreToken = UUID()
+            tagMemoryRestoreToken = restoreToken
+            beginTagMemoryRestore(restoreToken)
             let restored = await TagResultMemory.shared.restore(
                 frames,
                 keys: cacheKeys,
                 vocabulary: vocabulary,
                 threshold: settings.taggerThreshold
             )
+            guard tagMemoryRestoreToken == restoreToken else { return }
+            endTagMemoryRestore(restoreToken)
             guard analysisGeneration == token else { return }
             completedFrames = restored.frames
         }
@@ -1474,6 +1584,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         thumbnailCache.removeAll()
         ThumbnailRegenerator.shared.reset()
         taggingDemandActive = false
+        taggingDemandGeneration = UUID()
+        taggingCandidateRestoreToken = UUID()
+        taggingCandidateRestoreTask?.cancel()
+        taggingCandidateRestoreTask = nil
+        pendingTaggingRestoreFrames.removeAll()
+        tagMemoryRestoreOperations.removeAll()
         tagMemoryRestoreToken = UUID()
         restoringTagMemory = false
         taggingCacheKeys = .none
@@ -1511,6 +1627,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         cappedGroupSummaries = []
     }
 
+    private func beginTagMemoryRestore(_ token: UUID) {
+        tagMemoryRestoreOperations.insert(token)
+        restoringTagMemory = !tagMemoryRestoreOperations.isEmpty
+    }
+
+    private func endTagMemoryRestore(_ token: UUID) {
+        tagMemoryRestoreOperations.remove(token)
+        restoringTagMemory = !tagMemoryRestoreOperations.isEmpty
+    }
+
     private func restoreRememberedTagResults() {
         guard !restoringTagMemory, !taggingProgress.isRunning,
               progress.phase == .complete, !frames.isEmpty,
@@ -1524,7 +1650,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingVocabularyFingerprint = vocabulary.cacheFingerprint
         let requestToken = UUID()
         tagMemoryRestoreToken = requestToken
-        restoringTagMemory = true
+        beginTagMemoryRestore(requestToken)
         let analysisToken = analysisGeneration
         let sourceURL = video.url
         let snapshot = frames
@@ -1539,7 +1665,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 threshold: threshold
             )
             guard self.tagMemoryRestoreToken == requestToken else { return }
-            self.restoringTagMemory = false
+            self.endTagMemoryRestore(requestToken)
             guard self.analysisGeneration == analysisToken, self.video?.url == sourceURL,
                   !self.taggingProgress.isRunning else { return }
             if restored.restoredCount > 0 {
@@ -1553,11 +1679,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     private func clearTagResultsNotMatching(_ vocabularyFingerprint: UInt64) {
         guard frames.contains(where: {
-            ($0.tagProbabilities != nil || $0.tagRating != nil || $0.topTags != nil)
-                && $0.tagVocabularyFingerprint != vocabularyFingerprint
+            $0.hasTaggingResult && $0.tagVocabularyFingerprint != vocabularyFingerprint
         }) else { return }
         frames = frames.map { frame in
-            guard (frame.tagProbabilities != nil || frame.tagRating != nil || frame.topTags != nil),
+            guard frame.hasTaggingResult,
                   frame.tagVocabularyFingerprint != vocabularyFingerprint else { return frame }
             var copy = frame
             copy.tagProbabilities = nil

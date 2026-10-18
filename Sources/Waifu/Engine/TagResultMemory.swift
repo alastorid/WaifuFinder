@@ -256,6 +256,10 @@ final class TagResultMemory: ObservableObject {
         return await Task.detached(priority: .utility) {
             var restoredCount = 0
             let restoredFrames = frames.map { original -> AnalyzedFrame in
+                // Restore exists to turn cached probabilities into a rating and
+                // its tags, so it fills any frame still missing that rating. A
+                // frame carrying probabilities alone is unfinished here even
+                // though `hasTaggingResult` counts it for re-tagging purposes.
                 guard let identity = keys.key(for: original),
                       original.tagRating == nil,
                       let encoded = cached[identity]?[keys.recordIndex(for: original)],
