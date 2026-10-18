@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Photos
+import QuartzCore
 
 func registerPhotosWorkflowTests() {
     let suite = "Photos workflow"
@@ -168,22 +169,34 @@ func registerPhotosWorkflowTests() {
             context.fill(CGRect(x: 0, y: 0, width: 512, height: 256))
             context.setFillColor(NSColor.blue.cgColor)
             context.fill(CGRect(x: 128, y: 0, width: 256, height: 256))
+            context.setFillColor(NSColor.green.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: 512, height: 32))
             guard let source = context.makeImage() else { throw PhotosMedia.failure("Could not create the thumbnail fixture.") }
-            let image = NSImage(cgImage: source, size: NSSize(width: 512, height: 256))
             for (square, expectedHeight) in [(false, 80), (true, 160)] {
-                let renderer = ImageRenderer(content: PhotosThumbnailImage(image: image, sourceAspect: 2, square: square).frame(width: 160))
-                renderer.scale = 1
-                guard let pixels = renderer.cgImage else { throw PhotosMedia.failure("Could not render the thumbnail control.") }
+                let size = GridThumbnailLayout.size(width: 160, sourceAspect: 2, square: square)
+                let view = GridThumbnailImageView(frame: NSRect(origin: .zero, size: size))
+                view.configure(image: source, identity: UUID().uuidString, cropToFill: square, isVisible: true)
+                view.layoutSubtreeIfNeeded()
+                guard let target = CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+                                             bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                      let layer = view.layer else { throw PhotosMedia.failure("Could not render the thumbnail control.") }
+                layer.render(in: target)
+                guard let pixels = target.makeImage() else { throw PhotosMedia.failure("Could not render the thumbnail control.") }
                 checkEqual(pixels.width, 160, "thumbnail width stays fixed")
                 checkEqual(pixels.height, expectedHeight, "shape changes the actual image container")
                 let edge = NSBitmapImageRep(cgImage: pixels).colorAt(x: 8, y: expectedHeight / 2)?.usingColorSpace(.deviceRGB)
                 check(edge != nil, "rendered pixels are readable")
                 check((square ? edge?.blueComponent : edge?.redComponent) ?? 0 > 0.8,
                       "square crops the red edges; full aspect keeps them")
+                let sourceTop = NSBitmapImageRep(cgImage: source).colorAt(x: 256, y: 8)?.usingColorSpace(.deviceRGB)
+                let renderedTop = NSBitmapImageRep(cgImage: pixels).colorAt(x: 80, y: max(1, expectedHeight / 32))?.usingColorSpace(.deviceRGB)
+                check(abs((sourceTop?.greenComponent ?? -1) - (renderedTop?.greenComponent ?? -2)) < 0.05,
+                      "the native layer keeps the photo's vertical orientation")
             }
-            let portrait = ImageRenderer(content: PhotosThumbnailImage(image: nil, sourceAspect: 0.5, square: false).frame(width: 160))
-            portrait.scale = 1
-            checkEqual(portrait.cgImage?.height, 320, "full aspect also preserves portrait height before loading")
+            let portrait = GridThumbnailLayout.size(width: 160, sourceAspect: 0.5, square: false)
+            checkEqual(portrait.height, 320, "full aspect also preserves portrait height before loading")
 
             let session = WaifuSession()
             let full = FrameGridView(session: session, gridRevision: 1, squarePhotoThumbnails: false, onFrameClick: { _, _ in })

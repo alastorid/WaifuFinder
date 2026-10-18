@@ -19,6 +19,7 @@ struct RootView: View {
     // title bar. See ChiaroscuroLink.
     @StateObject private var link = ChiaroscuroLink()
     @State private var showPhotosWorkspace = false
+    @State private var showWelcomeScreen = false
     @AppStorage("rightPanelExpanded") private var rightPanelExpanded = true
     @AppStorage("photosSquareThumbnails") private var squarePhotoThumbnails = false
 
@@ -29,8 +30,11 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            if showPhotosWorkspace {
-                PhotosWorkspaceView(session: session, link: link, trailingControls: { workspaceControls }) {
+            if showWelcomeScreen {
+                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace)
+            } else if showPhotosWorkspace {
+                PhotosWorkspaceView(session: session, link: link, onBackToWelcome: returnToWelcome,
+                                    trailingControls: { workspaceControls }) {
                     mainContent
                 }
                 .opacity(session.previewFrame == nil ? 1 : 0)
@@ -51,7 +55,7 @@ struct RootView: View {
                     .accessibilityHidden(session.previewFrame != nil || session.uncover != nil)
             } else {
                 // Full-window drop zone when no video is loaded
-                DropZone(session: session, isPrimary: true, openPhotos: { showPhotosWorkspace = true })
+                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace)
             }
             // Keep dismissal immediate; the grid restores scrolling and focus only
             // after the session mutation has committed.
@@ -74,7 +78,11 @@ struct RootView: View {
                 .frame(width: 0, height: 0)
         }
         .onOpenURL { url in
-            if let source = FirefoxIntegration.incomingURL(url) { showPhotosWorkspace = false; session.loadVideo(at: source) }
+            if let source = FirefoxIntegration.incomingURL(url) {
+                showWelcomeScreen = false
+                showPhotosWorkspace = false
+                session.loadVideo(at: source)
+            }
             else { session.errorMessage = "Unsupported media URL. Use an HTTP or HTTPS link." }
         }
         .background { PreviewToggleKeyboard(session: session).frame(width: 0, height: 0) }
@@ -90,8 +98,23 @@ struct RootView: View {
         }
         .onChange(of: session.uncover != nil) { _, active in if active { preview.pause() } }
         .onChange(of: session.previewFrame != nil) { _, active in if active { preview.pause() } }
-        .onChange(of: session.progress.isRunning) { _, running in if running { preview.pause() } }
+        .onChange(of: session.progress.isRunning) { _, running in
+            if running {
+                showWelcomeScreen = false
+                preview.pause()
+            }
+        }
         .toolbar {
+            if !showWelcomeScreen && !showPhotosWorkspace && (session.video != nil || session.progress.isRunning) {
+                ToolbarItem(placement: .navigation) {
+                    Button(action: returnToWelcome) {
+                        Label("Back to welcome screen", systemImage: "chevron.left")
+                    }
+                    .labelStyle(.iconOnly)
+                    .help("Back to welcome screen")
+                    .accessibilityLabel("Back to welcome screen")
+                }
+            }
             if !showPhotosWorkspace && session.video != nil {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
@@ -125,6 +148,20 @@ struct RootView: View {
         } message: {
             Text(session.errorMessage ?? "")
         }
+    }
+
+    private func openPhotosWorkspace() {
+        showWelcomeScreen = false
+        showPhotosWorkspace = true
+    }
+
+    private func returnToWelcome() {
+        preview.pause()
+        if session.progress.isRunning { session.cancel() }
+        session.closeUncover()
+        session.previewFrame = nil
+        showPhotosWorkspace = false
+        showWelcomeScreen = true
     }
 
     // Photos embeds these after its own actions in one toolbar item, so

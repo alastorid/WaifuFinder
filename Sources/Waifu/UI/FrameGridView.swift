@@ -612,6 +612,7 @@ private struct FrameCell: View {
     let squareThumbnail: Bool
     @StateObject private var thumbnail: GridThumbnailPresentation
     @State private var isSelected: Bool
+    @State private var isThumbnailVisible = false
     @State private var isHovered = false
 
     init(session: WaifuSession, frame: AnalyzedFrame, thumbnailKey: String, generation: UUID, width: CGFloat,
@@ -630,9 +631,9 @@ private struct FrameCell: View {
 
     var body: some View {
         let visibleThumbnail = thumbnail.image(for: thumbnailIdentity)
-        let aspect = frame.thumbnailAspectRatio ?? visibleThumbnail.map { Double($0.size.width / $0.size.height) } ?? (16.0 / 9)
+        let aspect = frame.thumbnailAspectRatio ?? visibleThumbnail.map { Double($0.width) / Double($0.height) } ?? (16.0 / 9)
         let isSquare = isPhotosSource && squareThumbnail
-        let height = isSquare ? width : width / CGFloat(aspect.isFinite && aspect > 0 ? aspect : 16.0 / 9)
+        let height = GridThumbnailLayout.size(width: width, sourceAspect: CGFloat(aspect), square: isSquare).height
         let isOrdered = isPhotosSource
             ? session.photosAlbumURL.flatMap { albumURL in
                 guard let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL),
@@ -640,24 +641,10 @@ private struct FrameCell: View {
                 return photosOrderState.isOrdered(albumIdentifier: albumIdentifier, assetIdentifier: assetIdentifier)
             } ?? false
             : false
-        Group {
-            if let nsImage = visibleThumbnail {
-                if isPhotosSource {
-                    PhotosThumbnailImage(image: nsImage, sourceAspect: CGFloat(aspect), square: isSquare)
-                        .frame(width: width, height: height)
-                } else {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: width, height: height)
-                        .clipped()
-                }
-            } else {
-                Color.clear.frame(width: width, height: height)
-            }
-        }
+        GridThumbnailImage(image: visibleThumbnail, identity: thumbnailIdentity,
+                           cropToFill: isSquare, isVisible: isThumbnailVisible)
         .frame(width: width, height: height)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .contentShape(Rectangle())
         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         .overlay(alignment: .topLeading) {
             if !isPhotosSource { frameNumberOverlay }
@@ -692,15 +679,14 @@ private struct FrameCell: View {
                 .allowsHitTesting(false)
         }
         .help(isPhotosSource
-              ? (visibleThumbnail.map { "\(Int($0.size.width)) × \(Int($0.size.height)) pixels · " } ?? "") + "art \(String(format: "%.2f", frame.artScore))"
+              ? (visibleThumbnail.map { "\($0.width) × \($0.height) pixels · " } ?? "") + "art \(String(format: "%.2f", frame.artScore))"
               : "\(timecode(frame.timeSeconds)) · art \(String(format: "%.2f", frame.artScore))")
-        // Fade only the opacity of newly loaded content; layout, hover, and
-        // selection stay immediate. Cached cells start ready and do not refade.
-        .animation(visibleThumbnail == nil ? nil : .easeIn(duration: 0.33)) { content in
-            content.opacity(visibleThumbnail == nil ? 0 : 1)
-        }
+        // The native image layer owns the fade, including prefetched Photos
+        // cells that already have pixels before their first SwiftUI body.
+        .opacity(visibleThumbnail == nil ? 0 : 1)
         .allowsHitTesting(visibleThumbnail != nil)
         .accessibilityHidden(visibleThumbnail == nil)
+        .onScrollVisibilityChange(threshold: 0.01) { isThumbnailVisible = $0 }
         // Progress, tagging, and player updates must not redraw every thumbnail.
         // Only cells whose selection membership changed need a new border.
         .onReceive(session.$selectedFrameIDs.map { $0.contains(frame.id) }.removeDuplicates()) {

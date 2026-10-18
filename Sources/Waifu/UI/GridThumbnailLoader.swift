@@ -6,11 +6,13 @@ final class GridThumbnailLoader: @unchecked Sendable {
     static let shared = GridThumbnailLoader()
     private final class Entry: NSObject {
         let image: CGImage
+        // Accessed only under visibleLock. Decoding/prefetching is not display.
+        var firstPresentationTime: TimeInterval?
         init(_ image: CGImage) { self.image = image }
     }
     private let cache = NSCache<NSString, Entry>()
     private struct VisibleImage {
-        let image: CGImage
+        let entry: Entry
         var owners: Set<UUID>
     }
     private let visibleLock = NSLock()
@@ -31,7 +33,7 @@ final class GridThumbnailLoader: @unchecked Sendable {
     /// Fast path for a thumbnail already loaded by a visible grid cell.
     /// Preview entry can paint it immediately without queueing behind other cells.
     func cachedImage(identity: String) -> CGImage? {
-        visibleLock.withLock { visibleImages[identity]?.image }
+        visibleLock.withLock { visibleImages[identity]?.entry.image }
             ?? cache.object(forKey: identity as NSString)?.image
     }
 
@@ -43,8 +45,25 @@ final class GridThumbnailLoader: @unchecked Sendable {
                 entry.owners.insert(owner)
                 visibleImages[identity] = entry
             } else {
-                visibleImages[identity] = VisibleImage(image: image, owners: [owner])
+                let cached = cache.object(forKey: identity as NSString)
+                let entry: Entry
+                if let cached, cached.image === image { entry = cached }
+                else { entry = Entry(image) }
+                visibleImages[identity] = VisibleImage(entry: entry, owners: [owner])
             }
+        }
+    }
+
+    /// Start the reveal only when pixels reach the viewport. Recreated cells
+    /// share its clock, so a handoff during the fade cannot jump to full opacity.
+    /// This record lives with the bounded decoded cache/visibility lease.
+    func revealStart(identity: String, at time: TimeInterval) -> TimeInterval {
+        visibleLock.withLock {
+            guard let entry = visibleImages[identity]?.entry
+                    ?? cache.object(forKey: identity as NSString) else { return time }
+            if let start = entry.firstPresentationTime { return start }
+            entry.firstPresentationTime = time
+            return time
         }
     }
 

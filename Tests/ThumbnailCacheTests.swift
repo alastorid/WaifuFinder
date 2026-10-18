@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import Foundation
 
 // Thumbnail cache: the bounded, in-memory store for analysis-resolution JPEGs.
@@ -85,6 +86,70 @@ private final class ThumbnailReadGate {
 
 func registerThumbnailCacheTests() {
     let suite = "thumbnail cache"
+    Registry.shared.add(suite: suite, TestCase(name: "prefetched Photos thumbnails fade on first viewport entry, not during prefetch", knownBug: nil) {
+        let directory = try Temporary.directory("thumbnail-prefetched-reveal")
+        let url = directory.appendingPathComponent("photo.png")
+        let identity = UUID().uuidString
+        try RegionImages.write(try ImageFixture.cgImage(width: 64, height: 48), to: url)
+        guard let pixels = await GridThumbnailLoader.shared.image(at: url, identity: identity) else {
+            check(false, "prefetch must decode the fixture"); return
+        }
+        await MainActor.run {
+            let time = CACurrentMediaTime() + 10
+            let presentation = GridThumbnailPresentation(identity: identity)
+            check(presentation.image(for: identity) === pixels, "the cell starts with prefetched pixels, reproducing Photos mode")
+            let view = GridThumbnailImageView(frame: NSRect(x: 0, y: 0, width: 160, height: 120), mediaTime: { time })
+            view.configure(image: presentation.image(for: identity), identity: identity, cropToFill: false, isVisible: false)
+            guard let layer = checkNotNil(view.layer?.sublayers?.first, "the native image has a compositor layer") else { return }
+            checkNil(layer.animation(forKey: "thumbnailReveal"), "offscreen prefetch must not spend the reveal")
+            checkEqual(layer.opacity, Float(0), "prefetched pixels wait for viewport entry")
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            guard let fade = checkNotNil(layer.animation(forKey: "thumbnailReveal") as? CABasicAnimation,
+                                        "already-loaded Photos pixels receive an explicit fade") else { return }
+            checkEqual(fade.keyPath, "opacity", "the compositor animates only opacity")
+            checkEqual((fade.fromValue as? NSNumber)?.floatValue, Float(0), "first visible frame starts transparent")
+            checkEqual((fade.toValue as? NSNumber)?.floatValue, Float(1), "the fade ends fully visible")
+            checkEqual(fade.duration, 0.33, "the requested reveal lasts 0.33 seconds")
+            var control: [Float] = [0, 0]
+            fade.timingFunction?.getControlPoint(at: 1, values: &control)
+            check(abs(control[0] - 0.42) < 0.0001 && control[1] == 0, "the reveal uses ease-in timing")
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            checkEqual(layer.animation(forKey: "thumbnailReveal")?.beginTime, fade.beginTime,
+                       "ordinary cell updates do not restart the fade")
+            let replacement = GridThumbnailImageView(frame: view.frame, mediaTime: { time })
+            replacement.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            let replacementLayer = replacement.layer?.sublayers?.first
+            checkEqual(replacementLayer?.animation(forKey: "thumbnailReveal")?.beginTime, fade.beginTime,
+                       "a cell handoff shares the existing fade instead of jumping or restarting")
+            checkEqual(replacementLayer?.opacity, Float(1), "the model layer keeps the final opacity while the compositor continues the fade")
+
+            let viewedIdentity = UUID().uuidString, owner = UUID()
+            let loader = GridThumbnailLoader.shared
+            loader.retainVisibleImage(pixels, identity: viewedIdentity, owner: owner)
+            defer { loader.releaseVisibleImage(identity: viewedIdentity, owner: owner) }
+            _ = loader.revealStart(identity: viewedIdentity, at: time - 1)
+            let viewed = GridThumbnailImageView(frame: view.frame, mediaTime: { time })
+            viewed.configure(image: pixels, identity: viewedIdentity, cropToFill: false, isVisible: true)
+            checkNil(viewed.layer?.sublayers?.first?.animation(forKey: "thumbnailReveal"),
+                     "a cached thumbnail whose fade already finished appears immediately")
+        }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "visible cells fade late pixels and discard stale reveal animations", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 64, height: 48)
+        await MainActor.run {
+            let identity = UUID().uuidString
+            let view = GridThumbnailImageView(frame: NSRect(x: 0, y: 0, width: 160, height: 120))
+            view.configure(image: nil, identity: identity, cropToFill: false, isVisible: true)
+            let layer = view.layer?.sublayers?.first
+            checkNil(layer?.animation(forKey: "thumbnailReveal"), "loading without pixels cannot start a fade")
+            view.configure(image: pixels, identity: identity, cropToFill: false, isVisible: true)
+            checkNotNil(layer?.animation(forKey: "thumbnailReveal"), "pixels arriving in an already-visible cell also fade")
+            view.configure(image: nil, identity: UUID().uuidString, cropToFill: false, isVisible: true)
+            checkNil(layer?.animation(forKey: "thumbnailReveal"), "switching source removes the previous reveal")
+            checkNil(layer?.contents, "the replacement cell cannot show stale pixels")
+            checkEqual(layer?.opacity, Float(0), "a replacement waits transparently for its own pixels")
+        }
+    })
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail LRU promotes hits and accounts for replacement bytes", knownBug: nil) {
         let root = try Temporary.directory("thumb-lru")
         let cache = ThumbnailCache(rootDirectory: root, byteLimit: 12)
@@ -144,7 +209,8 @@ func registerThumbnailCacheTests() {
             gate.finish(pixels)
             await loading.value
             let ready = presentation.image(for: identity)
-            checkEqual(ready?.size, NSSize(width: 64, height: 48), "publication includes decoded geometry")
+            checkEqual(ready?.width, 64, "publication includes decoded width")
+            checkEqual(ready?.height, 48, "publication includes decoded height")
             presentation.disappear(identity: identity)
             check(presentation.image(for: identity) === ready, "a transient disappearance does not blank the cell")
             await presentation.prepare(identity: identity) {

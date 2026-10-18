@@ -1,4 +1,4 @@
-import AppKit
+import CoreGraphics
 import SwiftUI
 
 /// Publishes a cell only after its pixels are decoded. Identity and request
@@ -7,7 +7,7 @@ import SwiftUI
 final class GridThumbnailPresentation: ObservableObject {
     struct ReadyImage {
         let identity: String
-        let image: NSImage
+        let image: CGImage
     }
 
     @Published private(set) var ready: ReadyImage?
@@ -31,7 +31,7 @@ final class GridThumbnailPresentation: ObservableObject {
         if let pinnedIdentity { loader.releaseVisibleImage(identity: pinnedIdentity, owner: owner) }
     }
 
-    func image(for identity: String) -> NSImage? {
+    func image(for identity: String) -> CGImage? {
         guard ready?.identity == identity else { return nil }
         return ready?.image
     }
@@ -76,11 +76,10 @@ final class GridThumbnailPresentation: ObservableObject {
             pinnedIdentity = identity
         }
         let transaction = Transaction(animation: nil)
-        // Keep rearrangement animations out of publication. The cell supplies a
-        // scoped opacity animation for the loading-to-ready change.
+        // Publication never animates layout. The native image layer starts its
+        // explicit reveal when these pixels actually enter the viewport.
         withTransaction(transaction) {
-            ready = ReadyImage(identity: identity,
-                image: NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height)))
+            ready = ReadyImage(identity: identity, image: pixels)
         }
     }
 

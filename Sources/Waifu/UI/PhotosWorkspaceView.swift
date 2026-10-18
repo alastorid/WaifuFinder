@@ -7,6 +7,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
     private let trailingControls: () -> TrailingControls
+    private let onBackToWelcome: () -> Void
     /// Shared with the Sort and Filter fraction; see `ChiaroscuroLink`.
     private let link: ChiaroscuroLink
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
@@ -14,11 +15,12 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     @State private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: WaifuSession, link: ChiaroscuroLink,
+    init(session: WaifuSession, link: ChiaroscuroLink, onBackToWelcome: @escaping () -> Void,
          @ViewBuilder trailingControls: @escaping () -> TrailingControls,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
         self.session = session
         self.link = link
+        self.onBackToWelcome = onBackToWelcome
         self.rankedContent = rankedContent
         self.trailingControls = trailingControls
     }
@@ -51,6 +53,12 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         .transaction { $0.animation = nil }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
+                Button(action: onBackToWelcome) {
+                    Image(systemName: "chevron.left")
+                }
+                .help("Back to welcome screen")
+                .accessibilityLabel("Back to welcome screen")
+
                 Button { sidebarExpanded.toggle() } label: {
                     Image(systemName: "sidebar.left")
                 }
