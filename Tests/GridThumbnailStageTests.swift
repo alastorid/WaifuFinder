@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Combine
 
 private func stageFrame(_ index: Int) -> AnalyzedFrame {
     AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: 0,
@@ -37,6 +38,13 @@ private final class StageReads {
 
 func registerGridThumbnailStageTests() {
     let suite = "thumbnail staging"
+    Registry.shared.add(suite: suite, TestCase(name: "a growing album delivers its final committed layout and defers repeated visual routes", knownBug: nil) {
+        let directory = try Temporary.directory("album-grid-publication")
+        let pixels = try ImageFixture.cgImage(width: 16, height: 16)
+        let payloadA = try JSONEncoder().encode(await makeFeaturePrintObservation(0))
+        let payloadB = try JSONEncoder().encode(await makeFeaturePrintObservation(4))
+        await testAlbumGridPublication(directory: directory, pixels: pixels, payloads: [payloadA, payloadB])
+    })
     Registry.shared.add(suite: suite, TestCase(name: "target viewport uses stale scroll position and clamps a shorter filter", knownBug: nil) {
         let frames = (0..<20).map(stageFrame)
         let snapshot = GridStageSnapshot.make(stageInput(1, frames, generation: UUID()))
@@ -79,6 +87,49 @@ func registerGridThumbnailStageTests() {
         checkEqual(snapshot.navigation.neighbour(of: frames[3].id, by: -1)?.id, frames[2].id, "ungrouped Photos chunks retain their original row")
         checkNil(snapshot.navigation.neighbour(of: frames[2].id, by: -1), "stop at the ungrouped row's start")
     })
+}
+
+@MainActor
+private func testAlbumGridPublication(directory: URL, pixels: CGImage, payloads: [Data]) async {
+    let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+    session.frameOrder = .only([.art, .minimalVisualDistance])
+    let frames = (0..<120).map { index in
+        FrameFixture.make(id: String(format: "f%06d", index), time: Double(index), artScore: Float(index),
+                          featurePrint: payloads[index % payloads.count])
+    }
+    let stage = GridThumbnailStage(), generation = session.thumbnailGeneration
+    defer { stage.stop() }
+    stage.onCommit = { session.commitGridNavigation($0.navigation, generation: $0.key.generation) }
+    var changing = false
+    var revisions: [UInt64] = []
+    let subscription = session.gridLayoutUpdates.sink { _ in
+        MainActor.assumeIsolated {
+            check(!changing, "grid delivery happens after the mutation finishes")
+            revisions.append(session.gridRevision)
+            stage.submit(stageInput(session.gridRevision, session.displayOrderFrames, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 130)) { _ in pixels }
+        }
+    }
+    changing = true
+    session.updateAnalyzedFrames(Array(frames.prefix(1)), isProgressive: true)
+    changing = false
+    await stageWait { stage.current?.navigation.frames.count == 1 }
+    changing = true
+    session.updateAnalyzedFrames(Array(frames.prefix(80)), isProgressive: true)
+    changing = false
+    check(!session.isSortingVisualDistance, "a partial album does not launch another visual route")
+    checkEqual(session.displayOrderFrames.map(\.id), frames.prefix(80).map(\.id),
+               "growing results append in source order instead of shuffling the whole viewport")
+    await stageWait { stage.current?.navigation.frames.count == 80 }
+    changing = true
+    session.updateAnalyzedFrames(frames)
+    changing = false
+    await stageWait { !session.isSortingVisualDistance && stage.current?.key.revision == session.gridRevision }
+    checkEqual(stage.current?.navigation.frames.count, frames.count, "the grid cannot remain stuck on the initial photo or a prefix")
+    checkEqual(stage.current?.navigation.frames.map(\.id), session.displayOrderFrames.map(\.id),
+               "the last asynchronous route reaches the displayed layout without another UI event")
+    check(revisions.contains(session.gridRevision), "the final layout revision is delivered explicitly")
+    withExtendedLifetime(subscription) {}
 }
 
 @MainActor

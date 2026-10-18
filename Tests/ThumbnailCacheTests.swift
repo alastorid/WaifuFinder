@@ -1,6 +1,7 @@
 import AppKit
 import QuartzCore
 import Foundation
+import Combine
 
 // Thumbnail cache: the bounded, in-memory store for analysis-resolution JPEGs.
 //
@@ -245,6 +246,28 @@ func registerThumbnailCacheTests() {
             }
             checkNil(presentation.ready, "offscreen cells eventually release their strong image")
             checkNil(GridThumbnailLoader.shared.cachedImage(identity: identity), "the visibility lease is also released")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "recycled cells display staged replacement pixels before their task and never publish a blank swap", knownBug: nil) {
+        let oldPixels = try ImageFixture.cgImage(width: 32, height: 24, gray: 0.2)
+        let newPixels = try ImageFixture.cgImage(width: 96, height: 64, gray: 0.8)
+        await Task { @MainActor in
+            let oldIdentity = UUID().uuidString, newIdentity = UUID().uuidString, owner = UUID()
+            let loader = GridThumbnailLoader.shared
+            loader.retainVisibleImage(newPixels, identity: newIdentity, owner: owner)
+            defer { loader.releaseVisibleImage(identity: newIdentity, owner: owner) }
+            let presentation = GridThumbnailPresentation(identity: oldIdentity)
+            await presentation.prepare(identity: oldIdentity) { oldPixels }
+            check(presentation.image(for: newIdentity) === newPixels,
+                  "a reused cell can paint the staged image during body evaluation, before its task runs")
+            var publications: [String?] = []
+            let subscription = presentation.$ready.dropFirst().sink { publications.append($0?.identity) }
+            await presentation.prepare(identity: newIdentity) {
+                check(false, "already staged pixels must not be fetched again")
+                return nil
+            }
+            checkEqual(publications, [newIdentity], "the replacement publishes once without a nil frame in between")
+            withExtendedLifetime(subscription) {}
         }.value
     })
     Registry.shared.add(suite: suite, TestCase(name: "late and canceled thumbnail results cannot paint a replacement cell", knownBug: nil) {

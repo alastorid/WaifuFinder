@@ -32,8 +32,9 @@ final class GridThumbnailPresentation: ObservableObject {
     }
 
     func image(for identity: String) -> CGImage? {
-        guard ready?.identity == identity else { return nil }
-        return ready?.image
+        // SwiftUI can reuse a row's StateObject for a different frame before its
+        // task runs. Staged pixels must be available during that first body pass.
+        ready?.identity == identity ? ready?.image : loader.cachedImage(identity: identity)
     }
 
     func prepare(identity: String, load: () async -> CGImage?) async {
@@ -44,11 +45,11 @@ final class GridThumbnailPresentation: ObservableObject {
         let ticket = revision
         activeIdentity = identity
         if ready?.identity == identity { return }
-        clear()
         if let pixels = loader.cachedImage(identity: identity) {
             publish(pixels, identity: identity)
             return
         }
+        clear()
         guard let pixels = await load(), !Task.isCancelled,
               revision == ticket, activeIdentity == identity else { return }
         publish(pixels, identity: identity)

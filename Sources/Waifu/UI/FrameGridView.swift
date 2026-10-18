@@ -85,7 +85,7 @@ struct FrameGridView: View, Equatable {
                     }
                 }
                 .onDisappear { thumbnailStage.stop(); thumbnailPrefetcher.stop() }
-                .onChange(of: gridRevision) { _, _ in
+                .onReceive(session.gridLayoutUpdates) { _ in
                     prepareStage(size: geometry.size)
                 }
                 .onChange(of: geometry.size) { _, _ in
@@ -234,7 +234,7 @@ struct FrameGridView: View, Equatable {
 
     private func prepareStage(size: CGSize) {
         let generation = session.thumbnailGeneration
-        let key = GridStageKey(revision: gridRevision, generation: generation, width: size.width,
+        let key = GridStageKey(revision: session.gridRevision, generation: generation, width: size.width,
             columns: columnCount(in: size.width), groupColumns: rowColumnCount,
             grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
             square: usesSquarePhotoThumbnails)

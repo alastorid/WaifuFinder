@@ -252,6 +252,18 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Changes only when the grid's arrangement or layout inputs change. Selection,
     /// focus, and preview updates must not force a large LazyStack to diff every row.
     private(set) var gridRevision: UInt64 = 0
+    private let gridLayoutSubject = PassthroughSubject<Void, Never>()
+    /// Layout consumers must read after every stored layout field and revision
+    /// have committed, including the final asynchronous visual-sort result.
+    var gridLayoutUpdates: AnyPublisher<Void, Never> {
+        gridLayoutSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+    private var defersVisualOrder = false
+
+    private func invalidateGridLayout() {
+        gridRevision &+= 1
+        gridLayoutSubject.send(())
+    }
     private(set) var thumbnailGeneration = UUID()
     @Published private(set) var groups: [FrameGroup] = []
     @Published private(set) var selectedFrameIDs: Set<FrameID> = []
@@ -373,7 +385,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Two ways of looking at the same ordered list, so it is view state: nothing
     /// about the arrangement changes, only how the same frames are laid out.
     @Published var groupRows: Bool = true {
-        didSet { gridRevision &+= 1 }
+        didSet { invalidateGridLayout() }
     }
 
     /// Whether the analysis' groups participate in the grid arrangement. The group
@@ -743,6 +755,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if progress.phase != .complete && progress.phase != .idle {
             progress.phase = .cancelled
             progress.message = "Cancelled"
+        }
+        if defersVisualOrder {
+            defersVisualOrder = false
+            recomputeVisualOrder()
         }
     }
 
@@ -1442,7 +1458,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                             onProgress: { _ in })
             let grouping = IncrementalFrameGrouper(settings: settings.grouping)
             var lastPulse = started
-            var lastPhotosUpdate = Date.distantPast
+            var lastPhotosUpdate = started
             if album != nil { PhotosMedia.shared.resetSkippedItems(videoInfo.url) }
             for try await frame in scoredFrames {
                 try Task.checkCancellation()
@@ -1456,7 +1472,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 progress.facesProcessed += frame.faceCount
                 if frame.hasSignificantFace { progress.framesWithFaces += 1 }
                 let now = Date()
-                if album != nil && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
+                // Start with a useful batch rather than mounting a singleton
+                // grid that is immediately replaced by the rest of the album.
+                // Small albums publish in full through completeAnalysis below.
+                if album != nil && analyzed.count >= 64 && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
                     let liveGroups = try grouping.snapshot()
                     let liveFrames = Self.assignGroups(liveGroups, to: analyzed)
                     await acceptLivePhotos(frames: liveFrames, groups: liveGroups, token: token)
@@ -1537,12 +1556,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func acceptLivePhotos(frames: [AnalyzedFrame], groups: [FrameGroup], token: UUID) {
         guard analysisGeneration == token else { return }
         self.groups = groups
-        updateAnalyzedFrames(frames)
+        updateAnalyzedFrames(frames, isProgressive: true)
     }
 
     /// Both progressive and final snapshots share candidate invalidation and
     /// preserve completed tags while the album's scored prefix grows.
-    func updateAnalyzedFrames(_ incoming: [AnalyzedFrame]) {
+    func updateAnalyzedFrames(_ incoming: [AnalyzedFrame], isProgressive: Bool = false) {
+        defersVisualOrder = isProgressive
         frames = preservingLiveTags(incoming)
     }
 
@@ -1601,9 +1621,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         self.progress = progress
         analysisTask = nil
         isRegrouping = false
+        if defersVisualOrder {
+            defersVisualOrder = false
+            recomputeVisualOrder()
+        }
     }
 
     private func clearResults() {
+        defersVisualOrder = false
         thumbnailGeneration = UUID()
         for request in thumbnailRequests.values { request.task.cancel() }
         thumbnailRequests.removeAll(keepingCapacity: false)
@@ -1869,14 +1894,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             rowHeightRatios[value.id] = heightRatio
         }
-        gridRevision &+= 1
+        invalidateGridLayout()
     }
 
     /// Cache by the actual shown set, its seed order and feature payloads. Metadata
     /// refreshes reuse the route but still display the newest frame values. Flipping
     /// direction reverses the cached route without recalculating any distances.
     private func visuallyOrderedFrames(_ shown: [AnalyzedFrame]) -> [AnalyzedFrame] {
-        guard frameOrder.minimalVisualDistance.enabled, shown.count > 1 else {
+        guard frameOrder.minimalVisualDistance.enabled, !defersVisualOrder, shown.count > 1 else {
             if visualOrderTask != nil {
                 visualOrderTask?.cancel()
                 visualOrderTask = nil
@@ -1888,7 +1913,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 completedVisualOrderInput = nil
                 visualOrderIDs = []
             }
-            return shown
+            // A growing album appends in source order. Re-solving every prefix
+            // repeatedly moves visible cells and invalidates their prepared pixels.
+            return defersVisualOrder && frameOrder.minimalVisualDistance.enabled
+                ? shown.sorted { $0.id.sampleIndex < $1.id.sampleIndex } : shown
         }
         let input = shown.map { VisualOrderInput(id: $0.id, featurePrint: $0.featurePrint) }
         if completedVisualOrderInput != input, pendingVisualOrderInput != input {
