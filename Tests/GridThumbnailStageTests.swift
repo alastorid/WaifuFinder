@@ -38,6 +38,55 @@ private final class StageReads {
 
 func registerGridThumbnailStageTests() {
     let suite = "thumbnail staging"
+    Registry.shared.add(suite: suite, TestCase(name: "an album grid mounted after loading receives the latest layout without another mutation", knownBug: nil) {
+        let directory = try Temporary.directory("late-album-grid")
+        let pixels = try ImageFixture.cgImage(width: 16, height: 16)
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let frames = (0..<120).map(stageFrame)
+            session.updateAnalyzedFrames(frames)
+            let stage = GridThumbnailStage()
+            defer { stage.stop() }
+            let subscription = session.gridLayoutUpdates.sink { revision in
+                MainActor.assumeIsolated {
+                    checkEqual(revision, session.gridRevision, "the replay names the committed revision")
+                    stage.submit(stageInput(revision, session.displayOrderFrames, generation: session.thumbnailGeneration),
+                                 viewportSize: CGSize(width: 263, height: 130)) { _ in pixels }
+                }
+            }
+            await stageWait { stage.current?.navigation.frames.count == frames.count }
+            checkEqual(stage.current?.navigation.frames.map(\.id), frames.map(\.id),
+                       "a late subscriber paints the whole album without needing another event")
+            withExtendedLifetime(subscription) {}
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "album loading and stale empty snapshots cannot claim filters rejected the photos", knownBug: nil) {
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: false, snapshotGenerationMatches: true,
+            snapshotRevisionMatches: false, analysisRunning: false, displayedCount: 120,
+            analyzedCount: 120, filtersActive: false), .loading,
+            "the initial empty snapshot is being replaced by real photos, not a filter failure")
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: false, snapshotGenerationMatches: true,
+            snapshotRevisionMatches: true, analysisRunning: true, displayedCount: 0,
+            analyzedCount: 0, filtersActive: false), .loading,
+            "an album awaiting its first batch shows loading")
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: false, snapshotGenerationMatches: true,
+            snapshotRevisionMatches: true, analysisRunning: false, displayedCount: 0,
+            analyzedCount: 120, filtersActive: true), .filtered,
+            "only a settled, actually filtered empty result shows the filter warning")
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: false, snapshotGenerationMatches: true,
+            snapshotRevisionMatches: true, analysisRunning: false, displayedCount: 0,
+            analyzedCount: 0, filtersActive: false), .empty,
+            "an album with no available photos must not suggest changing nonexistent limits")
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: true, snapshotGenerationMatches: true,
+            snapshotRevisionMatches: false, analysisRunning: true, displayedCount: 240,
+            analyzedCount: 240, filtersActive: false), .content,
+            "existing album content stays visible while the next batch prepares")
+        checkEqual(FrameGridStatus.resolve(snapshotHasRows: true, snapshotGenerationMatches: false,
+            snapshotRevisionMatches: true, analysisRunning: true, displayedCount: 0,
+            analyzedCount: 0, filtersActive: false), .loading,
+            "a previous album's content does not determine the new album's status")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "a growing album delivers its final committed layout and defers repeated visual routes", knownBug: nil) {
         let directory = try Temporary.directory("album-grid-publication")
         let pixels = try ImageFixture.cgImage(width: 16, height: 16)

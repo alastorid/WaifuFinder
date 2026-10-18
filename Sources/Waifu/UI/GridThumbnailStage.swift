@@ -220,6 +220,7 @@ final class GridThumbnailStage: ObservableObject {
         request?.cancel()
         request = nil
         guard current?.key != input.key else { return }
+        Diag.trace(.grid, message: "stage submit revision=\(input.key.revision) frames=\(input.frames.count) viewport=\(viewportSize)")
         if viewport.height <= 0 { viewport = CGRect(origin: .zero, size: viewportSize) }
         if let current, current.key.generation != input.key.generation {
             viewport = CGRect(origin: .zero, size: viewportSize)
@@ -299,6 +300,7 @@ final class GridThumbnailStage: ObservableObject {
 
     private func commit(_ request: Request, snapshot: GridStageSnapshot) {
         guard self.request?.ticket == request.ticket else { return }
+        Diag.trace(.grid, message: "stage commit revision=\(snapshot.key.revision) frames=\(snapshot.navigation.frames.count) rows=\(snapshot.rows.count) wanted=\(request.wanted.count) ready=\(request.wanted.keys.filter { request.pixels.contains($0) }.count)")
         request.cancel()
         self.request = nil
         previous = current

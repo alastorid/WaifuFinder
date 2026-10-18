@@ -208,7 +208,6 @@ struct RootView: View {
                     }
                 }
             )
-            .equatable()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if rightPanelExpanded {

@@ -19,10 +19,10 @@ import SwiftUI
 /// opens the zoomable preview** (it no longer toggles selection — selecting has its
 /// own click, and the preview is what a frame deserves when you stop on it), Home and
 /// ⌘←/↑ focus the first frame, End and ⌘→/↓ focus the last, and Return selects.
-struct FrameGridView: View, Equatable {
-    /// The root observes the full session for toolbar and player state. Keep this
-    /// grid itself keyed only to arrangement changes so a focus/selection update
-    /// doesn't diff every item in a large filtered result.
+struct FrameGridView: View {
+    /// The asynchronous thumbnail stage must be allowed to redraw independently
+    /// of the session revision. An equality gate here can retain an empty tree
+    /// after the stage has committed its decoded rows.
     let session: WaifuSession
     let gridRevision: UInt64
     let squarePhotoThumbnails: Bool
@@ -30,10 +30,6 @@ struct FrameGridView: View, Equatable {
     /// Called when the user clicks a frame (single-click replaces selection,
     /// modifier clicks toggle or extend selection; Return also selects).
     let onFrameClick: (AnalyzedFrame, ClickKind) -> Void
-
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.gridRevision == rhs.gridRevision && lhs.squarePhotoThumbnails == rhs.squarePhotoThumbnails
-    }
 
     /// Whether the grid has keyboard focus.
     @FocusState private var isFocused: Bool
@@ -140,9 +136,7 @@ struct FrameGridView: View, Equatable {
         }
         .background(Color(nsColor: .textBackgroundColor))
         .overlay {
-            if thumbnailStage.current?.rows.isEmpty == true && !session.frames.isEmpty {
-                emptyState
-            }
+            FrameGridStatusView(session: session, stage: thumbnailStage)
         }
         .onAppear { if !session.frames.isEmpty { isFocused = true } }
     }
@@ -151,6 +145,7 @@ struct FrameGridView: View, Equatable {
 
     @ViewBuilder
     private var stagedLayout: some View {
+        let _ = Diag.trace(.grid, message: "grid render input=\(gridRevision) revision=\(thumbnailStage.current?.key.revision.description ?? "nil") rows=\(thumbnailStage.current?.rows.count ?? 0)")
         if let snapshot = thumbnailStage.current {
             LazyVStack(alignment: .leading, spacing: snapshot.key.grouped ? 12 : spacing) {
                 ForEach(snapshot.rows) { row in
@@ -373,23 +368,6 @@ struct FrameGridView: View, Equatable {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             proxy.scrollTo(target.rowID, anchor: .center)
-        }
-    }
-
-    /// Shown when the arrangement hides everything — most often the `Selected`
-    /// filter before anything has been selected.
-    private var emptyState: some View {
-        let isOrderFilter = session.photosAlbumURL != nil && session.photosOrderFilter != .all
-        return VStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: 32))
-                .foregroundStyle(.tertiary)
-            Text(isOrderFilter ? "No photos match this order state" : "Nothing matches these limits")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text(isOrderFilter ? "Click the order filter to show all photos, or use Sync order on a photo." : "\(session.frames.count) frames analysed — widen a range in the panel")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
         }
     }
 
@@ -642,6 +620,9 @@ private struct FrameCell: View {
               : "\(timecode(frame.timeSeconds)) · art \(String(format: "%.2f", frame.artScore))")
         // Keep the empty slot measurable so late arrivals can detect stage entry.
         .allowsHitTesting(visibleThumbnail != nil)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(isPhotosSource ? "Photo thumbnail" : "Frame thumbnail")
+        .accessibilityIdentifier("frame-thumbnail-\(frame.id.sampleIndex)")
         .accessibilityHidden(visibleThumbnail == nil)
         .onScrollVisibilityChange(threshold: 0.01) { isThumbnailVisible = $0 }
         // Progress, tagging, and player updates must not redraw every thumbnail.

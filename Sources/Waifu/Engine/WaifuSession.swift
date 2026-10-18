@@ -252,17 +252,20 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Changes only when the grid's arrangement or layout inputs change. Selection,
     /// focus, and preview updates must not force a large LazyStack to diff every row.
     private(set) var gridRevision: UInt64 = 0
-    private let gridLayoutSubject = PassthroughSubject<Void, Never>()
+    private let gridLayoutSubject = CurrentValueSubject<UInt64, Never>(0)
     /// Layout consumers must read after every stored layout field and revision
     /// have committed, including the final asynchronous visual-sort result.
-    var gridLayoutUpdates: AnyPublisher<Void, Never> {
-        gridLayoutSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    var gridLayoutUpdates: AnyPublisher<UInt64, Never> {
+        // A grid can mount (or renew its subscription) after an album update.
+        // Replay the current revision rather than waiting for another mutation.
+        gridLayoutSubject.removeDuplicates().receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
     private var defersVisualOrder = false
 
     private func invalidateGridLayout() {
         gridRevision &+= 1
-        gridLayoutSubject.send(())
+        Diag.trace(.grid, message: "layout revision=\(gridRevision) analyzed=\(frames.count) displayed=\(displayOrderFrames.count) rows=\(displayedRows.count) loading=\(progress.isRunning)")
+        gridLayoutSubject.send(gridRevision)
     }
     private(set) var thumbnailGeneration = UUID()
     @Published private(set) var groups: [FrameGroup] = []
@@ -707,6 +710,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var importedMedia: PreparedMedia?
 
     func loadVideo(at url: URL) {
+        Diag.trace(.analysis, message: "load source photos=\(PhotosMedia.shared.album(url)?.items.count ?? 0)")
         closeUncover()
         cancelTagging(keepingCompletedResults: false)
         cancel()

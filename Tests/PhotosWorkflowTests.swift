@@ -198,10 +198,6 @@ func registerPhotosWorkflowTests() {
             let portrait = GridThumbnailLayout.size(width: 160, sourceAspect: 0.5, square: false)
             checkEqual(portrait.height, 320, "full aspect also preserves portrait height before loading")
 
-            let session = WaifuSession()
-            let full = FrameGridView(session: session, gridRevision: 1, squarePhotoThumbnails: false, onFrameClick: { _, _ in })
-            let square = FrameGridView(session: session, gridRevision: 1, squarePhotoThumbnails: true, onFrameClick: { _, _ in })
-            check(full != square, "the ranked grid must update when only shape changes")
         }
     })
     Registry.shared.add(suite: suite, TestCase(name: "cached thumbnails feed the tagger without originals or model weights", knownBug: nil) {
