@@ -267,8 +267,6 @@ struct RemoteSettingsView: View {
                                           ready: entry.available,
                                           detail: entry.available ? entry.message : entry.message)
                         }
-                        capabilityRow("Apple Vision", ready: true,
-                                      detail: "Runs on this Mac")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }

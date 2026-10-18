@@ -9,7 +9,7 @@ func registerPhotosWorkflowTests() {
             error: NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.operationInterrupted.rawValue))
         try await PhotosOrderSync.run(operation: { try await probe.attempt() }, wait: { await probe.wait($0) })
         checkEqual(await probe.attempts, 3, "temporary failures recover automatically")
-        checkEqual(await probe.delays, [0.25, 0.75], "retries back off without blocking the UI")
+        checkEqual(await probe.delays, [0.25, 0.5], "retries back off without blocking the UI")
     })
     Registry.shared.add(suite: suite, TestCase(name: "sync retry refetches order after a successful commit with delayed verification", knownBug: nil) {
         let probe = PhotosOrderSyncProbe(failures: 0, error: PhotosOrderSync.VerificationError.orderNotVisible)
@@ -18,13 +18,14 @@ func registerPhotosWorkflowTests() {
         checkEqual(await probe.writes, 1, "the retry recognizes the committed order instead of replaying moves")
         checkEqual(await probe.order, ["C", "A", "B"], "the requested order is retained")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "sync stops after three transient failures and never retries permanent errors", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "sync stops after seven retries and never retries permanent errors", knownBug: nil) {
         let transient = NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.internalError.rawValue)
         let probe = PhotosOrderSyncProbe(failures: 10, error: transient)
         _ = await checkThrowsAsync("persistent errors reach the caller") {
             try await PhotosOrderSync.run(operation: { try await probe.attempt() }, wait: { await probe.wait($0) })
         }
-        checkEqual(await probe.attempts, 3, "retry count is bounded")
+        checkEqual(await probe.attempts, 8, "one initial attempt plus seven retries")
+        checkEqual(await probe.delays, [0.25, 0.5, 1, 1.5, 2, 2, 2], "persistent transient failures use the full capped backoff")
         for error in [
             NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.accessUserDenied.rawValue),
             NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.changeNotSupported.rawValue),

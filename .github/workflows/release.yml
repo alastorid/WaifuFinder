@@ -192,11 +192,24 @@ jobs:
           cp "$dmg" "$latest"
           shasum -a 256 "$dmg" > "${dmg}.sha256"
           if [[ "$EVENT_NAME" == "push" ]]; then
-            gh release create "$RELEASE_TAG" \
-              "$dmg" "${dmg}.sha256" "$latest" \
-              --title "WaifuFinder ${WAIFU_VERSION} (non-commercial edition)" \
-              --generate-notes \
-              --verify-tag
+            existing_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
+            if [[ "$existing_draft" == "true" ]]; then
+              # Reuse a prepared draft for this tag, replacing its assets with
+              # the artifacts built and verified by this workflow run.
+              gh release upload "$RELEASE_TAG" \
+                "$dmg" "${dmg}.sha256" "$latest" \
+                --clobber
+              gh release edit "$RELEASE_TAG" --draft=false --verify-tag
+            elif [[ "$existing_draft" == "false" ]]; then
+              echo "Release $RELEASE_TAG is already published; refusing to replace its assets." >&2
+              exit 1
+            else
+              gh release create "$RELEASE_TAG" \
+                "$dmg" "${dmg}.sha256" "$latest" \
+                --title "WaifuFinder ${WAIFU_VERSION} (non-commercial edition)" \
+                --generate-notes \
+                --verify-tag
+            fi
           else
             gh release create "$RELEASE_TAG" \
               "$dmg" "${dmg}.sha256" "$latest" \

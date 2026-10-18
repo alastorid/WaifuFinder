@@ -436,7 +436,9 @@ final class PhotosMedia: @unchecked Sendable {
             timeout: allowNetwork ? 120 : 10,
             timeoutError: allowNetwork ? Self.failure("Photos did not return this rendition. Try again.") : Self.localUnavailable(),
             timeoutFallback: { delivery.bestImage },
-            cancel: { manager.cancelImageRequest($0) })
+            // Capture the PhotosMedia owner (already audited as Sendable) rather
+            // than PhotosKit's non-Sendable manager directly.
+            cancel: { [self] requestID in renditionManager.cancelImageRequest(requestID) })
         let image = try await request.perform { completion in
             manager.requestImage(for: asset, targetSize: size, contentMode: .aspectFit, options: options) { image, info in
                 if (info?[PHImageCancelledKey] as? Bool) == true { completion(.failure(CancellationError())); return }

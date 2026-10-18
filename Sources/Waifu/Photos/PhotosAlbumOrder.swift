@@ -48,7 +48,7 @@ enum PhotosOrderSync {
             try await Task.sleep(for: .seconds(delay))
         }
     ) async throws {
-        let delays: [TimeInterval] = [0.25, 0.75]
+        let delays: [TimeInterval] = [0.25, 0.5, 1, 1.5, 2, 2, 2]
         for attempt in 0...delays.count {
             try Task.checkCancellation()
             do {
