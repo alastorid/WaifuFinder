@@ -50,10 +50,12 @@ struct GridStageRow: Identifiable, Sendable {
 /// SwiftUI is laying out a scrolling frame.
 struct GridStageSnapshot: Sendable {
     let key: GridStageKey
+    let navigation: FrameNavigationOrder
     let sourceURL: URL?
     let rows: [GridStageRow]
     let contentHeight: CGFloat
     let rowIndexByToken: [String: Int]
+    let rowIndexByFrameID: [FrameID: Int]
 
     static func make(_ input: GridStageInput) -> Self {
         let key = input.key
@@ -103,8 +105,13 @@ struct GridStageSnapshot: Sendable {
         } else { chunks(input.frames, prefix: "flat:") }
         let tokenPrefix = key.tokenPrefix
         let indices = Dictionary(uniqueKeysWithValues: result.enumerated().map { (tokenPrefix + $0.element.id, $0.offset) })
-        return Self(key: key, sourceURL: input.sourceURL, rows: result,
-                    contentHeight: result.isEmpty ? 2 : top - spacing + 1, rowIndexByToken: indices)
+        let frameIndices = Dictionary(uniqueKeysWithValues: result.enumerated().flatMap { index, row in
+            row.items.map { ($0.id, index) }
+        })
+        return Self(key: key, navigation: FrameNavigationOrder(frames: input.frames, rows: input.rows, groupRows: key.grouped),
+                    sourceURL: input.sourceURL, rows: result,
+                    contentHeight: result.isEmpty ? 2 : top - spacing + 1, rowIndexByToken: indices,
+                    rowIndexByFrameID: frameIndices)
     }
 
     /// Project the NEW order into the OLD viewport, including scroll clamping
@@ -169,6 +176,8 @@ private final class GridPreparedImages {
 @MainActor
 final class GridThumbnailStage: ObservableObject {
     @Published private(set) var current: GridStageSnapshot?
+    /// Runs in the same main-actor transaction as the visible layout handoff.
+    var onCommit: ((GridStageSnapshot) -> Void)?
     private(set) var previous: GridStageSnapshot?
     var isPreparing: Bool { request != nil }
 
@@ -296,7 +305,10 @@ final class GridThumbnailStage: ObservableObject {
         request.pixels.settle()
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
-        withTransaction(transaction) { current = snapshot }
+        withTransaction(transaction) {
+            onCommit?(snapshot)
+            current = snapshot
+        }
         // Keep prepared pixels leased until the newly mounted cells acquire
         // their own leases; NSCache eviction cannot tear the atomic handoff.
         let lease = request.pixels

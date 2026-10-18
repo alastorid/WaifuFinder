@@ -225,7 +225,18 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var completedTagSummaryInput: TagSummaryInput?
     private var completedTagSummaryLabels: TagSummary.Labels?
     private var incrementallyTaggedFrames: [AnalyzedFrame]?
-    private var displayedIndex: [FrameID: Int] = [:]
+    private var presentedGridNavigation: FrameNavigationOrder?
+    private var previewNavigation: FrameNavigationOrder?
+
+    private var navigationOrder: FrameNavigationOrder {
+        previewNavigation ?? presentedGridNavigation
+            ?? FrameNavigationOrder(frames: displayOrderFrames, rows: displayedRows, groupRows: usesGroupRows)
+    }
+
+    func commitGridNavigation(_ order: FrameNavigationOrder, generation: UUID) {
+        guard generation == thumbnailGeneration else { return }
+        presentedGridNavigation = order
+    }
     private var visualOrderTask: Task<[FrameID]?, Never>?
     private var visualOrderGeneration = UUID()
     private var pendingVisualOrderInput: [VisualOrderInput]?
@@ -424,6 +435,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// The target of the zoomable frame preview. Set by Space in the grid.
     @Published var previewFrame: AnalyzedFrame? {
         didSet {
+            if previewFrame == nil { previewNavigation = nil }
             if oldValue != nil, previewFrame == nil, let id = focusedFrameID {
                 requestGridScroll(to: id)
             }
@@ -1273,7 +1285,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// IDs in the same order the user sees, with each group contiguous and
     /// ungrouped frames after the groups.
     private var selectionOrder: [FrameID] {
-        displayOrderFrames.map(\.id)
+        navigationOrder.frames.map(\.id)
     }
 
     func selectFrame(_ id: FrameID, command: Bool = false, shift: Bool = false) {
@@ -1633,6 +1645,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         revealedGroups = []
         frameLimits = .none
         previewFrame = nil
+        presentedGridNavigation = nil
         displayedFrames = []
         displayOrderFrames = []
         tagFacetTags = []
@@ -1845,11 +1858,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         displayedRows = FrameArrangement.rows(of: displayedFrames)
         displayOrderFrames = groupingEnabled && !frameOrder.minimalVisualDistance.enabled
             ? displayedRows.flatMap(\.frames) : displayedFrames
-        displayedIndex.removeAll(keepingCapacity: true)
-        displayedIndex.reserveCapacity(displayOrderFrames.count)
-        for (index, frame) in displayOrderFrames.enumerated() {
-            displayedIndex[frame.id] = index
-        }
         rowPosition = [:]
         rowHeightRatios = [:]
         for (row, value) in displayedRows.enumerated() {
@@ -2110,39 +2118,26 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// at its ends; in the flow grid it walks the group-preserving displayed order.
     func focusNeighbour(_ delta: Int) {
         guard uncover == nil else { return }
-        let frames = displayOrderFrames
+        let order = navigationOrder
+        let frames = order.frames
         guard !frames.isEmpty else { return }
         guard let current = focusedFrameID,
-              let index = displayedIndex[current] else {
+              order.indexByID[current] != nil else {
             focus(on: frames[0])
             return
         }
-
-        var target: Int?
-        if usesGroupRows,
-           let location = rowPosition[current] {
-            let row = displayedRows[location.row]
-            let next = location.position + delta
-            if row.frames.indices.contains(next) {
-                let neighbour = row.frames[next].id
-                target = displayedIndex[neighbour]
-            }
-        } else {
-            let next = index + delta
-            if frames.indices.contains(next) { target = next }
-        }
-
-        guard let target, frames.indices.contains(target) else { return }
-        focus(on: frames[target])
+        guard let target = order.neighbour(of: current, by: delta) else { return }
+        focus(on: target)
     }
 
     /// Moves focus to the first frame of the next or previous group.
     func focusGroupEdge(forward: Bool) {
         guard uncover == nil, groupingEnabled else { return }
-        let frames = displayOrderFrames
+        let order = navigationOrder
+        let frames = order.frames
         guard !frames.isEmpty else { return }
         guard let current = focusedFrameID,
-              let index = displayedIndex[current] else {
+              let index = order.indexByID[current] else {
             focus(on: frames[0])
             return
         }
@@ -2169,7 +2164,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// result, regardless of whether the grid is flat or arranged in group rows.
     func focusDisplayedBoundary(forward: Bool) {
         guard uncover == nil else { return }
-        guard let frame = forward ? displayOrderFrames.last : displayOrderFrames.first else { return }
+        let frames = navigationOrder.frames
+        guard let frame = forward ? frames.last : frames.first else { return }
         focus(on: frame)
     }
 
@@ -2189,6 +2185,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// focus, so they must take the same selection path as keyboard navigation.
     func showPreview(_ frame: AnalyzedFrame) {
         guard uncover == nil else { return }
+        if previewFrame == nil {
+            // Keep the sequence the user opened, even if a pending visual route
+            // finishes or the thumbnail stage commits behind the overlay.
+            previewNavigation = navigationOrder
+        }
         gridNavigationFrameID = nil
         focus(on: frame, scrollIntoView: false)
         previewFrame = frame

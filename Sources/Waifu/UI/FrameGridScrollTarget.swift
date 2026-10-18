@@ -1,12 +1,12 @@
 import Foundation
 
-enum FrameGridScrollTarget: Equatable {
-    case frame(FrameID)
-    case row(String)
+struct FrameGridScrollTarget: Equatable {
+    let rowID: String
 
-    static func resolve(frame: FrameID, rowID: String?, group: FrameGroupID?,
-                        groupRows: Bool, photosSource: Bool) -> Self {
-        if groupRows, let rowID, !(photosSource && group == nil) { return .row(rowID) }
-        return .frame(frame)
+    /// The outer LazyVStack knows its row IDs even before it mounts their cells.
+    /// Resolve against the displayed snapshot, including individual Photos chunks.
+    static func resolve(frame: FrameID, snapshot: GridStageSnapshot) -> Self? {
+        guard let index = snapshot.rowIndexByFrameID[frame] else { return nil }
+        return Self(rowID: snapshot.rows[index].id)
     }
 }

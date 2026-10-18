@@ -35,6 +35,8 @@ struct FramePreviewView: View {
     @State private var displayedFrameID: FrameID?
     @State private var note: String?
     @State private var reading = false
+    /// A failed read is finished too; an unreadable frame must not trap held arrows.
+    @State private var completedReadFrameID: FrameID?
     /// Zoom as a multiple of the frame's fit-to-window size (1 = fit).
     @State private var zoom: CGFloat = 1
     /// The point in the image kept at the viewport center while frames change.
@@ -139,7 +141,7 @@ struct FramePreviewView: View {
     }
 
     private func arrowDown(_ direction: Int, isRepeat: Bool) {
-        let loading = reading || displayedFrameID != session.previewFrame?.id
+        let loading = reading || completedReadFrameID != session.previewFrame?.id
         if let step = arrows.down(direction, isRepeat: isRepeat, loading: loading) {
             session.focusNeighbour(step)
         }
@@ -324,7 +326,10 @@ struct FramePreviewView: View {
         reading = true
         animation = nil
         defer {
-            if loadID == request { reading = false }
+            if loadID == request {
+                reading = false
+                if !Task.isCancelled { completedReadFrameID = target.id }
+            }
         }
 
         // Paint the target thumbnail before awaiting its original, including

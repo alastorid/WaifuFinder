@@ -243,6 +243,16 @@ struct FrameOrderPanel: View {
 
     // MARK: - Grouping
 
+    /// The checkbox reports the layout currently in use. `groupRows` remains the
+    /// user's saved preference while grouping is paused or visual-distance ordering
+    /// requires a continuous grid.
+    private var groupRowsBinding: Binding<Bool> {
+        Binding(
+            get: { session.usesGroupRows },
+            set: { session.groupRows = $0 }
+        )
+    }
+
     private var groupingPanel: some View {
         collapsiblePanel(title: "Grouping", isExpanded: $groupingExpanded,
                          titleAccessory: session.isRegrouping
@@ -306,14 +316,14 @@ struct FrameOrderPanel: View {
 
                 perGroupSection
 
-                Toggle("One group per line", isOn: $session.groupRows)
+                Toggle("One group per line", isOn: groupRowsBinding)
                     .toggleStyle(.checkbox)
                     .disabled(!session.groupingEnabled || session.frameOrder.minimalVisualDistance.enabled)
-                    .help(session.frameOrder.minimalVisualDistance.enabled
+                    .help(!session.groupingEnabled
+                          ? "Turn grouping on to lay out one group per line."
+                          : session.frameOrder.minimalVisualDistance.enabled
                           ? "Turn off Minimal Visual Distance to lay out one group per line."
-                          : session.groupingEnabled
-                          ? "Keep each group together, either on its own line or in one continuous flow grid."
-                          : "Turn grouping on to lay out one group per line.")
+                          : "Keep each group together, either on its own line or in one continuous flow grid.")
 
                 if !session.beyondCapByGroup.isEmpty {
                     Divider()

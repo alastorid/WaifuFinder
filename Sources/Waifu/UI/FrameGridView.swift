@@ -38,7 +38,6 @@ struct FrameGridView: View, Equatable {
     /// Whether the grid has keyboard focus.
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
-    @State private var deferredScroll: FrameID?
     @State private var committedNavigation: FrameID?
     @StateObject private var thumbnailPrefetcher = GridThumbnailPrefetcher()
 
@@ -74,6 +73,12 @@ struct FrameGridView: View, Equatable {
                     if !empty { isFocused = true }
                 }
                 .onAppear {
+                    thumbnailStage.onCommit = { [weak session] snapshot in
+                        session?.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+                    }
+                    if let snapshot = thumbnailStage.current {
+                        session.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+                    }
                     prepareStage(size: geometry.size)
                     if let snapshot = thumbnailStage.current {
                         thumbnailPrefetcher.install(snapshot: snapshot, session: session)
@@ -103,9 +108,8 @@ struct FrameGridView: View, Equatable {
                             proxy.scrollTo(first.id, anchor: .top)
                         }
                     }
-                    if let id = deferredScroll {
+                    if let id = session.gridNavigationFrameID, isNavigationTarget(id) {
                         committedNavigation = id
-                        deferredScroll = nil
                         scroll(to: id, proxy: proxy)
                     }
                 }
@@ -116,10 +120,9 @@ struct FrameGridView: View, Equatable {
                     thumbnailPrefetcher.setVisibleRows(visible)
                 }
                 .onReceive(session.gridScrollRequests) { id in
-                    guard session.previewFrame == nil, session.uncover == nil, id == session.focusedFrameID,
-                          id == session.gridNavigationFrameID else { return }
-                    if thumbnailStage.isPreparing { deferredScroll = id }
-                    else { committedNavigation = id; scroll(to: id, proxy: proxy) }
+                    guard isNavigationTarget(id) else { return }
+                    committedNavigation = id
+                    scroll(to: id, proxy: proxy)
                 }
                 // @Published emits before its setter commits. Scrolling here can
                 // force a render; defer it so that render sees the closed preview.
@@ -204,17 +207,16 @@ struct FrameGridView: View, Equatable {
                     thumbnailStage.updateHorizontalOffset(row: row.id, offset: offset)
                 }
                 .onAppear {
-                    if let id = committedNavigation, id == session.gridNavigationFrameID, id == session.focusedFrameID,
-                       session.previewFrame == nil, session.uncover == nil,
-                       row.items.contains(where: { $0.id == id }) { proxy.scrollTo(id, anchor: .center) }
+                    scrollHorizontally(to: committedNavigation, in: row, proxy: proxy)
                 }
                 .onChange(of: committedNavigation) { _, id in
-                    if let id, row.items.contains(where: { $0.id == id }) { proxy.scrollTo(id, anchor: .center) }
+                    scrollHorizontally(to: id, in: row, proxy: proxy)
+                }
+                .onChange(of: snapshot.key) { _, _ in
+                    scrollHorizontally(to: committedNavigation, in: row, proxy: proxy)
                 }
                 .onReceive(session.gridScrollRequests) { id in
-                    guard !thumbnailStage.isPreparing, session.previewFrame == nil, session.uncover == nil,
-                          id == session.focusedFrameID, id == session.gridNavigationFrameID else { return }
-                    if row.items.contains(where: { $0.id == id }) { proxy.scrollTo(id, anchor: .center) }
+                    scrollHorizontally(to: id, in: row, proxy: proxy)
                 }
             }
         }
@@ -236,7 +238,6 @@ struct FrameGridView: View, Equatable {
             columns: columnCount(in: size.width), groupColumns: rowColumnCount,
             grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
             square: usesSquarePhotoThumbnails)
-        if thumbnailStage.current?.key != key { committedNavigation = nil }
         let input = GridStageInput(key: key, sourceURL: session.photosAlbumURL ?? session.video?.url,
             rows: session.displayedRows, frames: session.displayOrderFrames,
             beyondCap: session.beyondCapByGroup, revealed: session.revealedGroups)
@@ -353,20 +354,25 @@ struct FrameGridView: View, Equatable {
         return Diag.keyResult("grid.onKeyPress", press, result)
     }
 
-    /// Group strips scroll by row; a Photos ungrouped section is a whole grid and
-    /// must scroll by individual photo instead. Avoid animating lazy measurement.
+    private func isNavigationTarget(_ id: FrameID) -> Bool {
+        session.previewFrame == nil && session.uncover == nil
+            && id == session.focusedFrameID && id == session.gridNavigationFrameID
+    }
+
+    private func scrollHorizontally(to id: FrameID?, in row: GridStageRow, proxy: ScrollViewProxy) {
+        guard let id, isNavigationTarget(id), row.items.contains(where: { $0.id == id }) else { return }
+        proxy.scrollTo(id, anchor: .center)
+    }
+
+    /// Reveal the concrete staged row so lazy offscreen cells can be mounted.
+    /// A horizontal strip then reveals its selected cell when it appears.
     private func scroll(to id: FrameID?, proxy: ScrollViewProxy) {
-        guard let id else { return }
-        let target = FrameGridScrollTarget.resolve(frame: id, rowID: session.rowID(for: id),
-            group: session.frame(id: id)?.groupID, groupRows: session.usesGroupRows,
-            photosSource: session.photosAlbumURL != nil)
+        guard let id, let snapshot = thumbnailStage.current,
+              let target = FrameGridScrollTarget.resolve(frame: id, snapshot: snapshot) else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            switch target {
-            case .row(let row): proxy.scrollTo(row, anchor: .center)
-            case .frame(let frame): proxy.scrollTo(frame, anchor: .center)
-            }
+            proxy.scrollTo(target.rowID, anchor: .center)
         }
     }
 

@@ -64,6 +64,74 @@ func registerGridThumbnailStageTests() {
     Registry.shared.add(suite: suite, TestCase(name: "scrolling retargets a pending batch without restarting its deadline", knownBug: nil) {
         await testStageScroll()
     })
+    Registry.shared.add(suite: suite, TestCase(name: "preview follows the visible route through a staged reversal and stays stable until closed", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 16, height: 16)
+        let directory = try Temporary.directory("staged-preview-route")
+        await testStagePreviewNavigation(pixels, directory: directory)
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "committed group rows keep navigation inside each original row", knownBug: nil) {
+        let frames = (0..<4).map(stageFrame)
+        let rows = [FrameRow(group: FrameGroupID(raw: "a"), frames: Array(frames.prefix(2))),
+                    FrameRow(group: nil, frames: Array(frames.suffix(2)))]
+        let snapshot = GridStageSnapshot.make(stageInput(1, frames, generation: UUID(), grouped: true, rows: rows))
+        checkEqual(snapshot.navigation.neighbour(of: frames[0].id, by: 1)?.id, frames[1].id, "forward within a strip")
+        checkNil(snapshot.navigation.neighbour(of: frames[1].id, by: 1), "stop at strip boundary")
+        checkEqual(snapshot.navigation.neighbour(of: frames[3].id, by: -1)?.id, frames[2].id, "ungrouped Photos chunks retain their original row")
+        checkNil(snapshot.navigation.neighbour(of: frames[2].id, by: -1), "stop at the ungrouped row's start")
+    })
+}
+
+@MainActor
+private func testStagePreviewNavigation(_ pixels: CGImage, directory: URL) async {
+    let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+    session.frameOrder = .only([.time])
+    let frames = (0..<4).map(stageFrame)
+    session.updateAnalyzedFrames(frames)
+    let generation = session.thumbnailGeneration
+    let stage = GridThumbnailStage(preparationLimit: .seconds(2)), reads = StageReads()
+    defer { stage.stop(); reads.finishAll() }
+    stage.onCommit = { session.commitGridNavigation($0.navigation, generation: $0.key.generation) }
+    let size = CGSize(width: 263, height: 130)
+    stage.submit(stageInput(1, frames, generation: generation), viewportSize: size) { _ in pixels }
+    await stageWait { stage.current != nil }
+
+    session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
+    session.frameOrder.toggleDirection(of: .minimalVisualDistance)
+    checkEqual(session.displayOrderFrames.map(\.id), frames.reversed().map(\.id), "model already has the reversed visual route")
+    stage.submit(stageInput(2, session.displayOrderFrames, generation: generation), viewportSize: size) { await reads.read($0) }
+    await stageWait { reads.waiting.count == 2 }
+    checkEqual(stage.current?.key.revision, 1, "the old route is still visible while replacement pixels load")
+    if let snapshot = stage.current {
+        checkEqual(FrameGridScrollTarget.resolve(frame: frames[0].id, snapshot: snapshot)?.rowID,
+                   "flat:0", "arrow reveals use the currently mounted layout while a replacement is pending")
+    }
+    session.showPreview(frames[0])
+    session.focusNeighbour(-1)
+    checkEqual(session.previewFrame?.id, frames[0].id, "the first visible thumbnail has no backward neighbour")
+    session.focusNeighbour(1)
+    checkEqual(session.previewFrame?.id, frames[1].id, "forward follows the thumbnails the user clicked")
+
+    for id in Array(reads.waiting) { reads.finish(id, pixels) }
+    await stageWait { stage.current?.key.revision == 2 }
+    if let snapshot = stage.current {
+        checkEqual(FrameGridScrollTarget.resolve(frame: frames[0].id, snapshot: snapshot)?.rowID,
+                   "flat:1", "the reveal target moves to the new row when its layout commits")
+    }
+    session.focusNeighbour(1)
+    checkEqual(session.previewFrame?.id, frames[2].id, "a hidden grid commit cannot reverse an open preview")
+    session.focusNeighbour(-1)
+    checkEqual(session.previewFrame?.id, frames[1].id, "backward retraces the same sequence")
+    session.focusDisplayedBoundary(forward: true)
+    checkEqual(session.previewFrame?.id, frames[3].id, "end uses the preview's sequence")
+    session.previewFrame = nil
+    session.showPreview(frames[3])
+    session.focusNeighbour(1)
+    checkEqual(session.previewFrame?.id, frames[2].id, "reopening uses the newly displayed reverse sequence")
+    session.previewFrame = nil
+    session.commitGridNavigation(FrameNavigationOrder(frames: frames, rows: [], groupRows: false), generation: UUID())
+    session.focusDisplayedBoundary(forward: false)
+    checkEqual(session.focusedFrameID, frames[3].id, "an obsolete source cannot replace committed navigation")
+    session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
 }
 
 @MainActor

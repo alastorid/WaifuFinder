@@ -29,7 +29,12 @@ func registerFrameSelectionTests() {
         let directory = try Temporary.directory("navigation-scroll")
         try await Task { @MainActor in
             let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
-            let frame = FrameFixture.make(id: "f30")
+            let frame = FrameFixture.make(id: "f30", time: 30)
+            let preceding = FrameFixture.make(id: "f29", time: 29)
+            session.frameOrder = .only([.time])
+            session.updateAnalyzedFrames([preceding, frame])
+            session.focusFromPointer(preceding.id)
+            session.selectFrame(preceding.id)
             var scrolls: [FrameID] = []
             var changing = false
             let subscription = session.gridScrollRequests.sink { id in
@@ -40,10 +45,11 @@ func registerFrameSelectionTests() {
                 }
             }
             changing = true
-            session.focus(on: frame)
+            session.focusNeighbour(1)
             changing = false
             try await Task.sleep(for: .milliseconds(20))
             checkEqual(scrolls, [frame.id], "keyboard navigation requests one reveal")
+            checkEqual(session.selectedFrameIDs, [frame.id], "the reveal targets the thumbnail selected by the arrow")
             scrolls.removeAll()
             session.showPreview(frame)
             try await Task.sleep(for: .milliseconds(20))
@@ -62,17 +68,35 @@ func registerFrameSelectionTests() {
             withExtendedLifetime((subscription, newlyMountedRow)) {}
         }.value
     })
-    Registry.shared.add(suite: "Frame selection", TestCase(name: "ungrouped Photos navigation targets the photo instead of centering its entire grid section", knownBug: nil) {
-        let frame = FrameID(sampleIndex: 9_500)
+    Registry.shared.add(suite: "Frame selection", TestCase(name: "offscreen navigation targets concrete lazy rows in flow, Photos chunks and strips", knownBug: nil) {
+        let frames = (0..<10_000).map { index in
+            AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: 0,
+                faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: nil,
+                thumbnailAspectRatio: 1)
+        }
+        let frame = frames[9_500].id
         let group = FrameGroupID(raw: "group")
-        checkEqual(FrameGridScrollTarget.resolve(frame: frame, rowID: "ungrouped", group: nil,
-            groupRows: true, photosSource: true), .frame(frame), "large ungrouped photo grids scroll to the individual photo")
-        checkEqual(FrameGridScrollTarget.resolve(frame: frame, rowID: "group", group: group,
-            groupRows: true, photosSource: true), .row("group"), "horizontal photo strips scroll by row")
-        checkEqual(FrameGridScrollTarget.resolve(frame: frame, rowID: "ungrouped", group: nil,
-            groupRows: true, photosSource: false), .row("ungrouped"), "video strips retain row navigation")
-        checkEqual(FrameGridScrollTarget.resolve(frame: frame, rowID: "group", group: group,
-            groupRows: false, photosSource: true), .frame(frame), "flow layout always navigates by photo")
+        let ungrouped = FrameRow(group: nil, frames: frames)
+        func snapshot(grouped: Bool, photos: Bool, rows: [FrameRow]) -> GridStageSnapshot {
+            GridStageSnapshot.make(GridStageInput(
+                key: GridStageKey(revision: 1, generation: UUID(), width: 263, columns: 2,
+                    groupColumns: 2, grouped: grouped, photosSource: photos, square: true),
+                sourceURL: nil, rows: rows, frames: frames, beyondCap: [:], revealed: []))
+        }
+        let flow = snapshot(grouped: false, photos: true, rows: [])
+        let photos = snapshot(grouped: true, photos: true, rows: [ungrouped])
+        let strip = snapshot(grouped: true, photos: true, rows: [FrameRow(group: group, frames: frames)])
+        let video = snapshot(grouped: true, photos: false, rows: [ungrouped])
+        checkEqual(FrameGridScrollTarget.resolve(frame: frame, snapshot: flow)?.rowID,
+                   "flat:4750", "flow targets a row known to the outer LazyVStack before its cells mount")
+        checkEqual(FrameGridScrollTarget.resolve(frame: frame, snapshot: photos)?.rowID,
+                   ungrouped.id + ":4750", "ungrouped Photos target the selected photo's chunk, not the entire section")
+        checkEqual(FrameGridScrollTarget.resolve(frame: frame, snapshot: strip)?.rowID,
+                   group.raw, "horizontal photo strips reveal their containing row first")
+        checkEqual(FrameGridScrollTarget.resolve(frame: frame, snapshot: video)?.rowID,
+                   ungrouped.id, "video strips retain row navigation")
+        checkNil(FrameGridScrollTarget.resolve(frame: FrameID(sampleIndex: 10_000), snapshot: flow),
+                 "a target absent from the displayed snapshot waits for a later layout")
     })
     let order = (0..<6).map { FrameID(sampleIndex: $0) }
     Registry.shared.add(suite: "Frame selection", TestCase(name: "plain clicks replace selection and command clicks toggle individual frames", knownBug: nil) {

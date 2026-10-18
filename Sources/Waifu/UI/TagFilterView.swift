@@ -16,6 +16,14 @@ struct TagFilterView: View {
         session.previewFrame == nil && session.uncover == nil && !session.progress.isRunning
     }
 
+    private var hasActiveTags: Bool {
+        !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty
+    }
+
+    private var showsTaggingStatus: Bool {
+        session.taggingProgress.isRunning || session.taggedFrameCount == 0
+    }
+
     private func alphabetical(_ tags: Set<String>) -> [String] {
         tags.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
@@ -60,7 +68,11 @@ struct TagFilterView: View {
         return tags.filter { $0.localizedCaseInsensitiveContains(quickFilterText) }
     }
 
-    private var visibleStandaloneTags: [String] { matching(standaloneTags) }
+    /// Active filters must remain visible and removable, even when the quick
+    /// search or the current results no longer contain their tags.
+    private var visibleStandaloneTags: [String] {
+        wantedTags + unwantedTags + matching(unselectedTags)
+    }
 
     private var visibleCommonTags: [String] { matching(commonTags) }
 
@@ -77,10 +89,11 @@ struct TagFilterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            if session.taggingProgress.isRunning || session.taggedFrameCount == 0 {
+            if showsTaggingStatus {
                 TaggingPanelStatus(session: session, panel: .tags)
-            } else {
-                if session.tagVocabulary == nil {
+            }
+            if hasActiveTags || !showsTaggingStatus {
+                if session.tagVocabulary == nil && !hasActiveTags {
                     Text("Install WD Tagger in Settings to filter by tags.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -101,6 +114,7 @@ struct TagFilterView: View {
                             .textFieldStyle(.plain)
                             .font(.caption)
                             .accessibilityLabel("Quick filter tags")
+                            .help("Search available tags. Wanted and unwanted tags stay visible.")
                         if !quickFilterText.isEmpty {
                             Button {
                                 quickFilterText = ""
@@ -161,7 +175,7 @@ struct TagFilterView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if session.untaggedFrameCountForTagging > 0 {
+                if !showsTaggingStatus, session.untaggedFrameCountForTagging > 0 {
                     TaggingStartButton(session: session, panel: .tags)
                 }
             }
