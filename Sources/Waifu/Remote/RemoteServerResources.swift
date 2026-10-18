@@ -211,8 +211,7 @@ enum RemoteTagImageDecoder {
             }
             let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8,
                                     bytesPerRow: side * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                    bitmapInfo: CGBitmapInfo(rawValue:
-                                        CGImageAlphaInfo.premultipliedLast.rawValue))
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
             guard let context else { throw TaggerError.preprocessing }
             // Copied into the context's own buffer: a `CGImage` does not retain
             // the byte array it was drawn from, and the receive buffer is about
