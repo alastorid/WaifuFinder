@@ -86,10 +86,9 @@ struct FrameGridView: View, Equatable {
                     configureThumbnailPrefetch(width: geometry.size.width)
                 }
                 .onPreferenceChange(GridRowViewportPreferenceKey.self) { rowViewports in
-                    let visible = rowViewports.compactMapValues { viewport in
-                        viewport.rect.maxY > 0 && viewport.rect.minY < geometry.size.height
-                            ? viewport.frameIDs : nil
-                    }
+                    let visible = Set(rowViewports.compactMap { token, rect -> String? in
+                        rect.maxY > 0 && rect.minY < geometry.size.height ? token : nil
+                    })
                     thumbnailPrefetcher.setVisibleRows(visible)
                 }
                 .onReceive(session.gridScrollRequests) { id in
@@ -125,10 +124,11 @@ struct FrameGridView: View, Equatable {
     @ViewBuilder
     private func switchLayout(in width: CGFloat) -> some View {
         let rows = renderRows(in: width)
+        let prefetchPrefix = thumbnailPlanKey(width: width).tokenPrefix
         let rowSpacing: CGFloat = session.usesGroupRows ? 12 : spacing
         LazyVStack(alignment: .leading, spacing: rowSpacing) {
             ForEach(rows) { row in
-                let token = thumbnailPrefetcher.rowToken(for: row.id, frameIDs: row.frames.map(\.id))
+                let token = prefetchPrefix + row.id
                 if let group = row.group {
                     rowView(group, width: width, prefetchToken: token)
                         .id(row.id)
@@ -143,10 +143,7 @@ struct FrameGridView: View, Equatable {
                         GeometryReader { proxy in
                             Color.clear.preference(
                                 key: GridRowViewportPreferenceKey.self,
-                                value: [token: GridRowViewport(
-                                    rect: proxy.frame(in: .named("frame-grid-viewport")),
-                                    frameIDs: row.frames.map(\.id)
-                                )]
+                                value: [token: proxy.frame(in: .named("frame-grid-viewport"))]
                             )
                         }
                     }
@@ -213,10 +210,7 @@ struct FrameGridView: View, Equatable {
             GeometryReader { proxy in
                 Color.clear.preference(
                     key: GridRowViewportPreferenceKey.self,
-                    value: [prefetchToken: GridRowViewport(
-                        rect: proxy.frame(in: .named("frame-grid-viewport")),
-                        frameIDs: row.frames.map(\.id)
-                    )]
+                        value: [prefetchToken: proxy.frame(in: .named("frame-grid-viewport"))]
                 )
             }
         }
@@ -271,16 +265,20 @@ struct FrameGridView: View, Equatable {
         }
     }
 
-    private func configureThumbnailPrefetch(width: CGFloat) {
-        let key = GridThumbnailPrefetcher.PlanKey(
+    private func thumbnailPlanKey(width: CGFloat) -> GridThumbnailPrefetcher.PlanKey {
+        GridThumbnailPrefetcher.PlanKey(
             revision: gridRevision,
             generation: session.thumbnailGeneration,
             columns: columnCount(in: width),
             grouped: session.usesGroupRows,
             photosSource: session.photosAlbumURL != nil
         )
+    }
+
+    private func configureThumbnailPrefetch(width: CGFloat) {
+        let key = thumbnailPlanKey(width: width)
         guard thumbnailPrefetcher.needsPlan(key) else { return }
-        let rows = renderRows(in: width).map(\.frames)
+        let rows = renderRows(in: width)
         thumbnailPrefetcher.install(rows: rows, key: key, session: session)
     }
 
@@ -458,23 +456,18 @@ private struct GridRenderRow: Identifiable {
     let group: FrameRow?
 }
 
-private struct GridRowViewport: Equatable {
-    let rect: CGRect
-    let frameIDs: [FrameID]
-}
-
 private struct GridRowViewportPreferenceKey: PreferenceKey {
-    static let defaultValue: [String: GridRowViewport] = [:]
+    static let defaultValue: [String: CGRect] = [:]
 
-    static func reduce(value: inout [String: GridRowViewport],
-                       nextValue: () -> [String: GridRowViewport]) {
+    static func reduce(value: inout [String: CGRect],
+                       nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, newest in newest })
     }
 }
 
 /// Keeps decoded thumbnail pixels warm for three rows on either side of the
 /// rows currently in the viewport. Source reads and image decoding stay off the
-/// main thread; the visible cell path continues to own its loading indicator.
+/// main thread; visible cells own their loading and fade-in state.
 @MainActor
 private final class GridThumbnailPrefetcher: ObservableObject {
     struct PlanKey: Hashable {
@@ -483,6 +476,10 @@ private final class GridThumbnailPrefetcher: ObservableObject {
         let columns: Int
         let grouped: Bool
         let photosSource: Bool
+
+        var tokenPrefix: String {
+            "\(revision):\(generation.uuidString):\(columns):\(grouped):\(photosSource):"
+        }
     }
 
     private struct Job {
@@ -492,38 +489,31 @@ private final class GridThumbnailPrefetcher: ObservableObject {
 
     private(set) var planKey: PlanKey?
     private var rows: [[AnalyzedFrame]] = []
-    private var rowIndexByID: [FrameID: Int] = [:]
-    private var appearedRows: [String: Set<FrameID>] = [:]
+    private var rowIndexByToken: [String: Int] = [:]
+    private var visibleRowTokens: Set<String> = []
     private var jobs: [String: Job] = [:]
     private var refreshTask: Task<Void, Never>?
     private weak var session: WaifuSession?
 
     func needsPlan(_ key: PlanKey) -> Bool { planKey != key }
 
-    func rowToken(for rowID: String, frameIDs: [FrameID]) -> String {
-        var hasher = Hasher()
-        hasher.combine(rowID)
-        for id in frameIDs { hasher.combine(id) }
-        return "\(rowID):\(hasher.finalize())"
-    }
-
-    func install(rows: [[AnalyzedFrame]], key: PlanKey, session: WaifuSession) {
+    func install(rows: [GridRenderRow], key: PlanKey, session: WaifuSession) {
         guard planKey != key else { return }
         planKey = key
-        self.rows = rows
+        self.rows = rows.map(\.frames)
         self.session = session
-        rowIndexByID.removeAll(keepingCapacity: true)
-        rowIndexByID.reserveCapacity(rows.reduce(0) { $0 + $1.count })
+        rowIndexByToken.removeAll(keepingCapacity: true)
+        rowIndexByToken.reserveCapacity(rows.count)
+        let prefix = key.tokenPrefix
         for (index, row) in rows.enumerated() {
-            for frame in row { rowIndexByID[frame.id] = index }
+            rowIndexByToken[prefix + row.id] = index
         }
         scheduleRefresh()
     }
 
-    func setVisibleRows(_ rows: [String: [FrameID]]) {
-        let current = rows.mapValues(Set.init)
-        guard current != appearedRows else { return }
-        appearedRows = current
+    func setVisibleRows(_ tokens: Set<String>) {
+        guard tokens != visibleRowTokens else { return }
+        visibleRowTokens = tokens
         scheduleRefresh()
     }
 
@@ -532,9 +522,9 @@ private final class GridThumbnailPrefetcher: ObservableObject {
         refreshTask = nil
         for job in jobs.values { job.task.cancel() }
         jobs.removeAll(keepingCapacity: false)
-        appearedRows.removeAll(keepingCapacity: false)
+        visibleRowTokens.removeAll(keepingCapacity: false)
         rows.removeAll(keepingCapacity: false)
-        rowIndexByID.removeAll(keepingCapacity: false)
+        rowIndexByToken.removeAll(keepingCapacity: false)
         planKey = nil
         session = nil
     }
@@ -551,11 +541,9 @@ private final class GridThumbnailPrefetcher: ObservableObject {
 
     private func refresh() {
         guard let key = planKey, let session, !rows.isEmpty else { return }
-        var activeFrameIDs = Set<FrameID>()
-        for frameIDs in appearedRows.values { activeFrameIDs.formUnion(frameIDs) }
         // Warm the first screen before geometry preferences have arrived. Once
         // scrolling starts, the viewport replaces this initial window.
-        let measuredRows = Set(activeFrameIDs.compactMap { rowIndexByID[$0] })
+        let measuredRows = Set(visibleRowTokens.compactMap { rowIndexByToken[$0] })
         let visibleRows = measuredRows.isEmpty ? Set(0..<min(rows.count, 3)) : measuredRows
 
         var neighborRows = Set<Int>()
@@ -614,7 +602,7 @@ private final class GridThumbnailPrefetcher: ObservableObject {
 
 /// A single frame cell: picture, source ordinal, and inward selection border.
 private struct FrameCell: View {
-    @ObservedObject var session: WaifuSession
+    let session: WaifuSession
     @ObservedObject private var photosOrderState = PhotosOrderState.shared
     let frame: AnalyzedFrame
     let thumbnailKey: String
@@ -623,6 +611,7 @@ private struct FrameCell: View {
     let isPhotosSource: Bool
     let squareThumbnail: Bool
     @StateObject private var thumbnail: GridThumbnailPresentation
+    @State private var isSelected: Bool
     @State private var isHovered = false
 
     init(session: WaifuSession, frame: AnalyzedFrame, thumbnailKey: String, generation: UUID, width: CGFloat,
@@ -632,6 +621,7 @@ private struct FrameCell: View {
         self.isPhotosSource = isPhotosSource; self.squareThumbnail = squareThumbnail
         let identity = generation.uuidString + ":" + thumbnailKey
         _thumbnail = StateObject(wrappedValue: GridThumbnailPresentation(identity: identity))
+        _isSelected = State(initialValue: session.selectedFrameIDs.contains(frame.id))
     }
 
     private var thumbnailIdentity: String {
@@ -639,13 +629,10 @@ private struct FrameCell: View {
     }
 
     var body: some View {
-        let cached = GridThumbnailLoader.shared.cachedImage(identity: thumbnailIdentity)
         let visibleThumbnail = thumbnail.image(for: thumbnailIdentity)
-            ?? cached.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
         let aspect = frame.thumbnailAspectRatio ?? visibleThumbnail.map { Double($0.size.width / $0.size.height) } ?? (16.0 / 9)
         let isSquare = isPhotosSource && squareThumbnail
         let height = isSquare ? width : width / CGFloat(aspect.isFinite && aspect > 0 ? aspect : 16.0 / 9)
-        let isSelected = session.selectedFrameIDs.contains(frame.id)
         let isOrdered = isPhotosSource
             ? session.photosAlbumURL.flatMap { albumURL in
                 guard let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL),
@@ -707,14 +694,17 @@ private struct FrameCell: View {
         .help(isPhotosSource
               ? (visibleThumbnail.map { "\(Int($0.size.width)) × \(Int($0.size.height)) pixels · " } ?? "") + "art \(String(format: "%.2f", frame.artScore))"
               : "\(timecode(frame.timeSeconds)) · art \(String(format: "%.2f", frame.artScore))")
-        // Reveal the complete cell in one transaction, including its controls.
-        // Its geometry remains reserved while data is being fetched/decoded.
-        .opacity(visibleThumbnail == nil ? 0 : 1)
+        // Fade only the opacity of newly loaded content; layout, hover, and
+        // selection stay immediate. Cached cells start ready and do not refade.
+        .animation(visibleThumbnail == nil ? nil : .easeIn(duration: 0.33)) { content in
+            content.opacity(visibleThumbnail == nil ? 0 : 1)
+        }
         .allowsHitTesting(visibleThumbnail != nil)
         .accessibilityHidden(visibleThumbnail == nil)
-        .transaction { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
+        // Progress, tagging, and player updates must not redraw every thumbnail.
+        // Only cells whose selection membership changed need a new border.
+        .onReceive(session.$selectedFrameIDs.map { $0.contains(frame.id) }.removeDuplicates()) {
+            isSelected = $0
         }
         .task(id: thumbnailIdentity) {
             await thumbnail.prepare(identity: thumbnailIdentity) {

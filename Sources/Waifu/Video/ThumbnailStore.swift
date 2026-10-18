@@ -51,19 +51,25 @@ final class ThumbnailCache: @unchecked Sendable {
     private struct Entry {
         let data: Data
         let sequence: UInt64
+        var previous: Address?
+        var next: Address?
     }
 
     private let lock = NSLock()
     private var entries: [Address: Entry] = [:]
-    /// Oldest first, most recently requested last.
-    private var leastRecentlyUsed: [Address] = []
+    // Intrusive links keep cache hits, replacement, and eviction O(1). A large
+    // album must not scan or shift its whole cache for every visible thumbnail.
+    private var leastRecent: Address?
+    private var mostRecent: Address?
     private var cachedByteCount = 0
     private var nextSequence: UInt64 = 0
     private let rootDirectory: URL
     private static let jpegQuality: Float = 0.8
-    private static let byteLimit = 64 * 1024 * 1024
+    private let byteLimit: Int
+    private static let defaultByteLimit = 64 * 1024 * 1024
 
     init() {
+        byteLimit = Self.defaultByteLimit
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         rootDirectory = appSupport
             .appendingPathComponent("Waifu", isDirectory: true)
@@ -71,8 +77,9 @@ final class ThumbnailCache: @unchecked Sendable {
     }
 
     /// Retained for callers that need a stable logical cache namespace in fixtures.
-    init(rootDirectory: URL) {
+    init(rootDirectory: URL, byteLimit: Int = 64 * 1024 * 1024) {
         self.rootDirectory = rootDirectory
+        self.byteLimit = max(0, byteLimit)
     }
 
     /// Returns a logical per-video cache URL without creating a directory.
@@ -98,13 +105,13 @@ final class ThumbnailCache: @unchecked Sendable {
         guard !data.isEmpty else { throw ThumbnailStoreError.writeFailed("Thumbnail data is empty") }
         let address = Address(videoStem: sanitizePathComponent(videoStem), key: safeKey)
         lock.withLock {
-            if let previous = entries.removeValue(forKey: address) {
+            if let previous = entries[address] {
+                unlink(address)
                 cachedByteCount -= previous.data.count
             }
-            leastRecentlyUsed.removeAll { $0 == address }
             nextSequence &+= 1
-            entries[address] = Entry(data: data, sequence: nextSequence)
-            leastRecentlyUsed.append(address)
+            entries[address] = Entry(data: data, sequence: nextSequence, previous: nil, next: nil)
+            appendMostRecent(address)
             cachedByteCount += data.count
             evictUntilWithinLimit()
         }
@@ -116,12 +123,15 @@ final class ThumbnailCache: @unchecked Sendable {
     }
 
     /// Async form used by export and other actor-friendly callers.
-    func thumbnailData(forKey key: String, videoStem: String) async -> Data? {
-        thumbnailDataSync(forKey: key, videoStem: videoStem)
+    func thumbnailData(forKey key: String, videoStem: String, touchLRU: Bool = true,
+                       allowPrefixMatch: Bool = true) async -> Data? {
+        thumbnailDataSync(forKey: key, videoStem: videoStem, touchLRU: touchLRU,
+                          allowPrefixMatch: allowPrefixMatch)
     }
 
     /// Synchronous read for SwiftUI and the nonisolated export-store bridge.
-    func thumbnailDataSync(forKey key: String, videoStem: String, touchLRU: Bool = true) -> Data? {
+    func thumbnailDataSync(forKey key: String, videoStem: String, touchLRU: Bool = true,
+                           allowPrefixMatch: Bool = true) -> Data? {
         guard let safeKey = try? sanitizeKey(key) else { return nil }
         let stem = sanitizePathComponent(videoStem)
         return lock.withLock {
@@ -130,6 +140,10 @@ final class ThumbnailCache: @unchecked Sendable {
                 if touchLRU { touch(exactAddress) }
                 return exact.data
             }
+
+            // Grid requests already carry the complete analysis key. A miss is
+            // final; only legacy export keys need the prefix fallback below.
+            guard allowPrefixMatch else { return nil }
 
             // Export requests historically identify the sample without the analysis
             // width/run suffix. Pick the newest matching in-memory thumbnail.
@@ -147,11 +161,11 @@ final class ThumbnailCache: @unchecked Sendable {
         lock.withLock {
             let removed = entries.keys.filter { $0.videoStem == stem }
             for address in removed {
+                unlink(address)
                 if let entry = entries.removeValue(forKey: address) {
                     cachedByteCount -= entry.data.count
                 }
             }
-            leastRecentlyUsed.removeAll { $0.videoStem == stem }
         }
     }
 
@@ -163,19 +177,38 @@ final class ThumbnailCache: @unchecked Sendable {
     func removeAll() {
         lock.withLock {
             entries.removeAll(keepingCapacity: false)
-            leastRecentlyUsed.removeAll(keepingCapacity: false)
+            leastRecent = nil
+            mostRecent = nil
             cachedByteCount = 0
         }
     }
 
     private func touch(_ address: Address) {
-        leastRecentlyUsed.removeAll { $0 == address }
-        leastRecentlyUsed.append(address)
+        guard mostRecent != address else { return }
+        unlink(address)
+        appendMostRecent(address)
+    }
+
+    /// All link mutations occur while holding `lock`.
+    private func unlink(_ address: Address) {
+        guard let entry = entries[address] else { return }
+        if let previous = entry.previous { entries[previous]?.next = entry.next }
+        else { leastRecent = entry.next }
+        if let next = entry.next { entries[next]?.previous = entry.previous }
+        else { mostRecent = entry.previous }
+    }
+
+    private func appendMostRecent(_ address: Address) {
+        entries[address]?.previous = mostRecent
+        entries[address]?.next = nil
+        if let previous = mostRecent { entries[previous]?.next = address }
+        else { leastRecent = address }
+        mostRecent = address
     }
 
     private func evictUntilWithinLimit() {
-        while cachedByteCount > Self.byteLimit, !leastRecentlyUsed.isEmpty {
-            let oldest = leastRecentlyUsed.removeFirst()
+        while cachedByteCount > byteLimit, let oldest = leastRecent {
+            unlink(oldest)
             if let removed = entries.removeValue(forKey: oldest) {
                 cachedByteCount -= removed.data.count
             }

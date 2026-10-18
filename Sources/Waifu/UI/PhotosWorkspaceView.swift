@@ -11,7 +11,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     private let link: ChiaroscuroLink
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
     @AppStorage("photosSquareThumbnails") private var squareThumbnails = false
-    @AppStorage("photosSidebarExpanded") private var sidebarExpanded = true
+    @State private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
     init(session: WaifuSession, link: ChiaroscuroLink,
@@ -72,6 +72,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
             // Returning from Photos refreshes sidebar moves/renames without
             // reopening the selected source or restarting its analysis.
             guard scenePhase == .active else { return }
+            loading = true
             do {
                 let refreshedAlbums = try await PhotosMedia.shared.listAlbums()
                 try Task.checkCancellation()
@@ -217,22 +218,45 @@ private struct PhotosAlbumSidebar: View, Equatable {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            List(selection: $selectedAlbum) {
-                if albums.contains(where: { !$0.isSmartAlbum }) {
-                    Section("My Albums") {
-                        OutlineGroup(albums.filter { !$0.isSmartAlbum }, children: \.children) { album in
-                            albumRow(album)
-                                .selectionDisabled(album.isFolder || album.count == 0)
+            if loading && albums.isEmpty {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading albums…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .combine)
+            } else {
+                if loading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Refreshing albums…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                List(selection: $selectedAlbum) {
+                    if albums.contains(where: { !$0.isSmartAlbum }) {
+                        Section("My Albums") {
+                            OutlineGroup(albums.filter { !$0.isSmartAlbum }, children: \.children) { album in
+                                albumRow(album)
+                                    .selectionDisabled(album.isFolder || album.count == 0)
+                            }
+                        }
+                    }
+                    if albums.contains(where: \.isSmartAlbum) {
+                        Section("Smart Albums") {
+                            ForEach(albums.filter(\.isSmartAlbum)) { album in albumRow(album) }
                         }
                     }
                 }
-                if albums.contains(where: \.isSmartAlbum) {
-                    Section("Smart Albums") {
-                        ForEach(albums.filter(\.isSmartAlbum)) { album in albumRow(album) }
-                    }
-                }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
             if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary).textSelection(.enabled).padding(12)
             }

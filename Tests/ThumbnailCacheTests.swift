@@ -85,6 +85,53 @@ private final class ThumbnailReadGate {
 
 func registerThumbnailCacheTests() {
     let suite = "thumbnail cache"
+    Registry.shared.add(suite: suite, TestCase(name: "thumbnail LRU promotes hits and accounts for replacement bytes", knownBug: nil) {
+        let root = try Temporary.directory("thumb-lru")
+        let cache = ThumbnailCache(rootDirectory: root, byteLimit: 12)
+        let small = Data(repeating: 1, count: 4)
+        for key in ["a", "b", "c"] { try cache.store(small, forKey: key, videoStem: "video") }
+        checkEqual(cache.thumbnailDataSync(forKey: "a", videoStem: "video"), small, "reading the oldest entry promotes it")
+        try cache.store(small, forKey: "d", videoStem: "video")
+        checkNil(cache.thumbnailDataSync(forKey: "b", videoStem: "video"), "the untouched entry is evicted")
+        let larger = Data(repeating: 2, count: 8)
+        try cache.store(larger, forKey: "a", videoStem: "video")
+        checkNil(cache.thumbnailDataSync(forKey: "c", videoStem: "video"), "growing a replacement evicts the next oldest")
+        checkEqual(cache.thumbnailDataSync(forKey: "d", videoStem: "video", touchLRU: false), small, "replacement does not evict too many entries")
+        checkEqual(cache.thumbnailDataSync(forKey: "a", videoStem: "video"), larger, "replacement bytes are retained")
+        try cache.store(Data(repeating: 3, count: 13), forKey: "oversize", videoStem: "video")
+        checkNil(cache.thumbnailDataSync(forKey: "oversize", videoStem: "video"), "an oversized entry cannot exceed the memory budget")
+        try cache.store(small, forKey: "fresh", videoStem: "video")
+        checkEqual(cache.thumbnailDataSync(forKey: "fresh", videoStem: "video"), small, "the empty LRU accepts new entries after eviction")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "clearing interleaved thumbnail namespaces preserves LRU links", knownBug: nil) {
+        let root = try Temporary.directory("thumb-lru-clear")
+        let cache = ThumbnailCache(rootDirectory: root, byteLimit: 12)
+        let bytes = Data(repeating: 1, count: 4)
+        try cache.store(bytes, forKey: "first", videoStem: "remove")
+        try cache.store(bytes, forKey: "middle", videoStem: "keep")
+        try cache.store(bytes, forKey: "last", videoStem: "remove")
+        try await cache.clear(for: "remove")
+        try cache.store(Data(repeating: 2, count: 8), forKey: "large", videoStem: "other")
+        try cache.store(bytes, forKey: "new", videoStem: "other")
+        checkNil(cache.thumbnailDataSync(forKey: "middle", videoStem: "keep"), "the surviving entry is still the oldest")
+        checkNotNil(cache.thumbnailDataSync(forKey: "large", videoStem: "other"), "newer entries survive eviction after selective clearing")
+        cache.removeAll()
+        try cache.store(bytes, forKey: "reset", videoStem: "keep")
+        checkEqual(cache.thumbnailDataSync(forKey: "reset", videoStem: "keep"), bytes, "reset releases both ends of the LRU")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "exact grid cache misses skip legacy prefix matching", knownBug: nil) {
+        let root = try Temporary.directory("thumb-exact")
+        let cache = ThumbnailCache(rootDirectory: root)
+        let old = Data([1]), newest = Data([2])
+        try cache.store(old, forKey: "thumb-f000001-old", videoStem: "video")
+        try cache.store(newest, forKey: "thumb-f000001-new", videoStem: "video")
+        let exactMiss = await cache.thumbnailData(forKey: "thumb-f000001", videoStem: "video", allowPrefixMatch: false)
+        checkNil(exactMiss, "a frame with no exact entry proceeds to regeneration")
+        let legacy = await cache.thumbnailData(forKey: "thumb-f000001", videoStem: "video")
+        checkEqual(legacy, newest, "legacy export keys still resolve the latest rendition")
+        let exact = await cache.thumbnailData(forKey: "thumb-f000001-old", videoStem: "video", allowPrefixMatch: false)
+        checkEqual(exact, old, "an exact hit never borrows another rendition")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "cells publish only decoded images and preserve them through brief disappearance", knownBug: nil) {
         let pixels = try ImageFixture.cgImage(width: 64, height: 48, gray: 0.5)
         await Task { @MainActor in

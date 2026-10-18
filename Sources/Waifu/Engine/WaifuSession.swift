@@ -502,12 +502,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// accesses track the viewport and SwiftUI's nearby lazy cells.
     func thumbnailData(for frame: AnalyzedFrame, retainRegeneratedThumbnail: Bool = true) async -> Data? {
         guard !Task.isCancelled, let video else { return nil }
-        let stem = video.url.deletingPathExtension().lastPathComponent
-        if let cached = thumbnailCache.thumbnailDataSync(
-            forKey: frame.thumbnailKey, videoStem: stem, touchLRU: retainRegeneratedThumbnail
-        ) { return cached }
-
+        let sourceURL = video.url
+        let stem = sourceURL.deletingPathExtension().lastPathComponent
         let generation = thumbnailGeneration
+        // This nonisolated async cache read runs on the generic executor. Even
+        // cache bookkeeping and lock waits must not consume the scroll frame.
+        let cached = await thumbnailCache.thumbnailData(
+            forKey: frame.thumbnailKey, videoStem: stem, touchLRU: retainRegeneratedThumbnail,
+            allowPrefixMatch: false
+        )
+        guard !Task.isCancelled, thumbnailGeneration == generation,
+              self.video?.url == sourceURL else { return nil }
+        if let cached { return cached }
+
         let requestKey = generation.uuidString + ":" + frame.thumbnailKey
         let request: ThumbnailRequest
         if let existing = thumbnailRequests[requestKey] {
@@ -517,7 +524,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             request = promoted
         } else {
             let requestID = UUID()
-            let sourceURL = video.url
             // Photos grid/analysis thumbnails use 512px renditions, regardless
             // of the video analysis-width setting. Still-photo tagging requests
             // its own model-sized rendition through TaggingImageLoader.

@@ -75,8 +75,9 @@ final class GridThumbnailPresentation: ObservableObject {
             loader.retainVisibleImage(pixels, identity: identity, owner: owner)
             pinnedIdentity = identity
         }
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
+        let transaction = Transaction(animation: nil)
+        // Keep rearrangement animations out of publication. The cell supplies a
+        // scoped opacity animation for the loading-to-ready change.
         withTransaction(transaction) {
             ready = ReadyImage(identity: identity,
                 image: NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height)))
