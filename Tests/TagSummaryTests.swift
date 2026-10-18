@@ -25,6 +25,35 @@ private func summaryFrame(_ id: Int, _ scores: [Int: Float]) -> AnalyzedFrame {
 func registerTagSummaryTests() {
     let suite = "frame arrangement: tag summary"
 
+    Registry.shared.add(suite: suite, TestCase(name: "selected tag scores compose with ratings and strict trait filters", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = [summaryFrame(0, [0: 0.9, 4: 0.8, 5: 0.5]),
+                      summaryFrame(1, [0: 0.1, 4: 0.9, 5: 0.1]),
+                      summaryFrame(2, [0: 0.8, 4: 0.8, 5: 0.2])]
+        var filter = TagFilter(requiredTags: ["tag_0"], threshold: 0.5, scoreSortTag: "tag_0")
+        let forward = FrameArrangement.arrange(frames, order: .only([.ratingGeneral]),
+            perGroupTopCount: 10, grouping: .default, tagFilter: filter, vocabulary: vocabulary)
+        checkEqual(forward.visible.map(\.id), [frames[1].id, frames[0].id, frames[2].id],
+                   "tag score is primary; equal trait scores fall through to the distinct rating heads")
+        filter.scoreSortDescending = false
+        let reverse = FrameArrangement.arrange(frames, order: .only([.ratingGeneral]),
+            perGroupTopCount: 10, grouping: .default, tagFilter: filter, vocabulary: vocabulary)
+        checkEqual(reverse.visible.map(\.id), [frames[0].id, frames[2].id, frames[1].id],
+                   "tag direction does not reverse the rating tie breaker")
+        let required = TagFilter(requiredTags: ["tag_0", "tag_1"], threshold: 0.5)
+        check(!required.admits(frames[0], vocabulary: vocabulary), "equal threshold is excluded from all-tags match")
+        let excluded = TagFilter(requiredTags: ["tag_0"], excludedTags: ["tag_1"], threshold: 0.2)
+        check(!excluded.admits(frames[0], vocabulary: vocabulary), "an above-threshold excluded trait rejects")
+        check(excluded.admits(frames[2], vocabulary: vocabulary), "an equal-threshold excluded trait admits")
+        var corrupt = frames[0]
+        corrupt.tagProbabilities = Data("corrupt".utf8)
+        corrupt.topTags = ["tag_0", "tag_1"]
+        check(required.admits(corrupt, vocabulary: vocabulary), "malformed data retains saved-tag fallback")
+        check(!excluded.admits(corrupt, vocabulary: vocabulary), "saved excluded tags still reject")
+        check(!TagFilter(requiredTags: ["unknown"]).admits(frames[0], vocabulary: vocabulary),
+              "unknown required heads do not match")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "means include only values strictly above threshold and preserve legacy membership", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let frames = [summaryFrame(0, [4: 0.9, 5: 0.8, 6: 0.5, 7: 0.7]),

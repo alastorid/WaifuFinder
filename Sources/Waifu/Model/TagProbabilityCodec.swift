@@ -18,6 +18,33 @@ enum TagProbabilityCodec {
         return data
     }
 
+    /// Reads only the requested heads from live Float32 storage. Layout and the
+    /// requested values are validated; `decode` remains the whole-vector validator.
+    /// Legacy compressed metadata uses the existing full decoder for compatibility.
+    static func values(in data: Data, at indices: [Int]) -> [Float]? {
+        guard indices.allSatisfy({ $0 >= 0 && $0 < TagVocabulary.headCount }) else { return nil }
+        guard data.prefix(magic.count) == magic else {
+            guard let probabilities = decode(data) else { return nil }
+            return indices.map { probabilities[$0] }
+        }
+        guard data.count == magic.count + byteCount else { return nil }
+        return data.withUnsafeBytes { buffer in
+            var result: [Float] = []
+            result.reserveCapacity(indices.count)
+            for index in indices {
+                let bits = buffer.loadUnaligned(fromByteOffset: magic.count + index * 4, as: UInt32.self)
+                let value = Float(bitPattern: bits.littleEndian)
+                guard value.isFinite && value >= 0 && value <= 1 else { return nil }
+                result.append(value)
+            }
+            return result
+        }
+    }
+
+    static func value(in data: Data, at index: Int) -> Float? {
+        values(in: data, at: [index])?.first
+    }
+
     static func decode(_ data: Data) -> [Float]? {
         let bytes: Data
         if data.prefix(magic.count) == magic {

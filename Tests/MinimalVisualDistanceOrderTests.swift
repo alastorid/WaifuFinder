@@ -128,8 +128,7 @@ func registerMinimalVisualDistanceOrderTests() {
                 return frame
             }
             session.updateAnalyzedFrames(frames)
-            // A locally available vocabulary also starts a separate facet-index
-            // job. Let that fixture setup publish before measuring visual work.
+            // Let the background summary publish before measuring visual work.
             if session.tagVocabulary != nil {
                 for _ in 0..<500 {
                     if !session.tagCommonTags.isEmpty { break }
@@ -138,9 +137,9 @@ func registerMinimalVisualDistanceOrderTests() {
                 check(!session.tagCommonTags.isEmpty, "the fixture's shared tag is indexed")
             }
             let clock = ContinuousClock()
-            // Compare against an ordinary rebuild on the same machine. The full
-            // tagging vectors make accidental per-photo decoding observable even
-            // without a window, PhotoKit access, or a wall-clock speed assumption.
+            // Full vectors make accidental full decoding for rating keys visible.
+            // Both controls and ordinary rebuilds must stay responsive; the latter
+            // no longer provides a deliberately slow relative timing baseline.
             let rebuildStart = clock.now
             session.faceFilter = .all
             let rebuildTime = rebuildStart.duration(to: clock.now)
@@ -151,7 +150,8 @@ func registerMinimalVisualDistanceOrderTests() {
             session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
             let toggleTime = toggleStart.duration(to: clock.now)
             print("    tagged album rebuild: \(rebuildTime); visual toggle: \(toggleTime)")
-            check(toggleTime * 4 < rebuildTime, "enabling visual order must avoid the expensive album rebuild")
+            check(rebuildTime < .seconds(1), "rating keys must not decode 1,800 full probability vectors")
+            check(toggleTime < .milliseconds(100), "enabling visual order stays responsive")
             checkEqual(session.gridRevision, revision, "starting work keeps an unchanged grid mounted")
             check(session.isSortingVisualDistance, "the route is scheduled after the checkbox handler returns")
             for _ in 0..<250 {
@@ -165,11 +165,11 @@ func registerMinimalVisualDistanceOrderTests() {
             checkEqual(session.tagFacetTags, facetTags, "visual routing reuses tag summaries")
             let reverseStart = clock.now
             session.frameOrder.toggleDirection(of: .minimalVisualDistance)
-            check(reverseStart.duration(to: clock.now) * 4 < rebuildTime, "reverse avoids decoding the tagging vectors")
+            check(reverseStart.duration(to: clock.now) < .milliseconds(100), "reverse stays responsive")
             checkEqual(session.displayOrderFrames.map(\.id), frames.reversed().map(\.id), "navigation reverses with the cached route")
             let disableStart = clock.now
             session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
-            check(disableStart.duration(to: clock.now) * 4 < rebuildTime, "disabling visual order avoids the album rebuild")
+            check(disableStart.duration(to: clock.now) < .milliseconds(100), "disabling visual order stays responsive")
             checkEqual(session.displayOrderFrames.map(\.id), frames.map(\.id), "disabling restores score order")
             session.updateAnalyzedFrames(Array(frames.suffix(7)))
             session.frameOrder.setEnabled(true, for: .minimalVisualDistance)

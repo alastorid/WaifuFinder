@@ -72,6 +72,13 @@ the album's tagging vectors again on the UI thread. Frame and filter changes reb
 the snapshot; starting a route leaves the existing grid mounted when its displayed
 sequence and layout are unchanged.
 
+Ordinary score rebuilds read the four rating heads directly from live WDT2
+Float32 storage instead of decoding the complete 10,861-head vector per photo.
+Rating limits use the same selective reader, and trait filters and trait-score
+sorting read only their queried heads. The reader validates the payload layout
+and accessed values; the full decoder still validates whole vectors for consumers
+that need them. Legacy WDT1 compressed metadata retains the full decode fallback.
+
 These cutoffs were chosen for this first implementation, not imposed by cuOpt or
 Metal. A 200,000-frame input is not rejected: it uses the CPU fallback. Sequencing
 at that scale has not been benchmarked. A dense matrix would need roughly 149 GiB;
@@ -82,9 +89,12 @@ scalable GPU work should use bounded candidates, tiles and an explicit memory bu
 `./run-tests.sh --only 'frame arrangement'` includes solver permutation/objective
 checks, small instances checked against brute-force open-path optima, real Vision
 metric checks, CPU/Metal parity, bounded-memory candidate mode, invalid inputs,
-cancellation and session/filter/reversal checks. All 47 targeted checks passed on
+cancellation and session/filter/reversal checks. All 48 targeted checks passed on
 the available M3, including a 513-photo integration check and a tagged 1,800-photo
 control responsiveness regression, plus the [tag summary checks](Tag-summary.md).
+In that synthetic 1,800-photo debug fixture, a full display rebuild with rating
+ordering measured 21.4 ms after selective score reads, compared with about 2.84 s
+when sorting decoded full vectors. The visual-order checkbox measured 2.0 ms.
 These are background compute tests
 and do not operate the user's UI.
 

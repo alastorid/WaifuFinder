@@ -113,19 +113,19 @@ struct TagFilter: Equatable, Sendable {
         if excludedTags.contains(where: { excluded in
             let normalized = TagVocabulary.normalized(excluded)
             if let vocabulary, let data = frame.tagProbabilities,
-               let probabilities = TagProbabilityCodec.decode(data),
-               let index = vocabulary.index(for: normalized), probabilities.indices.contains(index) {
-                return probabilities[index] > threshold
+               let index = vocabulary.index(for: normalized),
+               let probability = TagProbabilityCodec.value(in: data, at: index) {
+                return probability > threshold
             }
             return (frame.topTags ?? []).contains { TagVocabulary.normalized($0) == normalized }
         }) { return false }
         guard !requiredTags.isEmpty else { return true }
         let required = Set(requiredTags.map(TagVocabulary.normalized))
-        if let vocabulary, let data = frame.tagProbabilities,
-           let probabilities = TagProbabilityCodec.decode(data) {
-            return required.allSatisfy { tag in
-                guard let index = vocabulary.index(for: tag), probabilities.indices.contains(index) else { return false }
-                return probabilities[index] > threshold
+        if let vocabulary, let data = frame.tagProbabilities {
+            let indices = required.compactMap { vocabulary.index(for: $0) }
+            guard indices.count == required.count else { return false }
+            if let probabilities = TagProbabilityCodec.values(in: data, at: indices) {
+                return probabilities.allSatisfy { $0 > threshold }
             }
         }
         return required.isSubset(of: Set((frame.topTags ?? []).map(TagVocabulary.normalized)))
@@ -373,13 +373,14 @@ struct SortTerm: Hashable, Sendable {
 }
 
 /// The four rating-head probabilities stored at the start of the tagger vector.
-/// Keeping this extraction in one value means each arrangement decodes a frame's
-/// compressed vector once, even when several rating controls are active.
+/// Live vectors need only four scalar reads, even when several controls are active.
 private struct RatingProbabilityScores {
     private let values: [Float]?
 
     init(frame: AnalyzedFrame) {
-        self.init(probabilities: frame.tagProbabilities.flatMap(TagProbabilityCodec.decode))
+        self.init(probabilities: frame.tagProbabilities.flatMap {
+            TagProbabilityCodec.values(in: $0, at: Array(0..<TagRating.allCases.count))
+        })
     }
 
     init(probabilities: [Float]?) {
@@ -768,11 +769,10 @@ enum FrameArrangement {
             self.frame = frame
             self.art = frame.artScore
             self.definition = frame.faceDefinitionScore
-            let probabilities: [Float]?
-            if includeRatingProbabilities || tagScoreIndex != nil {
-                probabilities = frame.tagProbabilities.flatMap(TagProbabilityCodec.decode)
-            } else {
-                probabilities = nil
+            var indices = includeRatingProbabilities ? Array(0..<TagRating.allCases.count) : []
+            if let tagScoreIndex { indices.append(tagScoreIndex) }
+            let probabilities = indices.isEmpty ? nil : frame.tagProbabilities.flatMap {
+                TagProbabilityCodec.values(in: $0, at: indices)
             }
             let ratings = includeRatingProbabilities ? RatingProbabilityScores(probabilities: probabilities) : nil
             self.ratingGeneral = ratings?.value(for: .general).map(Float.init)
@@ -780,9 +780,7 @@ enum FrameArrangement {
             self.ratingQuestionable = ratings?.value(for: .questionable).map(Float.init)
             self.ratingExplicit = ratings?.value(for: .explicit).map(Float.init)
             self.tagGeneralScore = frame.tagGeneralScore
-            self.tagScore = tagScoreIndex.flatMap { index in
-                probabilities.flatMap { $0.indices.contains(index) ? $0[index] : nil }
-            }
+            self.tagScore = tagScoreIndex == nil ? nil : probabilities?.last
             self.face = FrameRanker.faceIsSignificant(frame, settings: grouping) ? frame.faceScore : nil
             self.time = frame.timeSeconds
             self.identifier = frame.id.raw

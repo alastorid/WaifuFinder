@@ -191,6 +191,25 @@ func registerWDTaggerTests() {
         var invalid = encoded
         invalid.replaceSubrange(4..<8, with: [0x00, 0x00, 0xc0, 0x7f])
         checkNil(TagProbabilityCodec.decode(invalid), "nonfinite probabilities fail decoding")
+        let indices = [10_860, 0, 3, 3, 101]
+        checkEqual(TagProbabilityCodec.values(in: encoded, at: indices), indices.map { probabilities[$0] },
+                   "selective reads retain requested order, duplicate heads and last-head boundary")
+        checkNil(TagProbabilityCodec.values(in: encoded, at: [-1]), "negative head rejected")
+        checkNil(TagProbabilityCodec.value(in: encoded, at: probabilities.count), "past-end head rejected")
+        checkNil(TagProbabilityCodec.values(in: encoded.dropLast(), at: [0]), "selective reads reject truncation")
+        checkNil(TagProbabilityCodec.values(in: encoded + Data([0]), at: [0]), "selective reads reject trailing bytes")
+        checkNil(TagProbabilityCodec.value(in: invalid, at: 0), "queried nonfinite value rejected")
+        checkEqual(TagProbabilityCodec.value(in: invalid, at: 101), probabilities[101],
+                   "unqueried corrupt heads do not affect independent score reads")
+        var unaligned = Data([0xff]); unaligned.append(encoded)
+        checkEqual(TagProbabilityCodec.values(in: unaligned.dropFirst(), at: indices), indices.map { probabilities[$0] },
+                   "sliced storage does not require aligned Float32 pointers")
+        for value: Float in [-0.01, 1.01, .infinity] {
+            var badScore = encoded
+            var bits = value.bitPattern.littleEndian
+            withUnsafeBytes(of: &bits) { badScore.replaceSubrange(4..<8, with: $0) }
+            checkNil(TagProbabilityCodec.value(in: badScore, at: 0), "queried out-of-range score rejected")
+        }
     })
     Registry.shared.add(suite: suite, TestCase(name: "legacy compressed runtime probabilities remain readable", knownBug: nil) {
         let probabilities = (0..<TagVocabulary.headCount).map { Float($0 % 100) / 100 }
@@ -206,6 +225,9 @@ func registerWDTaggerTests() {
         var encoded = Data("WDT1".utf8)
         encoded.append(contentsOf: compressed.prefix(count))
         checkEqual(TagProbabilityCodec.decode(encoded), probabilities, "old saved frame metadata still decodes")
+        checkEqual(TagProbabilityCodec.values(in: encoded, at: [0, 3, 10_860]),
+                   [probabilities[0], probabilities[3], probabilities[10_860]],
+                   "selective consumers retain legacy compressed compatibility")
         checkNil(TagProbabilityCodec.decode(encoded.prefix(encoded.count / 2)), "truncated legacy scores fail decoding")
     })
     Registry.shared.add(suite: suite, TestCase(name: "tagging pipeline batches eight and preserves source image order and frame metadata", knownBug: nil) {
