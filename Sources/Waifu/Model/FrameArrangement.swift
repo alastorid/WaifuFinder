@@ -109,6 +109,75 @@ struct TagFilter: Equatable, Sendable, Codable {
         }
     }
 
+    /// Rank within the already-filtered candidate set, before group caps and
+    /// display ordering. Read sparse FP8 scores without mutating their payloads.
+    /// With no selection, combine the winners for every general tag. Otherwise
+    /// intersect each required tag's winners, preserving the all-required rule.
+    struct TopSelection {
+        var frames: [AnalyzedFrame]
+        var tagsByFrame: [FrameID: [String]] = [:]
+    }
+
+    func keepingTopFrames(_ frames: [AnalyzedFrame], count: Int,
+                          vocabulary: TagVocabulary?) -> [AnalyzedFrame] {
+        topFrameSelection(frames, count: count, vocabulary: vocabulary).frames
+    }
+
+    func topFrameSelection(_ frames: [AnalyzedFrame], count: Int,
+                           vocabulary: TagVocabulary?) -> TopSelection {
+        guard count < 99, let vocabulary else { return TopSelection(frames: frames) }
+        if requiredTags.isEmpty {
+            let generalIndices = Set(vocabulary.generalIndices)
+            let limit = max(count, 1)
+            var leaders: [Int: [(id: FrameID, score: Float)]] = [:]
+            for frame in frames {
+                guard let data = frame.tagProbabilities,
+                      let scores = TagProbabilityCodec.sparseValues(in: data) else { continue }
+                for entry in scores where generalIndices.contains(entry.index) && entry.value > threshold {
+                    var ranked = leaders[entry.index] ?? []
+                    let insertion = ranked.firstIndex {
+                        entry.value > $0.score || (entry.value == $0.score && frame.id.raw < $0.id.raw)
+                    } ?? ranked.count
+                    if insertion < limit {
+                        ranked.insert((frame.id, entry.value), at: insertion)
+                        if ranked.count > limit { ranked.removeLast() }
+                        leaders[entry.index] = ranked
+                    }
+                }
+            }
+            var tagsByFrame: [FrameID: [String]] = [:]
+            for index in leaders.keys.sorted() {
+                for leader in leaders[index] ?? [] {
+                    tagsByFrame[leader.id, default: []].append(vocabulary.labels[index].name)
+                }
+            }
+            return TopSelection(frames: frames.filter { tagsByFrame[$0.id] != nil }, tagsByFrame: tagsByFrame)
+        }
+        let tags = Set(requiredTags.map(TagVocabulary.normalized)).sorted()
+        let indices = tags.compactMap { vocabulary.index(for: $0) }
+        guard indices.count == tags.count else { return TopSelection(frames: []) }
+        let scored = frames.compactMap { frame -> (frame: AnalyzedFrame, scores: [Float])? in
+            guard let data = frame.tagProbabilities,
+                  let scores = TagProbabilityCodec.values(in: data, at: indices) else { return nil }
+            return (frame, scores)
+        }
+        var winners: Set<FrameID>?
+        for column in indices.indices {
+            let ranked = scored.filter { $0.scores[column] > threshold }.sorted {
+                if $0.scores[column] != $1.scores[column] {
+                    return $0.scores[column] > $1.scores[column]
+                }
+                return $0.frame.id.raw < $1.frame.id.raw
+            }
+            let selected = Set(ranked.prefix(max(count, 1)).map { $0.frame.id })
+            winners = winners.map { $0.intersection(selected) } ?? selected
+        }
+        let selected = winners ?? []
+        let visible = frames.filter { selected.contains($0.id) }
+        return TopSelection(frames: visible,
+                            tagsByFrame: Dictionary(uniqueKeysWithValues: visible.map { ($0.id, tags) }))
+    }
+
     func admits(_ frame: AnalyzedFrame, vocabulary: TagVocabulary? = nil) -> Bool {
         if excludedTags.contains(where: { excluded in
             let normalized = TagVocabulary.normalized(excluded)
@@ -613,6 +682,8 @@ enum FrameArrangement {
     struct Result: Sendable, Equatable {
         /// The frames to render, already ordered.
         var visible: [AnalyzedFrame] = []
+        /// The actual tag rankings that admitted each visible frame.
+        var topTagsByFrame: [FrameID: [String]] = [:]
         /// Frames past the per-group cap, per group — counted whether or not the
         /// group is revealed. A revealed group still needs its count, or revealing it
         /// would remove it from the list and there would be no way to put it back.
@@ -641,7 +712,8 @@ enum FrameArrangement {
         tagFilter: TagFilter = TagFilter(),
         vocabulary: TagVocabulary? = nil,
         filteredCandidates: [AnalyzedFrame]? = nil,
-        applyingVisualOrder: Bool = true
+        applyingVisualOrder: Bool = true,
+        tagTopCount: Int = 99
     ) -> Result {
         let candidates = filteredCandidates ?? frames.filter { frame in
             faceFilter.admits(frame, grouping: grouping)
@@ -649,7 +721,8 @@ enum FrameArrangement {
                 && tagFilter.admits(frame, vocabulary: vocabulary)
         }
         let scoreSortIndex = tagFilter.scoreSortTag.flatMap { vocabulary?.index(for: $0) }
-        let ordered = sorted(candidates, by: order, grouping: grouping,
+        let topSelection = tagFilter.topFrameSelection(candidates, count: tagTopCount, vocabulary: vocabulary)
+        let ordered = sorted(topSelection.frames, by: order, grouping: grouping,
                              tagScoreIndex: scoreSortIndex,
                              tagScoreDescending: tagFilter.scoreSortDescending,
                              applyingVisualOrder: false)
@@ -683,6 +756,9 @@ enum FrameArrangement {
             result.visible = (try? MinimalVisualDistanceOrder.sorted(
                 result.visible, reversed: !order.minimalVisualDistance.ascending
             )) ?? result.visible
+        }
+        for frame in result.visible {
+            if let tags = topSelection.tagsByFrame[frame.id] { result.topTagsByFrame[frame.id] = tags }
         }
         return result
     }

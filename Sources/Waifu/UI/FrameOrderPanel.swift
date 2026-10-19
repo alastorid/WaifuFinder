@@ -39,7 +39,7 @@ private struct RegroupProgressRing: View {
 }
 
 /// The right-hand panel: what the grid shows, in what order, how much of each group,
-/// how hard the app groups, and what the per-group cap left out.
+/// and how hard the app groups.
 ///
 /// When enabled, visual distance arranges the shown set after the other enabled
 /// signals rank candidates and choose group representatives. Otherwise the independent
@@ -327,10 +327,6 @@ struct FrameOrderPanel: View {
                           ? "Turn off Minimal Visual Distance to lay out one group per line."
                           : "Keep each group together, either on its own line or in one continuous flow grid.")
 
-                if !session.beyondCapByGroup.isEmpty {
-                    Divider()
-                    hiddenSection
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -349,6 +345,14 @@ struct FrameOrderPanel: View {
         } content: {
             TagFilterView(session: session)
         }
+    }
+
+    private var tagsAdvancedBinding: Binding<Bool> {
+        Binding(get: { session.settings.tagAdvancedMode }, set: { advanced in
+            var settings = session.settings
+            settings.tagAdvancedMode = advanced
+            session.settings = settings
+        })
     }
 
     /// Bordered panel with an independently controlled disclosure header.
@@ -380,6 +384,15 @@ struct FrameOrderPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    if title == "Tags" {
+                        Picker("Tags mode", selection: tagsAdvancedBinding) {
+                            Text("Basic").tag(false)
+                            Text("Advanced").tag(true)
+                        }
+                        .pickerStyle(.inline)
+                    }
+                }
                 .accessibilityLabel("\(title) panel")
                 .accessibilityValue(isExpanded.wrappedValue ? "Expanded" : "Collapsed")
 
@@ -400,13 +413,52 @@ struct FrameOrderPanel: View {
 
     // MARK: - Per-group cap
     private var perGroupSection: some View {
-        Stepper("Per group: \(session.settings.perGroupFrameCount)",
-                value: perGroupCountBinding,
-                in: 1...200)
+        let revealAll = session.settings.revealAllGroups
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 0) {
+                capModeButton("Show first \(session.settings.perGroupFrameCount) items", revealAll: false)
+                Rectangle().fill(Color.secondary.opacity(0.25))
+                    .frame(width: 1, height: 12)
+                capModeButton("Reveal all", revealAll: true)
+            }
+            .background(Color.secondary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
+            }
             .disabled(!session.groupingEnabled)
-            .help(session.groupingEnabled
-                  ? "How many frames of each group the grid keeps — the best of each, by the order above."
-                  : "Turn grouping on to apply the per-group limit.")
+
+            ValueSlider(
+                bounds: 1...33,
+                value: Double(session.settings.perGroupFrameCount),
+                step: 1,
+                onChange: { perGroupCountBinding.wrappedValue = Int($0.rounded()) },
+                onCommit: { perGroupCountBinding.wrappedValue = Int($0.rounded()) }
+            )
+            .disabled(!session.groupingEnabled || revealAll)
+            .accessibilityLabel("Items per group")
+            .accessibilityValue("\(session.settings.perGroupFrameCount)")
+            .help("Show the first 1–33 items in each group, ranked by the order above. Use +N more in the grid to reveal an individual group.")
+        }
+    }
+
+    private func capModeButton(_ title: String, revealAll: Bool) -> some View {
+        Button {
+            var settings = session.settings
+            settings.revealAllGroups = revealAll
+            session.settings = settings
+        } label: {
+            Text(title)
+                .font(.caption)
+                .monospacedDigit()
+                .frame(maxWidth: .infinity, minHeight: 21)
+                .background(session.settings.revealAllGroups == revealAll
+                            ? Color.accentColor.opacity(0.2) : Color.clear)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(session.settings.revealAllGroups == revealAll ? .isSelected : [])
     }
 
     // MARK: - Show
@@ -443,21 +495,10 @@ struct FrameOrderPanel: View {
             get: { session.settings.perGroupFrameCount },
             set: { value in
                 var settings = session.settings
-                settings.perGroupFrameCount = value
+                settings.perGroupFrameCount = min(max(value, 1), 33)
                 session.settings = settings
             }
         )
-    }
-
-    // MARK: - Hidden
-
-    private var hiddenSection: some View {
-        BeyondCapSection(session: session, groups: session.cappedGroupSummaries,
-                         revealedGroups: session.revealedGroups,
-                         totalFrameCount: session.frames.count,
-                         hiddenFrameCount: session.hiddenFrameCount,
-                         beyondCapFrameCount: session.beyondCapFrameCount)
-            .equatable()
     }
 
     // MARK: - Summary and actions
@@ -511,78 +552,4 @@ struct FrameOrderPanel: View {
             ? String(format: "%.1fs", elapsed)
             : String(format: "%dm %02ds", Int(elapsed) / 60, Int(elapsed) % 60)
     }
-}
-
-/// Progress, selection and score updates do not invalidate the group rows.
-private struct BeyondCapSection: View, Equatable {
-    let session: WaifuSession
-    let groups: [CappedGroupSummary]
-    let revealedGroups: Set<FrameGroupID>
-    let totalFrameCount: Int
-    let hiddenFrameCount: Int
-    let beyondCapFrameCount: Int
-
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.groups == rhs.groups && lhs.revealedGroups == rhs.revealedGroups
-            && lhs.totalFrameCount == rhs.totalFrameCount
-            && lhs.hiddenFrameCount == rhs.hiddenFrameCount
-            && lhs.beyondCapFrameCount == rhs.beyondCapFrameCount
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Beyond the cap")
-                    .font(.headline)
-                Spacer()
-                Button(revealedGroups.isEmpty ? "Reveal all" : "Hide all") {
-                    session.revealedGroups = revealedGroups.isEmpty
-                        ? Set(groups.map(\.id))
-                        : []
-                }
-                .buttonStyle(.link)
-                .font(.caption)
-            }
-
-            // Two different numbers, and the sentence has to use the right one:
-            // how many frames the cap puts past the limit (fixed), and how many of
-            // those the user has not revealed (which the toggles change).
-            Text(hiddenFrameCount > 0
-                 ? "\(hiddenFrameCount) of \(totalFrameCount) frames are past the per-group limit. Nothing was discarded to make room — reveal a group to see the rest of it."
-                 : "All \(beyondCapFrameCount) frames past the per-group limit are on screen.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ForEach(groups) { entry in
-                HStack(spacing: 6) {
-                    Text(entry.label)
-                        .font(.system(size: 11, design: .monospaced))
-                        .lineLimit(1)
-                    Text("\(entry.count) more")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                    Toggle("Reveal", isOn: revealBinding(entry.id))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .help("Show every frame of this group in the grid")
-                }
-            }
-        }
-    }
-
-    private func revealBinding(_ group: FrameGroupID) -> Binding<Bool> {
-        Binding(
-            get: { session.revealedGroups.contains(group) },
-            set: { revealed in
-                var revealedGroups = session.revealedGroups
-                if revealed { revealedGroups.insert(group) }
-                else { revealedGroups.remove(group) }
-                session.revealedGroups = revealedGroups
-            }
-        )
-    }
-
 }

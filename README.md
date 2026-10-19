@@ -402,13 +402,24 @@ focused frame in motion.
   confidence among values strictly above the tag threshold. Summary work runs in
   the background and reuses cached vectors on Metal for larger selections, with
   the same average on the CPU for small selections or when Metal is unavailable.
-  See [tag summary computation](docs/Tag-summary.md) for caching and fallback rules.
+  See [tag summary computation](docs/Tag-summary.md) for caching and fallback rules. Right-click
+  the **Tags** header to choose **Basic** (default) or **Advanced**. Advanced adds inline
+  **Top** (1–99, default 7; 99 displays **all**) and **Threshold** (0.35–1, default 0.35)
+  sliders above the tag search. Top combines the top N frames for every tag when none are selected; selected tags
+  keep their AND rule with a separate Top N ranking for each, before group caps. Basic leaves Top off.
+  Threshold filters stored FP8 scores without discarding scores below the chosen value,
+  so lowering it restores matches. Mode and slider values persist and are saved in presets. While Top is active,
+  thumbnails show the tags whose Top N rankings admitted them in place of the frame number,
+  in white text on stable dark colors. Click the tag label to show the frame number;
+  click the number to restore the tags. This toggle is available only in Advanced mode
+  with a Top limit active. A +N count and tooltip disclose additional tags.
 - **Grouping** (right, off by default) — the FeaturePrint distance within which two frames are the same
   shot, as a live slider: tighter makes more, smaller groups, looser makes fewer, larger
   ones. It re-groups when released (drag) or on each step (←/→), without re-scoring.
-- **Per group** (right) — how many frames of each group the grid keeps, best first by the
-  current order (7 by default). This selector appears before Show. Frames in no group are never capped; the tail of each
-  group's line is a "+N more" tile, and the panel lists every group past the cap.
+- **Show first n items / Reveal all** (Grouping panel) — how many frames of each group the grid keeps, best first by the
+  current order (7 by default), using a slider from 1 to 33. Reveal all lifts every group cap
+  and greys out the slider. Frames in no group are never capped; the tail of each
+  capped group's line has a "+N more" tile to reveal that group.
 - **Show** (right) — a compact Faces control: All (default), With faces, or Without
   faces; and one-group-per-line vs one continuous grid. The face filter uses the same
   significance threshold as ranking, so tiny detected faces count as without faces.

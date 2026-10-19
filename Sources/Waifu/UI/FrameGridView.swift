@@ -261,7 +261,9 @@ struct FrameGridView: View {
             sourceAspect: item.aspect,
             sourceURL: snapshot.sourceURL,
             isPhotosSource: snapshot.key.photosSource,
-            squareThumbnail: snapshot.key.square
+            squareThumbnail: snapshot.key.square,
+            topTags: session.topTagsByFrame[frame.id] ?? [],
+            topTagFilterActive: session.settings.tagAdvancedMode && session.settings.tagTopCount < 99
         )
         .gesture(
             TapGesture().modifiers([.command, .shift]).onEnded { click(frame, .additiveRange) }
@@ -429,17 +431,23 @@ private struct FrameCell: View {
     let sourceURL: URL?
     let isPhotosSource: Bool
     let squareThumbnail: Bool
+    let topTags: [String]
+    let topTagFilterActive: Bool
     @StateObject private var thumbnail: GridThumbnailPresentation
     @State private var isSelected: Bool
     @State private var isThumbnailVisible = false
     @State private var isHovered = false
+    @State private var showsFrameNumber = false
 
     init(session: WaifuSession, frame: AnalyzedFrame, thumbnailKey: String, generation: UUID, width: CGFloat,
-         sourceAspect: CGFloat, sourceURL: URL?, isPhotosSource: Bool, squareThumbnail: Bool) {
+         sourceAspect: CGFloat, sourceURL: URL?, isPhotosSource: Bool, squareThumbnail: Bool,
+         topTags: [String], topTagFilterActive: Bool) {
         self.session = session; self.frame = frame; self.thumbnailKey = thumbnailKey
         self.generation = generation; self.width = width
         self.sourceAspect = sourceAspect; self.sourceURL = sourceURL
         self.isPhotosSource = isPhotosSource; self.squareThumbnail = squareThumbnail
+        self.topTags = topTags
+        self.topTagFilterActive = topTagFilterActive
         let identity = generation.uuidString + ":" + thumbnailKey
         _thumbnail = StateObject(wrappedValue: GridThumbnailPresentation(identity: identity))
         _isSelected = State(initialValue: session.selectedFrameIDs.contains(frame.id))
@@ -466,7 +474,12 @@ private struct FrameCell: View {
         .contentShape(Rectangle())
         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         .overlay(alignment: .topLeading) {
-            if visibleThumbnail != nil && !isPhotosSource { frameNumberOverlay }
+            if visibleThumbnail != nil {
+                thumbnailLabel(height: height)
+                .padding(3)
+                .frame(maxWidth: width, maxHeight: height, alignment: .topLeading)
+                .clipped()
+            }
         }
         .overlay(alignment: .topTrailing) {
             if visibleThumbnail != nil && isOrdered {
@@ -492,6 +505,8 @@ private struct FrameCell: View {
             }
         }
         .onHover { isHovered = $0 }
+        .onChange(of: topTagFilterActive) { _, _ in showsFrameNumber = false }
+        .onChange(of: thumbnailIdentity) { _, _ in showsFrameNumber = false }
         // strokeBorder consumes picture space inward without changing cell geometry.
         .overlay {
             if visibleThumbnail != nil {
@@ -561,6 +576,33 @@ private struct FrameCell: View {
         return selectedURLs + [clickedURL]
     }
 
+    @ViewBuilder
+    private func thumbnailLabel(height: CGFloat) -> some View {
+        if topTagFilterActive && !topTags.isEmpty {
+            Button {
+                showsFrameNumber.toggle()
+            } label: {
+                if showsFrameNumber {
+                    frameNumberOverlay
+                } else {
+                    topTagBadges(height: height)
+                }
+            }
+            .buttonStyle(.plain)
+            .help(thumbnailLabelHelp)
+            .accessibilityLabel(showsFrameNumber ? "Show Top tags" : "Show frame number")
+            .accessibilityIdentifier("frame-label-toggle-\(frame.id.sampleIndex)")
+        } else if !isPhotosSource {
+            frameNumberOverlay
+        }
+    }
+
+    private var thumbnailLabelHelp: String {
+        let tags = topTags.joined(separator: ", ")
+        if showsFrameNumber { return "Click to show Top tags: " + tags }
+        return "Top \(session.settings.tagTopCount): " + tags + ". Click to show frame number."
+    }
+
     /// Zero-based decoded source ordinal, also used in exports and diagnostics.
     private var frameNumberOverlay: some View {
         Text("\(sourceURL.flatMap { VideoCollection.get($0) } == nil ? frame.id.sampleIndex : VideoCollection.localIndex(frame.id.sampleIndex))")
@@ -569,7 +611,35 @@ private struct FrameCell: View {
             .padding(.horizontal, 3)
             .padding(.vertical, 1)
             .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 2))
-            .padding(3)
+    }
+
+    /// Keep labels inside small thumbnails; the tooltip lists every winning tag.
+    private func topTagBadges(height: CGFloat) -> some View {
+        let rows = max(1, min(3, Int((height - 6) / 16)))
+        let shown = Array(topTags.prefix(rows))
+        return VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(shown.enumerated()), id: \.element) { index, tag in
+                HStack(spacing: 3) {
+                    Text(tag).lineLimit(1)
+                    if index == shown.count - 1, topTags.count > shown.count {
+                        Text("+\(topTags.count - shown.count)").fixedSize()
+                    }
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(topTagColor(tag), in: RoundedRectangle(cornerRadius: 3))
+                .accessibilityLabel("Top tag: \(tag)")
+            }
+        }
+        .frame(maxWidth: max(0, width - 6), alignment: .leading)
+    }
+
+    /// Stable hues with an opaque, dark background in both appearance modes.
+    private func topTagColor(_ tag: String) -> Color {
+        let hash = tag.utf8.reduce(UInt64(14_695_981_039_346_656_037)) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
+        return Color(hue: Double(hash % 360) / 360, saturation: 0.65, brightness: 0.32)
     }
 
 }

@@ -368,7 +368,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let preset = PanelPreset(id: previous.id, name: previous.name,
                                  order: frameOrder, limits: frameLimits, tags: tagFilter, faces: faceFilter,
                                  groupingEnabled: groupingEnabled, groupingThreshold: groupingThreshold,
-                                 groupRows: groupRows, perGroupCount: settings.perGroupFrameCount)
+                                 groupRows: groupRows, perGroupCount: settings.perGroupFrameCount,
+                                 revealAllGroups: settings.revealAllGroups,
+                                 tagAdvancedMode: settings.tagAdvancedMode,
+                                 tagTopCount: settings.tagTopCount,
+                                 tagThreshold: settings.taggerThreshold)
         var updated = panelPresets
         updated[slot] = preset
         guard persistPanelPresets(updated) else { return false }
@@ -425,7 +429,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         groupRows = preset.groupRows
         groupingThreshold = threshold
         var updated = settings
-        updated.perGroupFrameCount = min(max(preset.perGroupCount, 1), 200)
+        updated.perGroupFrameCount = min(max(preset.perGroupCount, 1), 33)
+        updated.revealAllGroups = preset.revealAllGroups ?? false
+        updated.tagAdvancedMode = preset.tagAdvancedMode ?? false
+        updated.tagTopCount = min(max(preset.tagTopCount ?? 7, 1), 99)
+        let tagThreshold = preset.tagThreshold ?? 0.35
+        updated.taggerThreshold = tagThreshold.isFinite ? min(max(tagThreshold, 0.35), 1) : 0.35
         // Leave the applied threshold intact until regroup() detects and persists the change.
         if frames.isEmpty { updated.similarityThreshold = threshold }
         settings = updated
@@ -568,6 +577,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// wherever its inputs change instead: `frames`, `settings`, and the arrangement
     /// fields (`frameOrder`, `faceFilter`, `revealedGroups`).
     @Published private(set) var displayedFrames: [AnalyzedFrame] = []
+    @Published private(set) var topTagsByFrame: [FrameID: [String]] = [:]
 
     /// Traits present on the frames currently shown in the grid, sorted for the
     /// wrapping tag filter. The selected tags are kept separately by `TagFilter`.
@@ -1957,7 +1967,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             order: frameOrder,
             faceFilter: faceFilter,
             limits: frameLimits,
-            perGroupTopCount: settings.perGroupFrameCount,
+            perGroupTopCount: settings.revealAllGroups ? Int.max : settings.perGroupFrameCount,
             revealedGroups: revealedGroups,
             grouping: grouping,
             groupingEnabled: groupingEnabled,
@@ -1970,8 +1980,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                  scoreSortDescending: tagFilter.scoreSortDescending),
             vocabulary: tagVocabulary,
             filteredCandidates: displayCandidates,
-            applyingVisualOrder: false
+            applyingVisualOrder: false,
+            tagTopCount: settings.tagAdvancedMode ? settings.tagTopCount : 99
         )
+        topTagsByFrame = arrangement.topTagsByFrame
         let baseFrames = uniqueFramesByID(arrangement.visible)
         visualOrderBaseFrames = baseFrames
         displayedFrames = visuallyOrderedFrames(baseFrames)

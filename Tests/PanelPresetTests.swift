@@ -20,6 +20,10 @@ func registerPanelPresetTests() {
             session.groupingThreshold = 0.58
             session.groupRows = false
             session.settings.perGroupFrameCount = 13
+            session.settings.revealAllGroups = true
+            session.settings.tagAdvancedMode = true
+            session.settings.tagTopCount = 19
+            session.settings.taggerThreshold = 0.65
             session.settings.exportJPEGQuality = 0.8
             guard session.savePanelPreset(at: 0) else {
                 check(false, "save succeeds"); return
@@ -28,6 +32,14 @@ func registerPanelPresetTests() {
             let id = expected.id
             let reopened = WaifuSession(settingsURL: url)
             checkEqual(reopened.panelPresets, session.panelPresets, "all three slots round trip on disk")
+            checkEqual(reopened.settings.revealAllGroups, true, "reveal mode persists across restart")
+            checkEqual(reopened.settings.tagAdvancedMode, true, "advanced mode persists across restart")
+            checkEqual(reopened.settings.tagTopCount, 19, "tag top count persists")
+            checkEqual(reopened.settings.taggerThreshold, 0.65, "dynamic threshold persists")
+            reopened.settings.tagAdvancedMode = false
+            reopened.settings.tagTopCount = 99
+            reopened.settings.taggerThreshold = 0.35
+            reopened.settings.revealAllGroups = false
             reopened.settings.exportJPEGQuality = 0.5
             reopened.loadPanelPreset(id)
             checkEqual(reopened.frameOrder, expected.order, "sort signals and directions restored")
@@ -39,8 +51,17 @@ func registerPanelPresetTests() {
             checkEqual(reopened.settings.similarityThreshold, 0.58, "threshold persists with no media loaded")
             checkEqual(reopened.groupRows, false, "row preference restored")
             checkEqual(reopened.settings.perGroupFrameCount, 13, "cap restored")
+            checkEqual(reopened.settings.revealAllGroups, true, "reveal mode restored from preset")
+            checkEqual(reopened.settings.tagAdvancedMode, true, "preset restores advanced mode")
+            checkEqual(reopened.settings.tagTopCount, 19, "preset restores tag top count")
+            checkEqual(reopened.settings.taggerThreshold, 0.65, "preset restores dynamic threshold")
             checkEqual(reopened.settings.exportJPEGQuality, 0.5, "unrelated preferences retained")
             checkEqual(reopened.regroupPending, false, "no stale pending indicator")
+            reopened.clearPanelSettings(selectedSlot: nil)
+            checkEqual(reopened.settings.revealAllGroups, false, "clear returns to limited mode")
+            checkEqual(reopened.settings.tagAdvancedMode, false, "clear returns to Basic")
+            checkEqual(reopened.settings.tagTopCount, 7, "clear resets Top")
+            checkEqual(reopened.settings.taggerThreshold, 0.35, "clear resets threshold")
         }
     })
     Registry.shared.add(suite: suite, TestCase(name: "three slots start from app defaults and memory replaces only the chosen slot", knownBug: nil) {
@@ -70,14 +91,14 @@ func registerPanelPresetTests() {
             checkEqual(session.panelPresets[0], initial[0], "slot 1 retained")
             checkEqual(session.panelPresets[2], initial[2], "slot 3 retained")
             checkEqual(session.panelPresets[1].id, initial[1].id, "slot identity retained")
-            session.settings.perGroupFrameCount = 37
+            session.settings.perGroupFrameCount = 27
             check(session.savePanelPreset(at: 1), "memory overwrites slot 2 again")
             let reopened = WaifuSession(settingsURL: url)
             reopened.loadPanelPreset(initial[1].id)
-            checkEqual(reopened.settings.perGroupFrameCount, 37, "latest overwrite survives restart")
-            reopened.settings.perGroupFrameCount = 55
+            checkEqual(reopened.settings.perGroupFrameCount, 27, "latest overwrite survives restart")
+            reopened.settings.perGroupFrameCount = 25
             reopened.loadPanelPreset(initial[1].id)
-            checkEqual(reopened.settings.perGroupFrameCount, 37, "reselecting the same number recalls it again")
+            checkEqual(reopened.settings.perGroupFrameCount, 27, "reselecting the same number recalls it again")
             reopened.loadPanelPreset(initial[0].id)
             checkEqual(reopened.settings.perGroupFrameCount, WaifuSettings.default.perGroupFrameCount, "untouched slots load defaults")
             check(!session.savePanelPreset(at: 3), "out-of-range slot rejected")

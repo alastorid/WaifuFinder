@@ -25,6 +25,107 @@ private func summaryFrame(_ id: Int, _ scores: [Int: Float]) -> AnalyzedFrame {
 func registerTagSummaryTests() {
     let suite = "frame arrangement: tag summary"
 
+    Registry.shared.add(suite: suite, TestCase(name: "thumbnail Top reasons follow rankings, group caps and partial reveals", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let group = FrameGroupID(raw: "top-badges")
+        var frames = [summaryFrame(0, [4: 0.9, 5: 0.5]),
+                      summaryFrame(1, [4: 0.8, 5: 0.8]),
+                      summaryFrame(2, [4: 0.5, 5: 0.9])]
+        for index in frames.indices { frames[index].groupID = group }
+        let capped = FrameArrangement.arrange(frames, order: .chronological,
+            perGroupTopCount: 1, grouping: .default, vocabulary: vocabulary, tagTopCount: 1)
+        checkEqual(capped.topTagsByFrame, [frames[0].id: ["tag 0"]], "only visible winners receive badges")
+        let revealed = FrameArrangement.arrange(frames, order: .chronological,
+            perGroupTopCount: 1, revealedGroups: [group], grouping: .default,
+            vocabulary: vocabulary, tagTopCount: 1)
+        checkEqual(revealed.topTagsByFrame, [frames[0].id: ["tag 0"], frames[2].id: ["tag 1"]],
+                   "partial reveal retains the exact ranking reason for each restored winner")
+        check(revealed.topTagsByFrame[frames[1].id] == nil, "a high-scoring nonwinner never receives a badge")
+        let high = FrameArrangement.arrange(frames, order: .chronological,
+            perGroupTopCount: 33, grouping: .default, tagFilter: TagFilter(threshold: 0.95),
+            vocabulary: vocabulary, tagTopCount: 1)
+        check(high.topTagsByFrame.isEmpty, "threshold changes remove obsolete reasons")
+        let shared = TagFilter().topFrameSelection([summaryFrame(3, [4: 0.9, 5: 0.9])],
+                                                  count: 1, vocabulary: vocabulary)
+        checkEqual(shared.tagsByFrame[FrameID(sampleIndex: 3)], ["tag 0", "tag 1"],
+                   "a frame can explain multiple independent winning tags")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Advanced mode applies Top without poisoning cached candidates", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let directory = try Temporary.directory("tag-advanced-session")
+        let frames = [summaryFrame(0, [4: 0.9, 5: 0.5]),
+                      summaryFrame(1, [4: 0.8, 5: 0.8]),
+                      summaryFrame(2, [4: 0.5, 5: 0.9])]
+        await MainActor.run {
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
+            session.frameOrder = .chronological
+            session.updateAnalyzedFrames(frames)
+            session.tagFilter = TagFilter(requiredTags: ["tag_0", "tag_1"])
+            session.settings.tagTopCount = 1
+            session.settings.tagAdvancedMode = true
+            session.tagFilter = TagFilter()
+            checkEqual(Set(session.displayedFrames.map(\.id)), Set([frames[0].id, frames[2].id]),
+                       "Advanced ranks every tag without a selection")
+            checkEqual(session.topTagsByFrame[frames[0].id], ["tag 0"], "first thumbnail explains its winning tag")
+            checkEqual(session.topTagsByFrame[frames[2].id], ["tag 1"], "last thumbnail explains a different winning tag")
+            session.settings.tagAdvancedMode = false
+            session.tagFilter = TagFilter(requiredTags: ["tag_0", "tag_1"])
+            session.settings.tagTopCount = 2
+            checkEqual(session.displayedFrames.count, 3, "Basic leaves Top off")
+            check(session.topTagsByFrame.isEmpty, "Basic removes thumbnail Top badges")
+            session.settings.tagAdvancedMode = true
+            checkEqual(session.displayedFrames.map(\.id), [frames[1].id], "Advanced applies per-tag Top")
+            session.settings.tagTopCount = 99
+            checkEqual(session.displayedFrames.count, 3, "all restores cached candidates")
+            check(session.topTagsByFrame.isEmpty, "all removes thumbnail Top badges")
+            session.settings.tagTopCount = 1
+            checkEqual(session.displayedFrames.count, 0, "separate top-one winners do not satisfy AND")
+            session.settings.tagAdvancedMode = false
+            checkEqual(session.displayedFrames.count, 3, "returning to Basic restores the candidate set")
+            session.settings.taggerThreshold = 0.85
+            checkEqual(session.displayedFrames.count, 0, "dynamic threshold applies to each required tag")
+            session.settings.taggerThreshold = 0.35
+            checkEqual(session.displayedFrames.count, 3, "lowering threshold restores FP8-backed matches")
+        }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Top intersects each selected tag before group caps and all removes the limit", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = [summaryFrame(0, [4: 0.9, 5: 0.5]),
+                      summaryFrame(1, [4: 0.8, 5: 0.8]),
+                      summaryFrame(2, [4: 0.5, 5: 0.9])]
+        let filter = TagFilter(requiredTags: ["tag_0", "tag_1"])
+        let top = FrameArrangement.arrange(frames, order: .chronological,
+            perGroupTopCount: 33, grouping: .default, tagFilter: filter,
+            vocabulary: vocabulary, tagTopCount: 2)
+        checkEqual(top.visible.map(\.id), [frames[1].id], "only the middle frame is in both top-two sets")
+        checkEqual(top.topTagsByFrame, [frames[1].id: ["tag 0", "tag 1"]], "selected-tag explanation includes both rankings")
+        let all = FrameArrangement.arrange(frames, order: .chronological,
+            perGroupTopCount: 33, grouping: .default, tagFilter: filter,
+            vocabulary: vocabulary, tagTopCount: 99)
+        checkEqual(all.visible.map(\.id), frames.map(\.id), "99 removes the top limit")
+        let reversed = filter.keepingTopFrames(Array(frames.reversed()), count: 2, vocabulary: vocabulary)
+        checkEqual(reversed.map(\.id), [frames[1].id], "membership does not depend on display order")
+        checkEqual(Set(TagFilter().keepingTopFrames(frames, count: 1, vocabulary: vocabulary).map(\.id)),
+                   Set([frames[0].id, frames[2].id]), "without a selection combine each tag's top frame")
+        checkEqual(TagFilter().keepingTopFrames(frames, count: 99, vocabulary: vocabulary).count, 3,
+                   "all removes the limit without selected tags too")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "raising and lowering dynamic threshold preserves sparse FP8 scores", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = [summaryFrame(0, [4: 0.5]), summaryFrame(1, [4: 0.9])]
+        let originalPayloads = frames.map(\.tagProbabilities)
+        let low = TagFilter(requiredTags: ["tag_0"], threshold: 0.35)
+        let high = TagFilter(requiredTags: ["tag_0"], threshold: 0.8)
+        checkEqual(low.keepingTopFrames(frames, count: 7, vocabulary: vocabulary).count, 2, "low threshold admits both")
+        checkEqual(high.keepingTopFrames(frames, count: 7, vocabulary: vocabulary).count, 1, "raised threshold narrows matches")
+        checkEqual(low.keepingTopFrames(frames, count: 7, vocabulary: vocabulary).count, 2, "lowering threshold restores matches")
+        checkEqual(frames.map(\.tagProbabilities), originalPayloads, "compressed scores remain intact")
+        checkEqual(frames[0].tagProbabilities?.prefix(4), Data("WDT3".utf8), "FP8 storage is retained")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "selected tag scores compose with ratings and strict trait filters", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let frames = [summaryFrame(0, [0: 0.9, 4: 0.8, 5: 0.5]),

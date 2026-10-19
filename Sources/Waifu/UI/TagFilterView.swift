@@ -89,6 +89,9 @@ struct TagFilterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
+            if session.settings.tagAdvancedMode {
+                advancedControls
+            }
             if showsTaggingStatus {
                 TaggingPanelStatus(session: session, panel: .tags)
             }
@@ -195,6 +198,49 @@ struct TagFilterView: View {
                 commonExpanded = false
             }
         }
+    }
+
+    private var advancedControls: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Top").frame(width: 58, alignment: .leading)
+                ValueSlider(bounds: 1...99, value: Double(session.settings.tagTopCount), step: 1,
+                            onChange: setTopCount, onCommit: setTopCount)
+                    .accessibilityLabel("Top frames per tag")
+                    .accessibilityValue(topCountText)
+                Text(topCountText).frame(width: 30, alignment: .trailing)
+            }
+            .help("Keep the top N frames for every tag, or for each selected tag. Set to all to remove the limit.")
+            HStack(spacing: 8) {
+                Text("Threshold").frame(width: 58, alignment: .leading)
+                ValueSlider(bounds: 0.35...1, value: Double(session.settings.taggerThreshold), step: 0.01,
+                            onChange: setThreshold, onCommit: setThreshold)
+                    .accessibilityLabel("Tag threshold")
+                    .accessibilityValue(String(format: "%.2f", session.settings.taggerThreshold))
+                Text(String(format: "%.2f", session.settings.taggerThreshold))
+                    .frame(width: 30, alignment: .trailing)
+            }
+            .help("Filter using stored FP8 tag scores. Lowering the threshold restores matches without retagging.")
+        }
+        .font(.caption)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+    }
+
+    private var topCountText: String {
+        session.settings.tagTopCount == 99 ? "all" : "\(session.settings.tagTopCount)"
+    }
+
+    private func setTopCount(_ value: Double) {
+        var settings = session.settings
+        settings.tagTopCount = min(max(Int(value.rounded()), 1), 99)
+        session.settings = settings
+    }
+
+    private func setThreshold(_ value: Double) {
+        var settings = session.settings
+        settings.taggerThreshold = Float(min(max((value * 100).rounded() / 100, 0.35), 1))
+        session.settings = settings
     }
 
     /// The chip that stands in for the common tags themselves. It borrows the

@@ -80,6 +80,16 @@ enum TagProbabilityCodec {
         }
     }
 
+    /// Sparse iteration for per-tag ranking. Compact FP8 rows never expand to
+    /// dense Float32 vectors; older formats remain readable.
+    static func sparseValues(in data: Data) -> [(index: Int, value: Float)]? {
+        if data.prefix(4) == compactMagic { return sparsePairs(in: data) }
+        guard let values = decode(data) else { return nil }
+        return values.enumerated().compactMap { index, value in
+            value > 0 ? (index, value) : nil
+        }
+    }
+
     static func value(in data: Data, at index: Int) -> Float? {
         values(in: data, at: [index])?.first
     }

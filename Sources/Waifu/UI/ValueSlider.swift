@@ -23,6 +23,7 @@ struct ValueSlider: View {
     let onChange: (Double) -> Void
     let onCommit: (Double) -> Void
 
+    @Environment(\.isEnabled) private var isEnabled
     @State private var dragging = false
     @FocusState private var isFocused: Bool
 
@@ -45,7 +46,7 @@ struct ValueSlider: View {
                     .padding(.horizontal, knob / 2)
 
                 Capsule()
-                    .fill(Color.accentColor.opacity(0.55))
+                    .fill((isEnabled ? Color.accentColor : Color.secondary).opacity(0.55))
                     .frame(width: max(0, position - knob / 2), height: track)
                     .offset(x: knob / 2)
 
@@ -90,7 +91,9 @@ struct ValueSlider: View {
             )
         }
         .frame(height: knob)
-        .focusable()
+        .opacity(isEnabled ? 1 : 0.45)
+        .allowsHitTesting(isEnabled)
+        .focusable(isEnabled)
         .focusEffectDisabled()
         .focused($isFocused)
         .onKeyPress(.leftArrow) { commitStep(-1); return .handled }
@@ -106,6 +109,7 @@ struct ValueSlider: View {
     /// One step, snapped to the step grid so the readout stays tidy, then committed —
     /// a key press is discrete, so there is no release to wait for.
     private func commitStep(_ direction: Int) {
+        guard isEnabled else { return }
         let stepped = min(max(value + Double(direction) * step, bounds.lowerBound), bounds.upperBound)
         let snapped = (stepped / step).rounded() * step
         guard snapped != value else { return }

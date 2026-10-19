@@ -26,6 +26,9 @@ struct WaifuSettings: Sendable, Equatable, Codable {
     /// Kept to read older settings files. Tagging now starts from its UI panels.
     var taggerEnabled: Bool = false
     var taggerThreshold: Float = 0.35
+    var tagAdvancedMode = false
+    /// 99 means all matching frames; applied only in Advanced mode.
+    var tagTopCount = 7
 
     // MARK: Decode
 
@@ -61,9 +64,10 @@ struct WaifuSettings: Sendable, Equatable, Codable {
     /// Groups are runs of near-identical frames — a single shot, a slow pan — so a
     /// group of 40 contributes one moment, not 40 rows. Seven is enough to choose
     /// between: the best few by whatever the order is, with room to see that the
-    /// group really is one shot. The rest are not lost; the panel reports them per
-    /// group and can reveal a group in place.
+    /// group really is one shot. The rest are not lost; the grid can reveal a group in place.
     var perGroupFrameCount: Int = 7
+    /// Lift every group cap while retaining the chosen limited count.
+    var revealAllGroups = false
 
     // MARK: Export
 
@@ -76,8 +80,8 @@ struct WaifuSettings: Sendable, Equatable, Codable {
     init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case taggerEnabled, taggerThreshold, analysisMode, analysisWidth, similarityThreshold, maximumGroupSize,
-             faceWeight, minimumFaceAreaFraction, perGroupFrameCount, exportFormat, exportJPEGQuality
+        case taggerEnabled, taggerThreshold, tagAdvancedMode, tagTopCount, analysisMode, analysisWidth, similarityThreshold, maximumGroupSize,
+             faceWeight, minimumFaceAreaFraction, perGroupFrameCount, revealAllGroups, exportFormat, exportJPEGQuality
     }
 
     /// Older settings predate analysisMode. Keep every saved preference when
@@ -88,12 +92,15 @@ struct WaifuSettings: Sendable, Equatable, Codable {
         analysisMode = try values.decodeIfPresent(AnalysisMode.self, forKey: .analysisMode) ?? .full
         taggerEnabled = try values.decodeIfPresent(Bool.self, forKey: .taggerEnabled) ?? false
         taggerThreshold = try values.decodeIfPresent(Float.self, forKey: .taggerThreshold) ?? 0.35
+        tagAdvancedMode = try values.decodeIfPresent(Bool.self, forKey: .tagAdvancedMode) ?? false
+        tagTopCount = try values.decodeIfPresent(Int.self, forKey: .tagTopCount) ?? 7
         analysisWidth = try values.decodeIfPresent(Int.self, forKey: .analysisWidth) ?? analysisWidth
         similarityThreshold = try values.decodeIfPresent(Float.self, forKey: .similarityThreshold) ?? similarityThreshold
         maximumGroupSize = try values.decodeIfPresent(Int.self, forKey: .maximumGroupSize) ?? maximumGroupSize
         faceWeight = try values.decodeIfPresent(Double.self, forKey: .faceWeight) ?? faceWeight
         minimumFaceAreaFraction = try values.decodeIfPresent(Float.self, forKey: .minimumFaceAreaFraction) ?? minimumFaceAreaFraction
         perGroupFrameCount = try values.decodeIfPresent(Int.self, forKey: .perGroupFrameCount) ?? perGroupFrameCount
+        revealAllGroups = try values.decodeIfPresent(Bool.self, forKey: .revealAllGroups) ?? false
         exportFormat = try values.decodeIfPresent(ExportFormat.self, forKey: .exportFormat) ?? exportFormat
         exportJPEGQuality = try values.decodeIfPresent(Float.self, forKey: .exportJPEGQuality) ?? exportJPEGQuality
     }
@@ -121,13 +128,14 @@ struct WaifuSettings: Sendable, Equatable, Codable {
         var copy = self
         // A zero or negative decode width would make every Vision call fail, so
         // the floor is a real one rather than a defensive one.
-        copy.taggerThreshold = copy.taggerThreshold.isFinite ? min(max(copy.taggerThreshold, 0), 1) : 0.35
+        copy.taggerThreshold = copy.taggerThreshold.isFinite ? min(max(copy.taggerThreshold, 0.35), 1) : 0.35
+        copy.tagTopCount = min(max(copy.tagTopCount, 1), 99)
         copy.analysisWidth = min(max(copy.analysisWidth, 64), 4096)
         copy.similarityThreshold = min(max(copy.similarityThreshold, 0.01), 2.0)
         copy.maximumGroupSize = min(max(copy.maximumGroupSize, 2), 500)
         copy.faceWeight = min(max(copy.faceWeight, 0), 1)
         copy.minimumFaceAreaFraction = min(max(copy.minimumFaceAreaFraction, 0), 0.5)
-        copy.perGroupFrameCount = min(max(copy.perGroupFrameCount, 1), 200)
+        copy.perGroupFrameCount = min(max(copy.perGroupFrameCount, 1), 33)
         copy.exportJPEGQuality = min(max(copy.exportJPEGQuality, 0.1), 1.0)
         return copy
     }

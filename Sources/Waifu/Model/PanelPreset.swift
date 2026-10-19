@@ -12,6 +12,11 @@ struct PanelPreset: Codable, Equatable, Identifiable, Sendable {
     let groupingThreshold: Float
     let groupRows: Bool
     let perGroupCount: Int
+    // Optional so presets saved before this control still decode.
+    var revealAllGroups: Bool? = nil
+    var tagAdvancedMode: Bool? = nil
+    var tagTopCount: Int? = nil
+    var tagThreshold: Float? = nil
 
     static func defaultSlot(_ number: Int) -> PanelPreset {
         PanelPreset(name: "Preset \(number)", order: .defaultOrder, limits: .none,
