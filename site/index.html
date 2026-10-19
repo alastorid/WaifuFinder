@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#141714" />
     <meta
       name="description"
-      content="Find, tag, compare and restore video frames on your Mac. WaifuFinder combines frame-by-frame analysis with an optimized WD Tagger and local AI restoration."
+      content="Find, tag, compare and restore video frames on your Mac. WaifuFinder combines frame-by-frame analysis with an optimized WD Tagger you can run locally, remotely, or across connected Macs, plus local AI restoration."
     />
     <meta
       property="og:title"
@@ -14,7 +14,7 @@
     />
     <meta
       property="og:description"
-      content="Frame-by-frame analysis. An optimized WD Tagger. Local restoration. Built for Apple silicon."
+      content="Frame-by-frame analysis. An optimized WD Tagger across your Mac or connected workers. Local restoration. Built for Apple silicon."
     />
     <meta
       property="og:image"
@@ -34,7 +34,9 @@
         ></a
       >
       <nav aria-label="Main navigation">
-        <a href="#workflow">Frame finder</a><a href="#sequence">Photo ordering</a><a href="#tagger">WD Tagger</a><a href="#credits">Credits</a
+        <a href="#workflow">Frame finder</a><a href="#sequence">Visual sequence</a
+        ><a href="#tagger">WD Tagger</a><a href="#distributed">Distributed</a
+        ><a href="#credits">Credits</a
         ><a href="https://github.com/alastorid/WaifuFinder">Source ↗</a
         ><a class="nav-download" href="#download">Get the app ↓</a>
       </nav>
@@ -42,8 +44,8 @@
     <main id="top">
       <section class="hero wrap">
         <div class="eyebrow">
-          <span class="status-dot"></span> Native macOS / Apple silicon / Local
-          processing
+          <span class="status-dot"></span> Native macOS / Apple silicon /
+          Local-first processing
         </div>
         <div class="hero-heading">
           <h1>A whole video.<br /><em>Your exact frame.</em></h1>
@@ -56,7 +58,8 @@
           <p class="hero-text">
             Go from a long timeline to the frames you came for. Analyze every
             frame, filter by what’s in it, compare the details, and restore a
-            selected region—all on your Mac.
+            selected region on your Mac. Add trusted Macs when WD Tagger needs
+            more room to work.
           </p>
           <div class="hero-actions">
             <a
@@ -177,9 +180,72 @@
           </div>
         </div>
       </section>
+      <section class="sequence wrap" id="sequence" aria-labelledby="sequence-heading">
+        <div class="section-label"><span>02 / VISUAL SEQUENCE</span><span>CUOPT ROUTING SEARCH, PORTED TO METAL</span></div>
+        <div class="section-heading">
+          <h2 id="sequence-heading">Add a visual<br /><em>sequence.</em></h2>
+          <p>For photo collections, Minimal Visual Distance places similar-looking images beside one another. It approximates a shortest open path through the photos shown; reverse follows that same path backward. This feature adds a new way to browse after WaifuFinder has helped you find the frames you want.</p>
+        </div>
+        <figure class="sequence-drawing" data-sequence-demo>
+          <div class="sequence-demo-header">
+            <span class="micro">ONE SET OF DRAWINGS / THREE WAYS TO BROWSE</span>
+            <div class="sequence-controls" role="group" aria-label="Illustration order">
+              <button type="button" data-sequence-mode="mixed" aria-pressed="false">Mixed</button>
+              <button type="button" data-sequence-mode="sorted" aria-pressed="true">Visual sequence</button>
+              <button type="button" data-sequence-mode="reverse" aria-pressed="false">Reverse ↔</button>
+            </div>
+          </div>
+          <svg class="sequence-map" viewBox="0 0 820 200" role="img" aria-labelledby="sequence-map-title sequence-map-desc">
+            <title id="sequence-map-title">A route through visual similarity</title>
+            <desc id="sequence-map-desc">Eight colored nodes represent synthetic scenes. A line connects them in their displayed order. This is an illustrative feature map, not real photo data.</desc>
+            <defs><pattern id="sequence-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#ffffff14" /></pattern></defs>
+            <rect width="820" height="200" fill="url(#sequence-grid)" />
+            <path class="sequence-route-shadow" d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
+            <path class="sequence-route" data-sequence-route d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
+            <g class="sequence-nodes" text-anchor="middle">
+              <g transform="translate(55 150)"><circle r="20" fill="#df9d65" /><text y="4">A</text></g>
+              <g transform="translate(155 130)"><circle r="20" fill="#c6aa65" /><text y="4">B</text></g>
+              <g transform="translate(255 140)"><circle r="20" fill="#a8b773" /><text y="4">C</text></g>
+              <g transform="translate(355 95)"><circle r="20" fill="#81b895" /><text y="4">D</text></g>
+              <g transform="translate(455 115)"><circle r="20" fill="#73b1b2" /><text y="4">E</text></g>
+              <g transform="translate(555 65)"><circle r="20" fill="#74a2c4" /><text y="4">F</text></g>
+              <g transform="translate(655 80)"><circle r="20" fill="#8c95c9" /><text y="4">G</text></g>
+              <g transform="translate(765 45)"><circle r="20" fill="#a58fbc" /><text y="4">H</text></g>
+            </g>
+          </svg>
+          <ol class="sequence-strip" data-sequence-strip aria-label="Synthetic scene sequence">
+            <li data-scene="0" style="--scene:#df9d65;--ridge:#8c5945"><span class="scene-art"><i></i></span><span>A · Amber</span></li>
+            <li data-scene="1" style="--scene:#c6aa65;--ridge:#786a46"><span class="scene-art"><i></i></span><span>B · Ochre</span></li>
+            <li data-scene="2" style="--scene:#a8b773;--ridge:#526a48"><span class="scene-art"><i></i></span><span>C · Meadow</span></li>
+            <li data-scene="3" style="--scene:#81b895;--ridge:#3e6a59"><span class="scene-art"><i></i></span><span>D · Grove</span></li>
+            <li data-scene="4" style="--scene:#73b1b2;--ridge:#39646b"><span class="scene-art"><i></i></span><span>E · Lagoon</span></li>
+            <li data-scene="5" style="--scene:#74a2c4;--ridge:#3d567c"><span class="scene-art"><i></i></span><span>F · Coast</span></li>
+            <li data-scene="6" style="--scene:#8c95c9;--ridge:#4f4977"><span class="scene-art"><i></i></span><span>G · Dusk</span></li>
+            <li data-scene="7" style="--scene:#a58fbc;--ridge:#64466f"><span class="scene-art"><i></i></span><span>H · Twilight</span></li>
+          </ol>
+          <figcaption><span data-sequence-caption aria-live="polite">A continuous visual sequence, from amber to twilight.</span>
+            <span>All scenes are drawn illustrations. No personal photos or video samples.</span></figcaption>
+        </figure>
+        <div class="sequence-process">
+          <article><span class="feature-index">01 / SEE</span><h3>Describe each image.</h3><p>Apple Vision supplies a visual fingerprint. Distances describe how different two images look.</p></article>
+          <article><span class="feature-index">02 / SEARCH</span><h3>Find a smoother route.</h3><p>Our Swift/Metal port of cuOpt’s 2-opt routing search tries several paths and evaluates improvements in parallel.</p></article>
+          <article><span class="feature-index">03 / BROWSE</span><h3>Follow the sequence.</h3><p>Every shown photo appears once. Reverse retraces the same path. Grouping is off by default and remains optional.</p></article>
+        </div>
+        <div class="sequence-finding">
+          <div><span class="micro">MEASURED ON APPLE M3</span><strong>4×<span>solver speedup</span></strong><p>About 75% less time in the measured 1,024-item workload.</p></div>
+          <div class="sequence-benchmark"><div><span>CPU</span><i style="--bar:100%"></i><b>116.296 ms</b></div><div><span>Metal</span><i style="--bar:25%"></i><b>29.068 ms</b></div>
+            <p>Optimized code · 768-dimensional synthetic vectors · four starting paths · 16 search iterations · includes distance-matrix construction. Excludes photo analysis and first shader compilation. M4 has not been measured.</p></div>
+        </div>
+        <details class="sequence-details"><summary>What came from NVIDIA—and what we built for Mac</summary>
+          <p>NVIDIA publishes cuOpt’s routing source under Apache 2.0. We adapted its 2-opt candidate search, ranked reductions and snapshot move execution into Swift and Metal. Apple Vision, Accelerate and Metal provide the native feature and execution pipeline. This is a specialized port of the routing search, with upstream attribution; the full CUDA solver is not running on macOS.</p>
+          <p>The objective is to reduce the total visual distance between neighboring photos, with no return edge from the end to the beginning. It is an approximate solution to an open-path traveling salesperson problem, rather than a guarantee of the global minimum. CPU and GPU distances are checked against Vision, including its squared-distance convention.</p>
+          <p>Videos can contain 200,000+ frames, but the 4× result is a solver measurement at 1,024 items. We have not benchmarked 200,000-item sequencing. The 16,384-item GPU cutoff is an implementation resource guard, not a collection limit: larger sets use the CPU fallback. A full distance matrix for 200,000 items would need about 149 GiB, so the implementation avoids allocating one. Analysis, filtering and sequencing have separate costs.</p>
+          <p><a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/CuOptMetal.md">Source audit, limits and reproducible benchmark ↗</a> · <a href="https://github.com/NVIDIA/cuopt">NVIDIA cuOpt ↗</a></p>
+        </details>
+      </section>
       <section class="tagger wrap" id="tagger">
         <div class="section-label">
-          <span>02 / WD TAGGER</span
+          <span>03 / WD TAGGER</span
           ><span class="lime">OPTIONAL MODEL. SERIOUSLY TUNED.</span>
         </div>
         <div class="tagger-grid">
@@ -305,10 +371,105 @@
           </div>
         </details>
       </section>
+      <section
+        class="distributed light-section"
+        id="distributed"
+        aria-labelledby="distributed-heading"
+      >
+        <div class="wrap">
+          <div class="section-label">
+            <span>04 / DISTRIBUTED WD TAGGER</span>
+            <span>PUT IDLE MAC MINIS TO WORK.</span>
+          </div>
+          <div class="distributed-intro">
+            <div>
+              <p class="eyebrow">One queue. A pool of Apple silicon.</p>
+              <h2 id="distributed-heading">
+                More Macs.<br /><em>More frames in flight.</em>
+              </h2>
+              <p class="section-copy">
+                Connect compatible Macs and WaifuFinder sends tagging batches to
+                the least-busy worker. Use the Mac with your video, remote Macs
+                on your network, or both together. Add idle Mac minis to give
+                the queue more capacity.
+              </p>
+            </div>
+            <figure class="compute-map" aria-labelledby="compute-map-caption">
+              <figcaption id="compute-map-caption">
+                <span class="micro">A SHARED TAGGING QUEUE</span>
+                <span>Illustration · batches run in parallel</span>
+              </figcaption>
+              <div class="compute-source">
+                <span class="compute-icon" aria-hidden="true">⌘</span>
+                <span><strong>Your video Mac</strong><small>Frames · queue · results</small></span>
+                <b>QUEUE</b>
+              </div>
+              <div
+                class="compute-lanes"
+                role="group"
+                aria-label="Tagging work can run on local and connected Macs"
+              >
+                <div class="compute-lane compute-lane-local">
+                  <span class="compute-node" aria-hidden="true"></span>
+                  <span><strong>This Mac</strong><small>Local tagger · optional lane</small></span>
+                  <span class="compute-badge">LOCAL</span>
+                </div>
+                <div class="compute-lane">
+                  <span class="compute-node" aria-hidden="true"></span>
+                  <span><strong>Mac mini 01</strong><small>Connected tagger worker</small></span>
+                  <span class="compute-badge">REMOTE</span>
+                </div>
+                <div class="compute-lane">
+                  <span class="compute-node" aria-hidden="true"></span>
+                  <span><strong>Mac mini 02</strong><small>Connected tagger worker</small></span>
+                  <span class="compute-badge">REMOTE</span>
+                </div>
+              </div>
+              <p class="compute-return"><span>←</span> Tag scores return to your video Mac</p>
+            </figure>
+          </div>
+          <div class="distributed-modes">
+            <article>
+              <span class="feature-index">01 — LOCAL</span>
+              <h3>Keep tagging here.</h3>
+              <p>
+                Run WD Tagger on the Mac with your video. Frames stay on that
+                Mac.
+              </p>
+            </article>
+            <article>
+              <span class="feature-index">02 — REMOTE</span>
+              <h3>Put idle Macs to work.</h3>
+              <p>
+                Connected Macs run the model and return tag results. The video
+                stays with the host Mac.
+              </p>
+            </article>
+            <article class="distributed-combined">
+              <span class="feature-index">03 — LOCAL + REMOTE</span>
+              <h3>Use the whole pool.</h3>
+              <p>
+                Include this Mac as a worker too. Batches flow across local and
+                remote Macs at the same time.
+              </p>
+            </article>
+          </div>
+          <p class="distributed-note">
+            More compatible Macs add concurrent batch capacity; the speedup
+            depends on each Mac and the network. Remote workers receive prepared
+            frame images over authenticated, encrypted connections. Matching WD
+            Tagger labels are required to combine local and remote workers.
+            <a
+              href="https://github.com/alastorid/WaifuFinder/blob/main/docs/Remote-inference.md"
+              >How remote tagging works ↗</a
+            >
+          </p>
+        </div>
+      </section>
       <section class="restoration light-section" id="restore">
         <div class="wrap">
           <div class="section-label">
-            <span>03 / UNCOVER WAIFU</span><span>LOCAL AI RESTORATION</span>
+            <span>05 / UNCOVER WAIFU</span><span>LOCAL AI RESTORATION</span>
           </div>
           <div class="restoration-grid">
             <div
@@ -349,17 +510,19 @@
       </section>
       <section class="local wrap">
         <div class="section-label">
-          <span>04 / BUILT TO STAY LOCAL</span
+          <span>06 / LOCAL BY DEFAULT</span
           ><span>YOUR MAC DOES THE WORK.</span>
         </div>
         <div class="local-grid">
           <h2>Your footage.<br /><em>Your machine.</em></h2>
           <div>
             <article>
-              <h3>No video uploads.</h3>
+              <h3>Your source video stays here.</h3>
               <p>
-                Analysis, tagging and restoration run on your Mac. No account,
-                analytics or telemetry.
+                By default, analysis, tagging and restoration run on your Mac.
+                With remote tagging, prepared frame images go only to Macs you
+                connect. The source video stays here. No account, analytics or
+                telemetry.
               </p>
             </article>
             <article>
@@ -379,72 +542,9 @@
           </div>
         </div>
       </section>
-      <section class="sequence wrap" id="sequence" aria-labelledby="sequence-heading">
-        <div class="section-label"><span>05 / OPTIONAL PHOTO ORDERING</span><span>CUOPT ROUTING SEARCH, PORTED TO METAL</span></div>
-        <div class="section-heading">
-          <h2 id="sequence-heading">Add a visual<br /><em>sequence.</em></h2>
-          <p>For photo collections, Minimal Visual Distance places similar-looking images beside one another. It approximates a shortest open path through the photos shown; reverse follows that same path backward. This optional sorting feature adds a new way to browse after WaifuFinder has helped you find the frames you want.</p>
-        </div>
-        <figure class="sequence-drawing" data-sequence-demo>
-          <div class="sequence-demo-header">
-            <span class="micro">ONE SET OF DRAWINGS / THREE WAYS TO BROWSE</span>
-            <div class="sequence-controls" role="group" aria-label="Illustration order">
-              <button type="button" data-sequence-mode="mixed" aria-pressed="false">Mixed</button>
-              <button type="button" data-sequence-mode="sorted" aria-pressed="true">Visual sequence</button>
-              <button type="button" data-sequence-mode="reverse" aria-pressed="false">Reverse ↔</button>
-            </div>
-          </div>
-          <svg class="sequence-map" viewBox="0 0 820 200" role="img" aria-labelledby="sequence-map-title sequence-map-desc">
-            <title id="sequence-map-title">A route through visual similarity</title>
-            <desc id="sequence-map-desc">Eight colored nodes represent synthetic scenes. A line connects them in their displayed order. This is an illustrative feature map, not real photo data.</desc>
-            <defs><pattern id="sequence-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#ffffff14" /></pattern></defs>
-            <rect width="820" height="200" fill="url(#sequence-grid)" />
-            <path class="sequence-route-shadow" d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
-            <path class="sequence-route" data-sequence-route d="M55 150 L155 130 L255 140 L355 95 L455 115 L555 65 L655 80 L765 45" />
-            <g class="sequence-nodes" text-anchor="middle">
-              <g transform="translate(55 150)"><circle r="20" fill="#df9d65" /><text y="4">A</text></g>
-              <g transform="translate(155 130)"><circle r="20" fill="#c6aa65" /><text y="4">B</text></g>
-              <g transform="translate(255 140)"><circle r="20" fill="#a8b773" /><text y="4">C</text></g>
-              <g transform="translate(355 95)"><circle r="20" fill="#81b895" /><text y="4">D</text></g>
-              <g transform="translate(455 115)"><circle r="20" fill="#73b1b2" /><text y="4">E</text></g>
-              <g transform="translate(555 65)"><circle r="20" fill="#74a2c4" /><text y="4">F</text></g>
-              <g transform="translate(655 80)"><circle r="20" fill="#8c95c9" /><text y="4">G</text></g>
-              <g transform="translate(765 45)"><circle r="20" fill="#a58fbc" /><text y="4">H</text></g>
-            </g>
-          </svg>
-          <ol class="sequence-strip" data-sequence-strip aria-label="Synthetic scene sequence">
-            <li data-scene="0" style="--scene:#df9d65;--ridge:#8c5945"><span class="scene-art"><i></i></span><span>A · Amber</span></li>
-            <li data-scene="1" style="--scene:#c6aa65;--ridge:#786a46"><span class="scene-art"><i></i></span><span>B · Ochre</span></li>
-            <li data-scene="2" style="--scene:#a8b773;--ridge:#526a48"><span class="scene-art"><i></i></span><span>C · Meadow</span></li>
-            <li data-scene="3" style="--scene:#81b895;--ridge:#3e6a59"><span class="scene-art"><i></i></span><span>D · Grove</span></li>
-            <li data-scene="4" style="--scene:#73b1b2;--ridge:#39646b"><span class="scene-art"><i></i></span><span>E · Lagoon</span></li>
-            <li data-scene="5" style="--scene:#74a2c4;--ridge:#3d567c"><span class="scene-art"><i></i></span><span>F · Coast</span></li>
-            <li data-scene="6" style="--scene:#8c95c9;--ridge:#4f4977"><span class="scene-art"><i></i></span><span>G · Dusk</span></li>
-            <li data-scene="7" style="--scene:#a58fbc;--ridge:#64466f"><span class="scene-art"><i></i></span><span>H · Twilight</span></li>
-          </ol>
-          <figcaption><span data-sequence-caption aria-live="polite">A continuous visual sequence, from amber to twilight.</span>
-            <span>All scenes are drawn illustrations. No personal photos or video samples.</span></figcaption>
-        </figure>
-        <div class="sequence-process">
-          <article><span class="feature-index">01 / SEE</span><h3>Describe each image.</h3><p>Apple Vision supplies a visual fingerprint. Distances describe how different two images look.</p></article>
-          <article><span class="feature-index">02 / SEARCH</span><h3>Find a smoother route.</h3><p>Our Swift/Metal port of cuOpt’s 2-opt routing search tries several paths and evaluates improvements in parallel.</p></article>
-          <article><span class="feature-index">03 / BROWSE</span><h3>Follow the sequence.</h3><p>Every shown photo appears once. Reverse retraces the same path. Grouping is off by default and remains optional.</p></article>
-        </div>
-        <div class="sequence-finding">
-          <div><span class="micro">MEASURED ON APPLE M3</span><strong>4×<span>solver speedup</span></strong><p>About 75% less time in the measured 1,024-item workload.</p></div>
-          <div class="sequence-benchmark"><div><span>CPU</span><i style="--bar:100%"></i><b>116.296 ms</b></div><div><span>Metal</span><i style="--bar:25%"></i><b>29.068 ms</b></div>
-            <p>Optimized code · 768-dimensional synthetic vectors · four starting paths · 16 search iterations · includes distance-matrix construction. Excludes photo analysis and first shader compilation. M4 has not been measured.</p></div>
-        </div>
-        <details class="sequence-details"><summary>What came from NVIDIA—and what we built for Mac</summary>
-          <p>NVIDIA publishes cuOpt’s routing source under Apache 2.0. We adapted its 2-opt candidate search, ranked reductions and snapshot move execution into Swift and Metal. Apple Vision, Accelerate and Metal provide the native feature and execution pipeline. This is a specialized port of the routing search, with upstream attribution; the full CUDA solver is not running on macOS.</p>
-          <p>The objective is to reduce the total visual distance between neighboring photos, with no return edge from the end to the beginning. It is an approximate solution to an open-path traveling salesperson problem, rather than a guarantee of the global minimum. CPU and GPU distances are checked against Vision, including its squared-distance convention.</p>
-          <p>Videos can contain 200,000+ frames, but the 4× result is a solver measurement at 1,024 items. We have not benchmarked 200,000-item sequencing. The 16,384-item GPU cutoff is an implementation resource guard, not a collection limit: larger sets use the CPU fallback. A full distance matrix for 200,000 items would need about 149 GiB, so the implementation avoids allocating one. Analysis, filtering and sequencing have separate costs.</p>
-          <p><a href="https://github.com/alastorid/WaifuFinder/blob/main/docs/CuOptMetal.md">Source audit, limits and reproducible benchmark ↗</a> · <a href="https://github.com/NVIDIA/cuopt">NVIDIA cuOpt ↗</a></p>
-        </details>
-      </section>
       <section class="credits light-section" id="credits" aria-labelledby="credits-heading">
         <div class="wrap">
-          <div class="section-label"><span>06 / SHARED WORK</span><span>CREDIT WHERE IT BELONGS.</span></div>
+          <div class="section-label"><span>07 / SHARED WORK</span><span>CREDIT WHERE IT BELONGS.</span></div>
           <div class="section-heading"><h2 id="credits-heading">Built on<br /><em>good open work.</em></h2><p>Our native Mac integration builds on the work of these projects and their contributors. Thank you for sharing the source, models and tools.</p></div>
           <div class="credit-grid">
             <article><h3><a href="https://github.com/NVIDIA/cuopt">NVIDIA · cuOpt ↗</a></h3><p>Routing search adapted for Metal. Apache 2.0.</p><span>#NVIDIA #cuOpt #TSP</span></article>

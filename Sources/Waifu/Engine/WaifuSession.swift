@@ -349,7 +349,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     // MARK: Grid arrangement
 
     /// Visual continuity, followed by independent score signals for representatives and ties.
-    @Published var frameOrder: FrameOrder = .everything {
+    @Published var frameOrder: FrameOrder = .defaultOrder {
         didSet {
             guard frameOrder != oldValue else { return }
             var previous = oldValue
@@ -710,6 +710,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var importedMedia: PreparedMedia?
 
     func loadVideo(at url: URL) {
+        loadVideos(at: [url])
+    }
+
+    /// Imports a drop as one continuous video, preserving the supplied order.
+    func loadVideos(at urls: [URL]) {
+        guard let url = urls.first else { return }
         Diag.trace(.analysis, message: "load source photos=\(PhotosMedia.shared.album(url)?.items.count ?? 0)")
         closeUncover()
         cancelTagging(keepingCompletedResults: false)
@@ -724,14 +730,35 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if let preparedSource { importedMedia = preparedSource }
 
         let stem = url.deletingPathExtension().lastPathComponent
-        currentVideoStem = stem
+        currentVideoStem = urls.count > 1 ? "\(stem) and \(urls.count - 1) more" : stem
 
-        progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
+        progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: urls.count > 1 ? "Preparing \(urls.count) videos…" : PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
 
         let token = analysisGeneration, config = settings.validated()
         analysisTask = Task.detached { [weak self] in
-            await self?.runAnalysisPipeline(for: url, existing: nil, settings: config, token: token, preparedSource: preparedSource)
+            await self?.runAnalysisPipeline(for: url, existing: nil, settings: config, token: token, preparedSource: preparedSource, sourceURLs: urls)
         }
+    }
+
+    func refreshPhotosAlbum(at url: URL) {
+        let limits = frameLimits
+        loadVideo(at: url)
+        frameLimits = limits
+    }
+
+    /// An album removed in Photos must not leave exportable stale results.
+    func clearPhotosAlbum() {
+        guard photosAlbumURL != nil else { return }
+        closeUncover()
+        cancelTagging(keepingCompletedResults: false)
+        cancel()
+        clearResults()
+        video = nil
+        photosAlbumURL = nil
+        importedMedia = nil
+        photosOrderSyncMessage = nil
+        errorMessage = nil
+        progress = AnalysisProgress()
     }
 
     /// Re-runs the analysis under current settings without re-probing.
@@ -1402,7 +1429,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Decode, score, accumulate and group away from the UI actor. Only small
     /// progress values cross actors during the pass; the grid receives one result.
     private nonisolated func runAnalysisPipeline(for url: URL?, existing: VideoInfo?,
-                                                settings: WaifuSettings, token: UUID, preparedSource: PreparedMedia? = nil) async {
+                                                settings: WaifuSettings, token: UUID, preparedSource: PreparedMedia? = nil, sourceURLs: [URL]? = nil) async {
         let started = Date()
         var progress = AnalysisProgress(phase: .probing, total: 1, message: "Reading video…")
         var analyzed: [AnalyzedFrame] = []
@@ -1410,7 +1437,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         do {
             let videoInfo: VideoInfo
             if let url {
-                let prepared = if let preparedSource { preparedSource } else { try await MediaImport.prepare(url) }
+                let prepared = if let preparedSource { preparedSource } else { try await MediaImport.prepare(sourceURLs ?? [url]) }
                 videoInfo = try await VideoProbe.probe(prepared.url)
                 try Task.checkCancellation()
                 guard await acceptVideo(videoInfo, token: token, prepared: prepared) else { return }

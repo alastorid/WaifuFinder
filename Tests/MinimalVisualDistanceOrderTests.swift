@@ -60,7 +60,7 @@ func registerMinimalVisualDistanceOrderTests() {
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "visual ordering is enabled by default and cannot filter", knownBug: nil) {
-        check(FrameOrder.everything.minimalVisualDistance.enabled, "default on")
+        check(FrameOrder.defaultOrder.minimalVisualDistance.enabled, "default on")
         check(!FrameSortKey.minimalVisualDistance.supportsFiltering, "no visual range control")
         var limits = FrameLimits.none
         limits.setLimit(FrameLimit(low: 5, high: 6), for: .minimalVisualDistance)
@@ -212,7 +212,12 @@ func registerMinimalVisualDistanceOrderTests() {
             check(!session.isSortingVisualDistance, "undoing a pending filter change restores the cached route")
             checkEqual(session.displayOrderFrames.map(\.id), Array(forward.reversed()), "cache restoration keeps the chosen direction")
             session.frameLimits.time.low = 9
+            // Visual distance is the only signal on by default, and the last
+            // remaining signal cannot be switched off. Enable the fallback the
+            // user reaches for before turning the visual route off.
+            session.frameOrder.setEnabled(true, for: .time)
             session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
+            check(!session.frameOrder.minimalVisualDistance.enabled, "the visual route can be switched off once another signal is on")
             check(!session.isSortingVisualDistance, "turning the control off cancels the pending route")
             check(!session.usesGroupRows, "turning off the global sort does not enable grouping")
             session.groupingEnabled = true

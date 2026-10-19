@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Photos keeps its album navigation beside the existing ranking workspace.
 /// Choosing another album replaces only the source; the scoring controls and
@@ -25,6 +26,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         self.trailingControls = trailingControls
     }
 
+    @State private var libraryRevision = 0
     @State private var albums: [PhotosAlbum] = []
     @State private var selectedAlbum: String?
     @State private var loading = true
@@ -76,18 +78,13 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
                 }
             }
         }
-        .task(id: scenePhase) {
-            // Returning from Photos refreshes sidebar moves/renames without
-            // reopening the selected source or restarting its analysis.
-            guard scenePhase == .active else { return }
-            loading = true
-            do {
-                let refreshedAlbums = try await PhotosMedia.shared.listAlbums()
-                try Task.checkCancellation()
-                albums = refreshedAlbums
-                if albums.allSatisfy({ $0.count == 0 }) { error = "No accessible albums contain photos." }
-            } catch is CancellationError { return } catch { self.error = error.localizedDescription }
-            loading = false
+        .task(id: libraryRevision) { await refreshLibrary() }
+        .onReceive(NotificationCenter.default.publisher(for: PhotosLibraryChanges.notification)
+            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)) { _ in
+                libraryRevision += 1
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { libraryRevision += 1 }
         }
         .onChange(of: downloadFromICloud) { _, _ in
             // Restart the bounded pass so previously skipped items are retried,
@@ -186,6 +183,47 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Refresh the current source as well as the sidebar. A fresh source URL
+    /// gives previews and thumbnails a new identity after edits or deletions.
+    private func refreshLibrary() async {
+        let sourceURL = session.photosAlbumURL
+        let selectionToken = selectionGeneration
+        loading = true
+        do {
+            let refreshedAlbums = try await PhotosMedia.shared.listAlbums()
+            try Task.checkCancellation()
+            albums = refreshedAlbums
+            error = albums.allSatisfy({ $0.count == 0 }) ? "No accessible albums contain photos." : nil
+            if let sourceURL, let previous = PhotosMedia.shared.album(sourceURL) {
+                let selection = albums.lazy.compactMap { $0.find(previous.collectionIdentifier) }.first
+                guard let selection else {
+                    if session.photosAlbumURL == sourceURL, selectionGeneration == selectionToken {
+                        session.clearPhotosAlbum()
+                        selectedAlbum = nil
+                    }
+                    loading = false
+                    return
+                }
+                let refreshedURL = try await Task.detached(priority: .utility) {
+                    try PhotosMedia.shared.openAlbum(selection, allowEmpty: true)
+                }.value
+                guard !Task.isCancelled, session.photosAlbumURL == sourceURL,
+                      selectionGeneration == selectionToken else {
+                    PhotosMedia.shared.release(refreshedURL)
+                    return
+                }
+                if let refreshed = PhotosMedia.shared.album(refreshedURL),
+                   refreshed.fingerprint != previous.fingerprint || refreshed.title != previous.title {
+                    session.refreshPhotosAlbum(at: refreshedURL)
+                } else {
+                    PhotosMedia.shared.release(refreshedURL)
+                }
+            }
+        } catch is CancellationError { return }
+        catch { self.error = error.localizedDescription }
+        loading = false
     }
 
     private func openAlbum(_ id: String?) {

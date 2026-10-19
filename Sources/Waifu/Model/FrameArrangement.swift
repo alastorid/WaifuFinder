@@ -167,7 +167,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
 
     var detail: String {
         switch self {
-        case .minimalVisualDistance: return "Arrange shown photos so consecutive images look similar. Reverse follows the same sequence backward. Other signals choose group representatives and break ties."
+        case .minimalVisualDistance: return "Arrange shown photos so consecutive images look similar. Reverse follows the same sequence backward. Other enabled signals can affect group representatives and the route's starting order."
         case .time: return "Position in the video. Ties fall through the other enabled signals."
         case .definition: return "Detail in native-resolution face crops, without size or position weighting."
         case .face: return "Vision face capture quality. Frames with no significant face sort last."
@@ -211,9 +211,9 @@ struct OrderTerm: Hashable, Sendable {
     var directionLabel: String { ascending ? "Ascending" : "Descending" }
 }
 
-/// Visual distance orders the complete shown set after the other signals choose
-/// representatives. Those signals use time, face, face definition, art, then each
-/// rating probability in fixed precedence.
+/// Visual distance arranges the shown set after the other signals sort candidates
+/// and determine group representatives. Those signals use time, face, face definition,
+/// art, then each rating probability in fixed precedence.
 ///
 /// One term always decides the tie before the next is consulted, and the frame
 /// identifier is the last resort — which is what makes every order **total**, so two
@@ -234,9 +234,11 @@ struct FrameOrder: Equatable, Sendable {
     var ratingExplicit: OrderTerm
     var tagGeneralScore: OrderTerm
 
-    /// The ordinary visual factors in force — rating probabilities remain opt-in.
+    /// By default, only visual distance is enabled. Other signals remain available
+    /// as independent options; rating probabilities are opt-in in all presets.
     init(minimalVisualDistance: OrderTerm = .chronological,
-         time: OrderTerm = .chronological, face: OrderTerm = .best, art: OrderTerm = .best, definition: OrderTerm = .best,
+         time: OrderTerm = .off(ascending: true), face: OrderTerm = .off(ascending: false),
+         art: OrderTerm = .off(ascending: false), definition: OrderTerm = .off(ascending: false),
          ratingGeneral: OrderTerm = .off(ascending: false), ratingSensitive: OrderTerm = .off(ascending: false),
          ratingQuestionable: OrderTerm = .off(ascending: false), ratingExplicit: OrderTerm = .off(ascending: false),
          tagGeneralScore: OrderTerm = .off(ascending: false)) {
@@ -358,7 +360,9 @@ struct FrameOrder: Equatable, Sendable {
         )
     }
 
-    static let everything = FrameOrder()
+    static let defaultOrder = FrameOrder()
+    /// All ordinary sorting signals enabled, retained for explicit presets and fixtures.
+    static let everything = FrameOrder.only([.minimalVisualDistance, .time, .face, .definition, .art])
     static let faceThenArt = FrameOrder.only([.face, .art])
     static let definitionOnly = FrameOrder.only([.definition])
     static let faceOnly = FrameOrder.only([.face])

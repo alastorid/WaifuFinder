@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 private func makeDropFixture(_ name: String) throws -> URL {
     let directory = try Temporary.directory("drop")
@@ -64,16 +65,16 @@ func registerVideoDropTests() {
     })
 
     Registry.shared.add(suite: suite, TestCase(
-        name: "firstAcceptableVideo takes the first acceptable URL, ignoring the rest", knownBug: nil) {
-        let good = try makeDropFixture("good.mp4")
-        let bad = URL(string: "ftp://example.com/notes.txt")!
-
-        checkEqual(VideoDrop.firstAcceptableVideo(in: [good, bad]), good,
-                   "the first acceptable URL wins")
-        checkEqual(VideoDrop.firstAcceptableVideo(in: [bad, good]), good,
-                   "a leading refusal does not stop the search")
-        checkNil(VideoDrop.firstAcceptableVideo(in: [bad]),
-                 "no acceptable URL yields nil, not a rejection of the last candidate")
-        checkNil(VideoDrop.firstAcceptableVideo(in: []), "an empty drop yields nil")
+        name: "all dropped URLs resolve in order, including serialized providers", knownBug: nil) {
+        let first = try makeDropFixture("first.mp4")
+        let second = try makeDropFixture("second.mov")
+        let third = URL(string: "https://example.com/third")!
+        let providers = [first, second, third].map { url in
+            NSItemProvider(item: url.dataRepresentation as NSData, typeIdentifier: UTType.url.identifier)
+        }
+        let urls = await VideoDrop.urls(from: providers)
+        checkEqual(urls, [first, second, third], "one drop includes every source in provider order")
+        let empty = await VideoDrop.urls(from: [])
+        checkEqual(empty, [], "empty drop stays empty")
     })
 }

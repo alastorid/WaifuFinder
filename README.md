@@ -33,7 +33,7 @@ signing removes a protection; it does not verify the app’s safety. Release bui
 are not Apple-notarized. Continue only if you trust the official download.
 After setup, open WaifuFinder from Applications as usual and eject the disk image.
 
-WaifuFinder takes one video file, decodes it frame by frame, asks Apple's Vision models
+WaifuFinder takes a video file (or joins several), decodes it frame by frame, asks Apple's Vision models
 what is interesting about each frame, clusters the frames that show the same shot, ranks
 within each cluster, and lets you browse, compare and export the survivors. It is built
 for the case where the interesting material is scattered through an hour of footage and
@@ -291,7 +291,7 @@ only part of a face: readable facial features must accompany sharp pixels. It do
 not weight frame position or face area, and bypasses the normal 1% subject-area
 filter for faces with a definition score. Faces need at least 8 native pixels in
 both dimensions to be measured. There is no deferred detection or second scan
-when sorting or filtering. Switch off Minimal Visual Distance, Time and Face to prioritize definition,
+when sorting or filtering. To prioritize definition, turn on Face definition and switch off Minimal Visual Distance, Time and Face,
 or use **Presets → Face definition only**; its range filters independently of
 whether its sorting checkbox is enabled. Tiles show `D`, and preview names the
 score. Original export pixels remain unchanged.
@@ -372,18 +372,21 @@ focused frame in motion.
   zoom keep the image point under the mouse in place, including after panning; Space or Escape
   leaves it. Stepping to another frame keeps the zoom and position you set up, because
   stepping is a comparison.
-- **Sort and Filter** (right) — **Minimal Visual Distance**, on by default, arranges all
+- **Sort and Filter** (right) — **Minimal Visual Distance** is the only sorting signal
+  on by default. It arranges all
   shown photos along an approximate shortest visual path using the same FeaturePrint
   distance as grouping. A native Swift/Metal port of cuOpt's 2-opt routing search
   explores several initial paths; small sets use the CPU and larger sets use Metal.
   Its forward/reverse control follows the same path in either direction, with no
   filtering range. An inline ring spins while the route is computed in the background.
   Photos appear in one continuous grid across group boundaries. Photos with missing feature
-  data remain visible at the end of the forward sequence. Turn this option off to
-  restore group rows and the other sorting signals: time, face, face definition, art,
-  then four independent WD Tagger rating probabilities. These signals still select
-  group representatives before visual ordering, and each can be selected, reversed
-  and filtered by its own range. Frames without a score sort last.
+  data remain visible at the end of the forward sequence. Other sorting signals—time,
+  face, face definition, art, and four independent WD Tagger rating probabilities—are
+  off by default. When enabled alongside visual distance, they rank candidates, choose
+  group representatives and provide the route's starting order; visual distance then
+  arranges the shown photos. Turn visual distance
+  off to sort directly by the other enabled signals and restore group rows. Each can be
+  selected, reversed and filtered by its own range. Frames without a score sort last.
   See [the cuOpt source audit and benchmark](docs/CuOptMetal.md) for the port's scope,
   metric checks, memory limits and CPU fallback.
 - **Ranges** (right) — under each filterable signal, a two-ended slider that keeps only the frames
@@ -693,6 +696,13 @@ Paste a direct HTTP(S) media URL, or drop a web link onto the window. Import ins
 content rather than requiring a filename extension: extensionless endpoints and
 misnamed downloads (including `.dms`) work when their contents are supported video.
 Files chosen locally are also inspected regardless of suffix.
+
+Drop multiple videos together, or select multiple files in **Browse files…**, to
+join them in the supplied order and analyze them as one continuous video. The app
+first renders a temporary joined video with Apple’s native exporter, retaining
+audio and fitting different sizes and orientations without stretching. This
+preparation takes extra time and temporary disk space. Analysis, previews, and
+frame exports all use the joined timeline; source files remain untouched.
 
 Direct media URLs are downloaded to a temporary local file before analysis so
 frame sampling, preview, restoration and export share a seekable source. Finite,

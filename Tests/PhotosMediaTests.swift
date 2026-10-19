@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import Photos
 
 func registerPhotosMediaTests() {
     Registry.shared.add(suite: "Photos media", TestCase(name: "album frame timestamps resolve to their owning item", knownBug: nil) {
@@ -66,6 +67,18 @@ func registerPhotosMediaTests() {
         check(key != PhotosMedia.fingerprint([second, first]), "order affects frame correspondence")
         check(key != PhotosMedia.fingerprint([first]), "album membership affects frame correspondence")
         checkEqual(PhotosMedia.frameIndex(seconds: 2), 2_000_000, "frame identity is independent of skipped items")
+    })
+
+    Registry.shared.add(suite: "Photos media", TestCase(name: "deleting the last photo leaves a valid empty sampling source", knownBug: nil) {
+        let url = URL(string: "waifu-photos://album/empty-test")!
+        let album = PhotosMedia.Album(title: "Empty album", collectionIdentifier: "empty-test",
+            canReorder: true, items: [], offsets: [], url: url,
+            fingerprint: PhotosMedia.fingerprint([]), fetchResult: PHFetchResult<PHAsset>())
+        let sampler = PhotosAlbumSampler(album: album, width: 512, mode: .full)
+        checkNil(try await sampler.next(), "an emptied album completes without decoding deleted photos")
+        check(album.duration > 0, "the empty source still has a valid probe duration")
+        let photo = PhotosMedia.Revision(identifier: "last-photo", modified: 1, width: 100, height: 100, duration: 1)
+        check(album.fingerprint != PhotosMedia.fingerprint([photo]), "deleting the last member invalidates the previous source")
     })
 
     Registry.shared.add(suite: "Photos media", TestCase(name: "an unanswered thumbnail request times out instead of blocking an album", knownBug: nil) {

@@ -1,5 +1,9 @@
 import SwiftUI
 
+private extension Notification.Name {
+    static let photosFavoriteDidUpdate = Notification.Name("WaifuPhotosFavoriteDidUpdate")
+}
+
 /// Shared order glyph for the toolbar filter and the small synced-photo badge.
 struct PhotosOrderIcon: View {
     let filter: PhotosOrderFilter
@@ -24,6 +28,7 @@ struct PhotosOrderIcon: View {
 struct PhotosFavoriteButton: View {
     let url: URL
     let isHovered: Bool
+    let favoriteTargets: () -> [URL]
     @Environment(\.scenePhase) private var scenePhase
     @State private var isFavorite = false
     @State private var isUpdating = false
@@ -33,11 +38,18 @@ struct PhotosFavoriteButton: View {
         Button {
             guard !isUpdating else { return }
             let next = !isFavorite
+            let targets = favoriteTargets()
+            let identifiers = targets.compactMap { PhotosMedia.shared.item($0)?.asset.localIdentifier }
             isUpdating = true
             Task {
                 do {
-                    try await PhotosMedia.shared.setFavorite(url, isFavorite: next)
+                    try await PhotosMedia.shared.setFavorite(targets, isFavorite: next)
                     isFavorite = next
+                    NotificationCenter.default.post(
+                        name: .photosFavoriteDidUpdate,
+                        object: nil,
+                        userInfo: ["assetIdentifiers": identifiers, "isFavorite": next]
+                    )
                 } catch {
                     self.error = error.localizedDescription
                 }
@@ -64,6 +76,13 @@ struct PhotosFavoriteButton: View {
             // Refetch after returning from Photos or remounting a scrolled cell.
             let favorite = await PhotosMedia.shared.favoriteStatus(url) ?? item.asset.isFavorite
             guard !Task.isCancelled else { return }
+            isFavorite = favorite
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .photosFavoriteDidUpdate)) { notification in
+            guard let identifier = PhotosMedia.shared.item(url)?.asset.localIdentifier,
+                  let identifiers = notification.userInfo?["assetIdentifiers"] as? [String],
+                  identifiers.contains(identifier),
+                  let favorite = notification.userInfo?["isFavorite"] as? Bool else { return }
             isFavorite = favorite
         }
         .alert("Couldn't update Favorite", isPresented: Binding(

@@ -84,6 +84,8 @@ final class PhotosMedia: @unchecked Sendable {
         let offsets: [Double]
         let url: URL
         let fingerprint: String
+        // Retain the fetch so PhotoKit continues reporting membership changes.
+        let fetchResult: PHFetchResult<PHAsset>
         var duration: Double { items.last.map { $0.offset + $0.duration } ?? 1 }
     }
     /// One photo's own cache identity. Photos exposes no file to stat, so the
@@ -104,6 +106,12 @@ final class PhotosMedia: @unchecked Sendable {
     private var albums: [URL: Album] = [:]
     private var items: [URL: Item] = [:]
     private var videoAssets: [URL: VideoAsset] = [:]
+    // Keep sidebar fetches alive so new albums, folder changes and counts also
+    // remain part of PhotoKit's observed results between refreshes.
+    private var sidebarCollections: [PHFetchResult<PHCollection>] = []
+    private var sidebarAssets: [PHFetchResult<PHAsset>] = []
+    private var sidebarSmartAlbums: PHFetchResult<PHAssetCollection>?
+
 
     static func isPhotos(_ url: URL) -> Bool { url.scheme == "waifu-photos" }
     func album(_ url: URL) -> Album? { lock.withLock { albums[url] } }
@@ -187,16 +195,28 @@ final class PhotosMedia: @unchecked Sendable {
         return item(resolved)?.assetCacheKey
     }
 
-    func setFavorite(_ url: URL, isFavorite: Bool) async throws {
-        guard let item = item(url), item.isStill else {
-            throw Self.failure("This photo is no longer available in Photos.")
+    func setFavorite(_ urls: [URL], isFavorite: Bool) async throws {
+        var assets: [PHAsset] = []
+        var identifiers = Set<String>()
+        for url in urls {
+            guard let item = item(url), item.isStill else {
+                throw Self.failure("This photo is no longer available in Photos.")
+            }
+            if identifiers.insert(item.asset.localIdentifier).inserted {
+                assets.append(item.asset)
+            }
+        }
+        guard !assets.isEmpty else {
+            throw Self.failure("No photos are available to update.")
         }
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         guard status == .authorized || status == .limited else {
             throw Self.failure("Allow WaifuFinder to make changes to Photos in System Settings → Privacy & Security → Photos.")
         }
         try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest(for: item.asset).isFavorite = isFavorite
+            for asset in assets {
+                PHAssetChangeRequest(for: asset).isFavorite = isFavorite
+            }
         }
     }
 
@@ -251,11 +271,15 @@ final class PhotosMedia: @unchecked Sendable {
         guard status == .authorized || status == .limited else {
             throw Self.failure("Allow Photos access in System Settings → Privacy & Security → Photos, then try again.")
         }
+        PhotosLibraryChanges.shared.start()
         // A flat fetchAssetCollections(.album) is not the user's sidebar order.
         // Read the ordered root collection list and each folder's child list.
         // Do not apply a sort descriptor or flatten albums out of their folders.
         var visited = Set<String>()
+        var collectionFetches: [PHFetchResult<PHCollection>] = []
+        var assetFetches: [PHFetchResult<PHAsset>] = []
         func readCollections(_ collections: PHFetchResult<PHCollection>) -> [PhotosAlbum] {
+            collectionFetches.append(collections)
             var rows: [PhotosAlbum] = []
             for index in 0..<collections.count {
                 let collection = collections.object(at: index)
@@ -267,28 +291,38 @@ final class PhotosMedia: @unchecked Sendable {
                                             count: children.reduce(0) { $0 + $1.count },
                                             isSmartAlbum: false, children: children))
                 } else if let album = collection as? PHAssetCollection {
+                    let assets = PHAsset.fetchAssets(in: album, options: Self.fetchOptions())
+                    assetFetches.append(assets)
                     rows.append(PhotosAlbum(id: album.localIdentifier,
                                             title: album.localizedTitle ?? "Album",
-                                            count: PHAsset.fetchAssets(in: album, options: Self.fetchOptions()).count,
+                                            count: assets.count,
                                             isSmartAlbum: false))
                 }
             }
             return rows
         }
         var rows = readCollections(PHCollection.fetchTopLevelUserCollections(with: nil))
-        PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil).enumerateObjects { collection, _, _ in
+        let smartAlbums = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: nil)
+        smartAlbums.enumerateObjects { collection, _, _ in
             guard visited.insert(collection.localIdentifier).inserted else { return }
-            let count = PHAsset.fetchAssets(in: collection, options: Self.fetchOptions()).count
+            let assets = PHAsset.fetchAssets(in: collection, options: Self.fetchOptions())
+            assetFetches.append(assets)
+            let count = assets.count
             if count > 0 {
                 rows.append(PhotosAlbum(id: collection.localIdentifier,
                                         title: collection.localizedTitle ?? "Album",
                                         count: count, isSmartAlbum: true))
             }
         }
+        lock.withLock {
+            sidebarCollections = collectionFetches
+            sidebarAssets = assetFetches
+            sidebarSmartAlbums = smartAlbums
+        }
         return rows
     }
 
-    func openAlbum(_ selection: PhotosAlbum) throws -> URL {
+    func openAlbum(_ selection: PhotosAlbum, allowEmpty: Bool = false) throws -> URL {
         guard !selection.isFolder else { throw Self.failure("Choose an album inside this folder.") }
         guard let collection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [selection.id], options: nil).firstObject else {
             throw Self.failure("This album is no longer available in Photos.")
@@ -296,17 +330,18 @@ final class PhotosMedia: @unchecked Sendable {
         let session = UUID().uuidString
         let url = URL(string: "waifu-photos://album/\(session)")!
         var entries: [Item] = [], offset = 0.0
-        PHAsset.fetchAssets(in: collection, options: Self.fetchOptions()).enumerateObjects { asset, _, _ in
+        let fetched = PHAsset.fetchAssets(in: collection, options: Self.fetchOptions())
+        fetched.enumerateObjects { asset, _, _ in
             let item = Item(asset: asset, url: URL(string: "waifu-photos://asset/\(session)-\(entries.count)")!, offset: offset)
             entries.append(item)
             offset += item.duration
         }
-        guard !entries.isEmpty else { throw Self.failure("This album contains no accessible photos.") }
+        guard allowEmpty || !entries.isEmpty else { throw Self.failure("This album contains no accessible photos.") }
         lock.withLock {
             albums[url] = Album(title: selection.title, collectionIdentifier: collection.localIdentifier,
                                 canReorder: collection.canPerform(.rearrangeContent),
                                 items: entries, offsets: entries.map(\.offset), url: url,
-                                fingerprint: Self.fingerprint(entries))
+                                fingerprint: Self.fingerprint(entries), fetchResult: fetched)
             for entry in entries { items[entry.url] = entry }
         }
         return url

@@ -391,7 +391,7 @@ struct FrameGridView: View {
             Button("Sync order") { session.syncPhotosOrder(for: frame) }
                 .disabled(session.isSyncingPhotosOrder || session.photosAlbumURL.flatMap { PhotosMedia.shared.album($0) }?.canReorder != true)
                 .help("Write the displayed order to Photos. With multiple photos selected, sync only that selection in its displayed order.")
-            Button("Reset order state") { session.resetPhotosOrderState() }
+            Button("Mark unordered") { session.resetPhotosOrderState() }
             Button("Show in Photos") { PhotosAppIntegration.reveal(photoURL) }
         }
 
@@ -600,7 +600,9 @@ private struct FrameCell: View {
             if visibleThumbnail != nil, isPhotosSource,
                let albumURL = sourceURL,
                let photoURL = PhotosMedia.shared.photoItemURL(for: albumURL, seconds: frame.timeSeconds) {
-                PhotosFavoriteButton(url: photoURL, isHovered: isHovered)
+                PhotosFavoriteButton(url: photoURL, isHovered: isHovered) {
+                    favoriteTargets(for: photoURL)
+                }
                     .id(photoURL)
                     .padding(5)
             }
@@ -640,6 +642,33 @@ private struct FrameCell: View {
         }
         .onDisappear { thumbnail.disappear(identity: thumbnailIdentity) }
 
+    }
+
+    private func favoriteTargets(for clickedURL: URL) -> [URL] {
+        guard let albumURL = sourceURL,
+              session.selectedFrameIDs.count > 1,
+              session.selectedFrameIDs.contains(frame.id) else {
+            return [clickedURL]
+        }
+
+        var seen = Set<String>()
+        let selectedURLs = session.displayOrderFrames
+            .filter { session.selectedFrameIDs.contains($0.id) }
+            .compactMap { PhotosMedia.shared.photoItemURL(for: albumURL, seconds: $0.timeSeconds) }
+            .filter { url in
+                guard let identifier = PhotosMedia.shared.item(url)?.asset.localIdentifier else { return false }
+                return seen.insert(identifier).inserted
+            }
+
+        guard let clickedIdentifier = PhotosMedia.shared.item(clickedURL)?.asset.localIdentifier else {
+            return [clickedURL]
+        }
+        if selectedURLs.contains(where: {
+            PhotosMedia.shared.item($0)?.asset.localIdentifier == clickedIdentifier
+        }) {
+            return selectedURLs
+        }
+        return selectedURLs + [clickedURL]
     }
 
     /// Zero-based decoded source ordinal, also used in exports and diagnostics.

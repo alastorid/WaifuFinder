@@ -41,8 +41,9 @@ private struct RegroupProgressRing: View {
 /// The right-hand panel: what the grid shows, in what order, how much of each group,
 /// how hard the app groups, and what the per-group cap left out.
 ///
-/// Visual distance orders the complete shown set. The other independent switches
-/// order by time, face, face definition, art, then rating probabilities, and carry
+/// When enabled, visual distance arranges the shown set after the other enabled
+/// signals rank candidates and choose group representatives. Otherwise the independent
+/// switches order by time, face, face definition, art, then rating probabilities, and carry
 /// a **range**, which filters:
 /// drag the two ends to keep only frames between them. The range's ends are the span
 /// the data actually covers, printed on the two handles themselves, so the control

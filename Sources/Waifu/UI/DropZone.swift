@@ -38,7 +38,7 @@ struct DropZone: View {
                 .foregroundStyle(isTargeted ? Color.accentColor : .secondary)
                 .symbolEffect(.bounce, value: isTargeted)
 
-            Text("Drop a video here")
+            Text("Drop videos here")
                 .font(.title2)
                 .foregroundStyle(.primary)
 
@@ -121,45 +121,33 @@ struct DropZone: View {
     /// Returns `true` when an item provider *can* supply a file URL, which is what
     /// tells AppKit to animate acceptance; the URL itself arrives asynchronously,
     /// because a file dragged from a remote volume may still be being copied. The
-    /// decision is therefore returned immediately and the load happens when the URL
-    /// lands, if `VideoDrop` accepts it.
+    /// decision is therefore returned immediately and one analysis starts after all candidate URLs
+    /// have arrived.
     private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
         let session = session
-        for provider in providers
-        where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) || provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-            let type = provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ? UTType.fileURL.identifier : UTType.url.identifier
-            provider.loadItem(forTypeIdentifier: type, options: nil) { item, _ in
-                guard let url = DropZone.url(from: item), VideoDrop.accepts(url) else { return }
-                Task { @MainActor in session.loadVideo(at: url) }
-            }
-            return true
+        let candidates = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
+            $0.hasItemConformingToTypeIdentifier(UTType.url.identifier)
         }
-        return false
-    }
-
-    /// Reads a file URL out of whatever `NSItemProvider` handed back. A local drop
-    /// delivers a `URL`; a cross-process one delivers the URL's serialised `Data`.
-    ///
-    /// `nonisolated` because it is called from `loadItem`'s completion handler,
-    /// which runs off the main actor, and it touches no view state.
-    nonisolated private static func url(from item: NSSecureCoding?) -> URL? {
-        if let url = item as? URL { return url }
-        if let text = item as? String { return URL(string: text) }
-        if let data = item as? Data { return URL(dataRepresentation: data, relativeTo: nil) }
-        return nil
+        guard !candidates.isEmpty else { return false }
+        Task { @MainActor in
+            let urls = await VideoDrop.urls(from: candidates)
+            session.loadVideos(at: urls)
+        }
+        return true
     }
 
     /// Opens a file panel for selecting a video when the user clicks the drop zone.
     private func selectFileViaPanel() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.data]
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.title = "Select a video to analyze"
-        panel.message = "Choose a video file"
-        if panel.runModal() == .OK, let url = panel.url {
-            session.loadVideo(at: url)
+        panel.title = "Select videos to analyze"
+        panel.message = "Choose videos to join and analyze together"
+        if panel.runModal() == .OK {
+            session.loadVideos(at: panel.urls)
         }
     }
 }

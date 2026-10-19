@@ -130,17 +130,13 @@ func registerFrameArrangementTests() {
     // MARK: - One order, independent signals
 
     Registry.shared.add(suite: suite, TestCase(
-        name: "the default order starts with visual distance, then time and scores", knownBug: nil) {
+        name: "the default order uses visual distance alone", knownBug: nil) {
         // Asserted as the projected term list, because that is exactly what the
         // sorter consumes — the precedence is not a convention the UI follows, it is
         // what the type produces.
-        checkEqual(FrameOrder.everything.terms,
-                   [SortTerm(key: .minimalVisualDistance, ascending: true),
-                    SortTerm(key: .time, ascending: true),
-                    SortTerm(key: .face, ascending: false),
-                    SortTerm(key: .definition, ascending: false),
-                    SortTerm(key: .art, ascending: false)],
-                   "visual distance is on by default, ahead of the score signals")
+        checkEqual(FrameOrder.defaultOrder.terms,
+                   [SortTerm(key: .minimalVisualDistance, ascending: true)],
+                   "visual distance is the only signal on by default")
         checkEqual(FrameSortKey.allCases,
                    [.minimalVisualDistance, .time, .face, .definition, .art, .ratingGeneral, .ratingSensitive,
                     .ratingQuestionable, .ratingExplicit, .tagGeneralScore],
