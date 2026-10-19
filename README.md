@@ -311,9 +311,10 @@ During grouping it also reports compared frames and linked groups (before final
 size-limit splitting). The frame grid, thumbnails and player are not mounted; results
 are arranged once at completion. Cancel remains available.
 
-After analysis, changing the grouping factor keeps the browser visible. A small
-progress ring beside Grouping fills as it works; finished groups replace the old
-ones when ready.
+After analysis, the title-bar **Thumbnail shape** control switches between square
+crops and full aspect ratios. Changing the grouping factor keeps the browser visible.
+A small progress ring beside Grouping fills as it works; finished groups replace the
+old ones when ready.
 
 Grouping now runs as scored frames arrive, alongside the scoring workers. Each
 new frame compares with earlier neighbours in the 120-second window; decoded

@@ -109,6 +109,7 @@ final class GridThumbnailLoader: @unchecked Sendable {
                         kCGImageSourceShouldCacheImmediately: true
                     ] as CFDictionary)
                 }
+                guard !request.isCancelled else { continuation.resume(returning: nil); return }
                 if let image {
                     cache.setObject(Entry(image), forKey: identity as NSString,
                                     cost: image.bytesPerRow * image.height)
@@ -140,6 +141,7 @@ final class GridThumbnailLoader: @unchecked Sendable {
                         kCGImageSourceShouldCacheImmediately: true
                     ] as CFDictionary)
                 }
+                guard !request.isCancelled else { continuation.resume(returning: nil); return }
                 if let image {
                     cache.setObject(Entry(image), forKey: identity as NSString,
                                     cost: image.bytesPerRow * image.height)

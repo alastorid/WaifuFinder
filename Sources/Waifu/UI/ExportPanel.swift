@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 /// Handles export directory selection and results for the toolbar Export action.
 ///
-/// Presents an `NSOpenPanel` as soon as the toolbar requests export, then calls
+/// Presents a folder importer when the toolbar requests export, then calls
 /// `session.exportSelection(to:)` and shows a results sheet with the list of
 /// exported files and any errors. The export runs asynchronously so the UI
 /// stays responsive.
@@ -19,10 +19,18 @@ struct ExportPanel: View {
 
     var body: some View {
         Color.clear
-            .onChange(of: isPresented) { _, shouldPresent in
-                guard shouldPresent else { return }
-                isPresented = false
-                selectDirectoryAndExport()
+            .fileImporter(isPresented: $isPresented, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+                switch result {
+                case .success(let directories):
+                    guard let directory = directories.first else { return }
+                    selectedDirectory = directory
+                    startExport(to: directory)
+                case .failure(let error):
+                    exportResults = []
+                    selectedDirectory = nil
+                    exportError = error.localizedDescription
+                    showResults = true
+                }
             }
             .sheet(isPresented: $showResults) {
                 ExportResultsSheet(
@@ -33,22 +41,6 @@ struct ExportPanel: View {
             }
     }
 
-    /// Opens a directory picker and starts the export.
-    private func selectDirectoryAndExport() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.title = "Choose Export Directory"
-        panel.message = "Selected frames will be exported as \(session.settings.exportFormat.fileExtension.uppercased()) files"
-        panel.prompt = "Export Here"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            selectedDirectory = url
-            startExport(to: url)
-        }
-    }
-
     /// Starts the export asynchronously.
     private func startExport(to directory: URL) {
         isExporting = true
@@ -56,6 +48,8 @@ struct ExportPanel: View {
         exportError = nil
 
         Task {
+            let scopedAccess = directory.startAccessingSecurityScopedResource()
+            defer { if scopedAccess { directory.stopAccessingSecurityScopedResource() } }
             do {
                 let results = try await session.exportSelection(to: directory)
                 await MainActor.run {

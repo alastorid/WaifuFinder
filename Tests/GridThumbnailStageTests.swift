@@ -38,6 +38,99 @@ private final class StageReads {
 
 func registerGridThumbnailStageTests() {
     let suite = "thumbnail staging"
+    Registry.shared.add(suite: suite, TestCase(name: "visible thumbnails preempt bounded offscreen prefetching which resumes at the new viewport in both modes", knownBug: nil) {
+        let directory = try Temporary.directory("thumbnail-prefetch-priority")
+        await Task { @MainActor in
+            for photosSource in [true, false] {
+                let priority = GridThumbnailWorkPriority()
+                let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+                let frames = (0..<40).map(stageFrame)
+                let key = GridStageKey(revision: 1, generation: UUID(), width: 263, columns: 2,
+                    groupColumns: 2, grouped: false, photosSource: photosSource, square: true)
+                let snapshot = GridStageSnapshot.make(GridStageInput(key: key, sourceURL: nil,
+                    rows: [], frames: frames, beyondCap: [:], revealed: []))
+                var started: [FrameID] = []
+                var cancelled = 0
+                let prefetcher = GridThumbnailPrefetcher(priority: priority) { _, frame, _ in
+                    started.append(frame.id)
+                    do { try await Task.sleep(for: .seconds(30)) }
+                    catch { cancelled += 1 }
+                }
+                prefetcher.install(snapshot: snapshot, session: session)
+                prefetcher.setVisibleRows([key.tokenPrefix + snapshot.rows[0].id])
+                await stageWait { started.count == 2 }
+                checkEqual(started.count, 2, "speculative loading has a bounded concurrency")
+                let reads = StageReads()
+                let visible = Task { await priority.withVisibleWork { await reads.read(frames[20]) } }
+                await stageWait { cancelled == 2 && reads.waiting.contains(frames[20].id) }
+                prefetcher.setVisibleRows([key.tokenPrefix + snapshot.rows[10].id])
+                for _ in 0..<20 { await Task.yield() }
+                checkEqual(started.count, 2, "prefetching stays suspended while visible work is pending")
+                reads.finishAll()
+                _ = await visible.value
+                await stageWait { started.count == 4 }
+                checkEqual(Array(started.suffix(2)), [frames[20].id, frames[21].id],
+                           "prefetching resumes in the newly visible rows before their neighbors")
+                prefetcher.stop()
+                await stageWait { cancelled == 4 }
+            }
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "cancelled video thumbnail reads leave the newly visible frame available", knownBug: nil) {
+        let directory = try Temporary.directory("thumbnail-scroll-cancel")
+        let url = directory.appendingPathComponent("source.mp4")
+        try VideoFixture.writeVideo(to: url, duration: 0.5, width: 128, height: 96, frameRate: 12)
+        let obsolete = Task { try await ThumbnailRegenerator.shared.jpegData(for: url, timeSeconds: 0, analysisWidth: 64) }
+        obsolete.cancel()
+        do {
+            _ = try await obsolete.value
+            check(false, "an offscreen request must report cancellation")
+        } catch is CancellationError {} catch {
+            check(false, "cancelled reads report cancellation rather than a decode error: \(error)")
+        }
+        let data = try await ThumbnailRegenerator.shared.jpegData(for: url, timeSeconds: 0.25, analysisWidth: 64)
+        check(!data.isEmpty, "the next visible frame decodes after cancellation")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "offscreen consumers cancel source work without interrupting another visible consumer", knownBug: nil) {
+        await Task { @MainActor in
+            var started = false
+            var cancelled = false
+            let source = Task<Data?, Never> { @MainActor in
+                started = true
+                do { try await Task.sleep(for: .seconds(30)) }
+                catch { cancelled = true }
+                return nil
+            }
+            let request = ThumbnailRequest(id: UUID(), task: source, retainAfterCompletion: false)
+            let first = Task { await request.value() }
+            let second = Task { await request.value() }
+            await stageWait { started }
+            // Let both consumers register before simulating a scroll departure.
+            for _ in 0..<10 { await Task.yield() }
+            first.cancel()
+            for _ in 0..<10 { await Task.yield() }
+            check(!source.isCancelled, "a remaining visible consumer keeps the source read alive")
+            second.cancel()
+            await stageWait { cancelled }
+            check(source.isCancelled, "the last offscreen consumer cancels the underlying read")
+            checkNil(await first.value, "an abandoned cell receives no result")
+            checkNil(await second.value, "all abandoned consumers complete")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "an already cancelled consumer cannot start an orphan thumbnail read", knownBug: nil) {
+        await Task { @MainActor in
+            let source = Task<Data?, Never> {
+                try? await Task.sleep(for: .seconds(30))
+                return nil
+            }
+            let request = ThumbnailRequest(id: UUID(), task: source, retainAfterCompletion: false)
+            let consumer = Task { @MainActor in await request.value() }
+            consumer.cancel()
+            checkNil(await consumer.value, "a cancelled consumer returns immediately")
+            check(source.isCancelled, "no source read survives without a consumer")
+            _ = await source.value
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "an album grid mounted after loading receives the latest layout without another mutation", knownBug: nil) {
         let directory = try Temporary.directory("late-album-grid")
         let pixels = try ImageFixture.cgImage(width: 16, height: 16)

@@ -263,6 +263,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var defersVisualOrder = false
 
     private func invalidateGridLayout() {
+        guard !applyingPanelPreset else { return }
         gridRevision &+= 1
         Diag.trace(.grid, message: "layout revision=\(gridRevision) analyzed=\(frames.count) displayed=\(displayOrderFrames.count) rows=\(displayedRows.count) loading=\(progress.isRunning)")
         gridLayoutSubject.send(gridRevision)
@@ -351,6 +352,67 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     nonisolated(unsafe) private var currentVideoStem: String?
 
     // MARK: Grid arrangement
+
+    @Published private(set) var panelPresets: [PanelPreset] = (1...3).map(PanelPreset.defaultSlot)
+    private var applyingPanelPreset = false
+
+    private var presetsURL: URL {
+        settingsURL.deletingPathExtension().appendingPathExtension("presets.json")
+    }
+
+    /// Memory replaces one fixed slot, retaining its identity and the other two slots.
+    @discardableResult
+    func savePanelPreset(at slot: Int) -> Bool {
+        guard panelPresets.indices.contains(slot) else { return false }
+        let previous = panelPresets[slot]
+        let preset = PanelPreset(id: previous.id, name: previous.name,
+                                 order: frameOrder, limits: frameLimits, tags: tagFilter, faces: faceFilter,
+                                 groupingEnabled: groupingEnabled, groupingThreshold: groupingThreshold,
+                                 groupRows: groupRows, perGroupCount: settings.perGroupFrameCount)
+        var updated = panelPresets
+        updated[slot] = preset
+        guard persistPanelPresets(updated) else { return false }
+        panelPresets = updated
+        return true
+    }
+
+    private func persistPanelPresets(_ presets: [PanelPreset]) -> Bool {
+        do {
+            try JSONEncoder().encode(presets).write(to: presetsURL, options: .atomic)
+            return true
+        } catch {
+            errorMessage = "Couldn’t save presets: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    var canLoadPanelPreset: Bool { !progress.isRunning && !isRegrouping }
+
+    func loadPanelPreset(_ id: UUID) {
+        guard canLoadPanelPreset, let preset = panelPresets.first(where: { $0.id == id }) else { return }
+        let threshold = preset.groupingThreshold.isFinite
+            ? min(max(preset.groupingThreshold, 0.05), 1.2) : WaifuSettings.default.similarityThreshold
+        let needsRegroup = threshold != settings.similarityThreshold
+        applyingPanelPreset = true
+        frameOrder = preset.order.enabledCount > 0 ? preset.order : .defaultOrder
+        frameLimits = preset.limits
+        tagFilter = preset.tags
+        faceFilter = preset.faces
+        groupingEnabled = preset.groupingEnabled
+        groupRows = preset.groupRows
+        groupingThreshold = threshold
+        var updated = settings
+        updated.perGroupFrameCount = min(max(preset.perGroupCount, 1), 200)
+        // Leave the applied threshold intact until regroup() detects and persists the change.
+        if frames.isEmpty { updated.similarityThreshold = threshold }
+        settings = updated
+        revealedGroups = []
+        regroupPending = false
+        applyingPanelPreset = false
+        recomputeDisplayedFrames()
+        invalidateGridLayout()
+        if needsRegroup { regroup() }
+    }
 
     /// Visual continuity, followed by independent score signals for representatives and ties.
     @Published var frameOrder: FrameOrder = .defaultOrder {
@@ -530,8 +592,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     /// Returns an in-memory thumbnail, regenerating it from the source video after
-    /// LRU eviction. Grid-cell tasks request only materialized cells, so recent
-    /// accesses track the viewport and SwiftUI's nearby lazy cells.
+    /// LRU eviction. Grid-cell requests follow actual viewport visibility.
     func thumbnailData(for frame: AnalyzedFrame, retainRegeneratedThumbnail: Bool = true) async -> Data? {
         guard !Task.isCancelled, let video else { return nil }
         let sourceURL = video.url
@@ -549,8 +610,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         let requestKey = generation.uuidString + ":" + frame.thumbnailKey
         let request: ThumbnailRequest
-        if let existing = thumbnailRequests[requestKey] {
-            var promoted = existing
+        if let existing = thumbnailRequests[requestKey], !existing.task.isCancelled {
+            let promoted = existing
             promoted.retainAfterCompletion = promoted.retainAfterCompletion || retainRegeneratedThumbnail
             thumbnailRequests[requestKey] = promoted
             request = promoted
@@ -572,7 +633,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                         self.thumbnailRequests.removeValue(forKey: requestKey)
                     }
                 }
-                guard self.thumbnailGeneration == generation,
+                guard !Task.isCancelled, self.thumbnailGeneration == generation,
                       self.video?.url == sourceURL,
                       self.frameByID[frame.id]?.thumbnailKey == frame.thumbnailKey else { return nil }
                 if let data, self.thumbnailRequests[requestKey]?.retainAfterCompletion == true {
@@ -585,7 +646,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             thumbnailRequests[requestKey] = request
         }
 
-        let data = await request.task.value
+        let data = await request.value()
         return Task.isCancelled ? nil : data
     }
 
@@ -631,11 +692,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var tagMemoryRestoreToken = UUID()
     private var analysisCacheIdentity: VideoAnalysisCacheKeys?
     nonisolated private let thumbnailCache = ThumbnailCache()
-    private struct ThumbnailRequest {
-        let id: UUID
-        let task: Task<Data?, Never>
-        var retainAfterCompletion: Bool
-    }
     private var thumbnailRequests: [String: ThumbnailRequest] = [:]
     private let settingsURL: URL
     /// A supplied settings file keeps session-level regression fixtures isolated.
@@ -647,6 +703,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         self.settingsURL = file
         loadSettings()
+        if FileManager.default.fileExists(atPath: presetsURL.path) {
+            do {
+                let saved = try JSONDecoder().decode([PanelPreset].self, from: Data(contentsOf: presetsURL))
+                // Older lists fill the first slots; any unused slots retain app defaults.
+                for (slot, preset) in saved.prefix(3).enumerated() { panelPresets[slot] = preset }
+            } catch {
+                errorMessage = "Couldn’t read saved presets: \(error.localizedDescription)"
+            }
+        }
         tagVocabulary = vocabulary ?? RemoteInferencePool.shared.remoteVocabulary ?? TagVocabulary.loadAvailable()
         remoteVocabularyChanges = RemoteInferencePool.shared.$remoteVocabulary
             .dropFirst()
@@ -1669,7 +1734,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         for request in thumbnailRequests.values { request.task.cancel() }
         thumbnailRequests.removeAll(keepingCapacity: false)
         thumbnailCache.removeAll()
-        ThumbnailRegenerator.shared.reset()
         taggingDemandActive = false
         taggingDemandGeneration = UUID()
         taggingCandidateRestoreToken = UUID()
@@ -1815,6 +1879,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Rebuilds `displayedFrames`, `displayedRows`, `limitBounds` and
     /// `beyondCapByGroup` from the current arrangement.
     private func recomputeDisplayedFrames() {
+        guard !applyingPanelPreset else { return }
         let grouping = settings.grouping.validated()
         let taggingSelection = taggingCandidates(grouping)
         let taggingCandidates = taggingSelection.frames
@@ -1903,6 +1968,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Visual order cannot change membership, representatives, score bounds or
     /// tag summaries. Reuse those results both for controls and route completion.
     private func recomputeVisualOrder() {
+        guard !applyingPanelPreset else { return }
         guard let baseFrames = visualOrderBaseFrames else {
             recomputeDisplayedFrames()
             return

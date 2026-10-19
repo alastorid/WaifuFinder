@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -25,7 +26,7 @@ struct FrameGridView: View {
     /// after the stage has committed its decoded rows.
     let session: WaifuSession
     let gridRevision: UInt64
-    let squarePhotoThumbnails: Bool
+    let squareThumbnails: Bool
 
     /// Called when the user clicks a frame (single-click replaces selection,
     /// modifier clicks toggle or extend selection; Return also selects).
@@ -41,8 +42,8 @@ struct FrameGridView: View {
     private let padding: CGFloat = 1
     private let minCellWidth: CGFloat = 130
 
-    private var usesSquarePhotoThumbnails: Bool {
-        session.photosAlbumURL != nil && squarePhotoThumbnails
+    private var usesSquareThumbnails: Bool {
+        squareThumbnails
     }
 
     var body: some View {
@@ -93,7 +94,7 @@ struct FrameGridView: View {
                 .onChange(of: session.thumbnailGeneration) { _, _ in
                     prepareStage(size: geometry.size)
                 }
-                .onChange(of: squarePhotoThumbnails) { _, _ in prepareStage(size: geometry.size) }
+                .onChange(of: squareThumbnails) { _, _ in prepareStage(size: geometry.size) }
                 .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
                     thumbnailStage.updateViewport(rect)
                 }
@@ -200,6 +201,7 @@ struct FrameGridView: View {
                 .frame(height: row.contentHeight)
                 .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, offset in
                     thumbnailStage.updateHorizontalOffset(row: row.id, offset: offset)
+                    thumbnailPrefetcher.setHorizontalOffset(row: row.id, offset: offset)
                 }
                 .onAppear {
                     scrollHorizontally(to: committedNavigation, in: row, proxy: proxy)
@@ -232,15 +234,17 @@ struct FrameGridView: View {
         let key = GridStageKey(revision: session.gridRevision, generation: generation, width: size.width,
             columns: columnCount(in: size.width), groupColumns: rowColumnCount,
             grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
-            square: usesSquarePhotoThumbnails)
+            square: usesSquareThumbnails)
         let input = GridStageInput(key: key, sourceURL: session.photosAlbumURL ?? session.video?.url,
             rows: session.displayedRows, frames: session.displayOrderFrames,
             beyondCap: session.beyondCapByGroup, revealed: session.revealedGroups)
         thumbnailStage.submit(input, viewportSize: size) { [weak session] frame in
-            guard let session, session.thumbnailGeneration == generation,
-                  let data = await session.thumbnailData(for: frame, retainRegeneratedThumbnail: false),
-                  !Task.isCancelled, session.thumbnailGeneration == generation else { return nil }
-            return await GridThumbnailLoader.shared.image(data: data, identity: generation.uuidString + ":" + frame.thumbnailKey)
+            await GridThumbnailWorkPriority.shared.withVisibleWork {
+                guard let session, session.thumbnailGeneration == generation,
+                      let data = await session.thumbnailData(for: frame, retainRegeneratedThumbnail: false),
+                      !Task.isCancelled, session.thumbnailGeneration == generation else { return nil }
+                return await GridThumbnailLoader.shared.image(data: data, identity: generation.uuidString + ":" + frame.thumbnailKey)
+            }
         }
     }
 
@@ -413,127 +417,6 @@ private struct GridRowViewportPreferenceKey: PreferenceKey {
     }
 }
 
-/// Keeps decoded thumbnail pixels warm for three rows on either side of the
-/// rows currently in the viewport. Source reads and image decoding stay off the
-/// main thread; visible cells own their loading and fade-in state.
-@MainActor
-private final class GridThumbnailPrefetcher: ObservableObject {
-    typealias PlanKey = GridStageKey
-
-    private struct Job {
-        let id: UUID
-        let task: Task<Void, Never>
-    }
-
-    private(set) var planKey: PlanKey?
-    private var rows: [GridStageRow] = []
-    private var rowIndexByToken: [String: Int] = [:]
-    private var visibleRowTokens: Set<String> = []
-    private var jobs: [String: Job] = [:]
-    private var refreshTask: Task<Void, Never>?
-    private weak var session: WaifuSession?
-
-    func install(snapshot: GridStageSnapshot, session: WaifuSession) {
-        guard planKey != snapshot.key else { return }
-        planKey = snapshot.key
-        // These immutable arrays/indices were built off-main. Installation only
-        // takes shared storage references, even for a very large photo library.
-        rows = snapshot.rows
-        rowIndexByToken = snapshot.rowIndexByToken
-        self.session = session
-        scheduleRefresh()
-    }
-
-    func setVisibleRows(_ tokens: Set<String>) {
-        guard tokens != visibleRowTokens else { return }
-        visibleRowTokens = tokens
-        scheduleRefresh()
-    }
-
-    func stop() {
-        refreshTask?.cancel()
-        refreshTask = nil
-        for job in jobs.values { job.task.cancel() }
-        jobs.removeAll(keepingCapacity: false)
-        visibleRowTokens.removeAll(keepingCapacity: false)
-        rows.removeAll(keepingCapacity: false)
-        rowIndexByToken.removeAll(keepingCapacity: false)
-        planKey = nil
-        session = nil
-    }
-
-    private func scheduleRefresh() {
-        guard refreshTask == nil else { return }
-        refreshTask = Task { [weak self] in
-            await Task.yield()
-            guard let self, !Task.isCancelled else { return }
-            self.refreshTask = nil
-            self.refresh()
-        }
-    }
-
-    private func refresh() {
-        guard let key = planKey, let session, !rows.isEmpty else { return }
-        // Warm the first screen before geometry preferences have arrived. Once
-        // scrolling starts, the viewport replaces this initial window.
-        let measuredRows = Set(visibleRowTokens.compactMap { rowIndexByToken[$0] })
-        let visibleRows = measuredRows.isEmpty ? Set(0..<min(rows.count, 3)) : measuredRows
-
-        var neighborRows = Set<Int>()
-        for visible in visibleRows {
-            for index in max(0, visible - 3)...min(rows.count - 1, visible + 3)
-                where !visibleRows.contains(index) {
-                neighborRows.insert(index)
-            }
-        }
-        let orderedRows = visibleRows.sorted() + neighborRows.sorted { lhs, rhs in
-            let leftDistance = visibleRows.map { abs($0 - lhs) }.min() ?? .max
-            let rightDistance = visibleRows.map { abs($0 - rhs) }.min() ?? .max
-            return leftDistance == rightDistance ? lhs < rhs : leftDistance < rightDistance
-        }
-
-        // Group strips can be much longer than the viewport. Prefetch one screen
-        // of each adjacent strip; the horizontal lazy stack loads the rest as it
-        // comes into view. Flat rows already contain at most one screen of cells.
-        var wanted: [String: AnalyzedFrame] = [:]
-        let maximum = max(1, key.columns * (visibleRows.count + 6))
-        for index in orderedRows {
-            let candidateFrames = key.grouped ? Array(rows[index].items.prefix(key.columns)) : rows[index].items
-            for item in candidateFrames {
-                let frame = item.frame
-                let identity = key.generation.uuidString + ":" + frame.thumbnailKey
-                wanted[identity] = frame
-                if wanted.count >= maximum { break }
-            }
-            if wanted.count >= maximum { break }
-        }
-
-        let obsoleteJobs = jobs.filter { wanted[$0.key] == nil }
-        for (identity, job) in obsoleteJobs {
-            job.task.cancel()
-            jobs.removeValue(forKey: identity)
-        }
-        for (identity, frame) in wanted where jobs[identity] == nil
-            && GridThumbnailLoader.shared.cachedImage(identity: identity) == nil {
-            let jobID = UUID()
-            let task = Task(priority: .utility) { [weak self, weak session] in
-                if let session,
-                   let data = await session.thumbnailData(for: frame, retainRegeneratedThumbnail: false),
-                   !Task.isCancelled {
-                    _ = await GridThumbnailLoader.shared.image(data: data, identity: identity)
-                }
-                self?.finish(identity: identity, jobID: jobID)
-            }
-            jobs[identity] = Job(id: jobID, task: task)
-        }
-    }
-
-    private func finish(identity: String, jobID: UUID) {
-        guard jobs[identity]?.id == jobID else { return }
-        jobs.removeValue(forKey: identity)
-    }
-}
-
 /// A single frame cell: picture, source ordinal, and inward selection border.
 private struct FrameCell: View {
     let session: WaifuSession
@@ -568,7 +451,7 @@ private struct FrameCell: View {
 
     var body: some View {
         let visibleThumbnail = thumbnail.image(for: thumbnailIdentity)
-        let isSquare = isPhotosSource && squareThumbnail
+        let isSquare = squareThumbnail
         let height = GridThumbnailLayout.size(width: width, sourceAspect: sourceAspect, square: isSquare).height
         let isOrdered = isPhotosSource
             ? sourceURL.flatMap { albumURL in
@@ -633,12 +516,18 @@ private struct FrameCell: View {
         .onReceive(session.$selectedFrameIDs.map { $0.contains(frame.id) }.removeDuplicates()) {
             isSelected = $0
         }
-        .task(id: thumbnailIdentity) {
+        .task(id: isThumbnailVisible ? thumbnailIdentity : nil) {
+            guard isThumbnailVisible else {
+                thumbnail.disappear(identity: thumbnailIdentity)
+                return
+            }
             await thumbnail.prepare(identity: thumbnailIdentity) {
-                guard session.thumbnailGeneration == generation,
-                      let data = await session.thumbnailData(for: frame), !Task.isCancelled,
-                      session.thumbnailGeneration == generation else { return nil }
-                return await GridThumbnailLoader.shared.image(data: data, identity: thumbnailIdentity)
+                await GridThumbnailWorkPriority.shared.withVisibleWork {
+                    guard session.thumbnailGeneration == generation,
+                          let data = await session.thumbnailData(for: frame), !Task.isCancelled,
+                          session.thumbnailGeneration == generation else { return nil }
+                    return await GridThumbnailLoader.shared.image(data: data, identity: thumbnailIdentity)
+                }
             }
         }
         .onDisappear { thumbnail.disappear(identity: thumbnailIdentity) }

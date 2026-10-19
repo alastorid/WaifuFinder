@@ -66,6 +66,7 @@ struct FrameOrderPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10.5) {
+                PanelPresetManager(session: session)
                 orderPanel
                 tagsPanel
                 groupingPanel

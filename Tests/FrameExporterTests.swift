@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 // Frame export: file naming, overwrite suffixes, and one real decode-and-write.
 //
@@ -28,6 +29,35 @@ import Foundation
 
 func registerFrameExporterTests() {
     let suite = "frame export"
+    Registry.shared.add(suite: suite, TestCase(name: "a selection spanning multiple videos exports each original with its local frame name", knownBug: nil) {
+        let directory = try Temporary.directory("export-multiple-videos")
+        let first = directory.appendingPathComponent("first.mp4")
+        let second = directory.appendingPathComponent("second.mp4")
+        try VideoFixture.writeVideo(to: first, duration: 1, width: 64, height: 48, frameRate: 4)
+        try VideoFixture.writeVideo(to: second, duration: 1, width: 96, height: 64, frameRate: 4)
+        let prepared = try await MediaImport.prepare([first, second])
+        let firstID = FrameID(sampleIndex: 1)
+        let secondID = FrameID(sampleIndex: try VideoCollection.frameIndex(source: 1, local: 1))
+        let destination = directory.appendingPathComponent("export")
+        let request = ExportRequest(frameIDs: [secondID, firstID], destinationDirectory: destination,
+                                    frameTimes: [firstID: 0.25, secondID: 1.25])
+        var results: [ExportResult] = []
+        for try await result in FrameExporter().export(request, sourceURL: prepared.url) { results.append(result) }
+        checkEqual(results.map(\.frameID), [secondID, firstID], "export keeps the selected frame identities and order")
+        checkEqual(results.map { $0.url.lastPathComponent }, ["second-000001.png", "first-000001.png"],
+                   "each file names its original video and local frame ordinal")
+        let sizes = [(96, 64), (64, 48)]
+        for (result, size) in zip(results, sizes) {
+            guard let source = CGImageSourceCreateWithURL(result.url as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                check(false, "every exported selection is a readable image")
+                continue
+            }
+            checkEqual(image.width, size.0, "the frame comes from the selected original at native width")
+            checkEqual(image.height, size.1, "the frame comes from the selected original at native height")
+        }
+        withExtendedLifetime(prepared) {}
+    })
 
     // MARK: - Filename derivation
 

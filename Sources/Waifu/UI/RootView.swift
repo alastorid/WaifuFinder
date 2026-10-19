@@ -21,7 +21,8 @@ struct RootView: View {
     @State private var showPhotosWorkspace = false
     @State private var showWelcomeScreen = false
     @AppStorage("rightPanelExpanded") private var rightPanelExpanded = true
-    @AppStorage("photosSquareThumbnails") private var squarePhotoThumbnails = false
+    // Keep the existing preference key so current Photos users retain their choice.
+    @AppStorage("photosSquareThumbnails") private var squareThumbnails = false
 
     private var photosAlbum: PhotosMedia.Album? {
         guard let url = session.photosAlbumURL else { return nil }
@@ -138,6 +139,13 @@ struct RootView: View {
                                 .help(isAnalyzing ? "Cancel analysis" : "Re-run analysis")
                             }
                         }
+                        Button { squareThumbnails.toggle() } label: {
+                            Label("Thumbnail shape", systemImage: squareThumbnails ? "square.grid.2x2" : "rectangle.ratio.16.to.9")
+                        }
+                        .labelStyle(.iconOnly)
+                        .frame(width: 30)
+                        .accessibilityValue(squareThumbnails ? "Square" : "Full aspect ratio")
+                        .help(squareThumbnails ? "Show full aspect ratio" : "Crop thumbnails to squares")
                         workspaceControls
                     }
                 }
@@ -196,7 +204,7 @@ struct RootView: View {
             FrameGridView(
                 session: session,
                 gridRevision: session.gridRevision,
-                squarePhotoThumbnails: squarePhotoThumbnails,
+                squareThumbnails: squareThumbnails,
                 onFrameClick: { frame, kind in
                     session.focusFromPointer(frame.id)
                     switch kind {

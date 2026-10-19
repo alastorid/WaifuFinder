@@ -9,7 +9,7 @@ struct CappedGroupSummary: Equatable, Identifiable {
 }
 
 /// The face filter uses the same significance threshold as face ranking.
-enum FrameFaceFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
+enum FrameFaceFilter: String, CaseIterable, Identifiable, Hashable, Sendable, Codable {
     case all
     case withFaces
     case withoutFaces
@@ -34,7 +34,7 @@ enum FrameFaceFilter: String, CaseIterable, Identifiable, Hashable, Sendable {
 }
 
 /// Required tags compose with face and numeric filters; unwanted tags exclude matches.
-struct TagFilter: Equatable, Sendable {
+struct TagFilter: Equatable, Sendable, Codable {
     var requiredTags: Set<String> = []
     var excludedTags: Set<String> = []
     var threshold: Float = 0.35
@@ -194,7 +194,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Whether one signal takes part, and which way it points.
-struct OrderTerm: Hashable, Sendable {
+struct OrderTerm: Hashable, Sendable, Codable {
     var enabled: Bool
     var ascending: Bool
 
@@ -222,7 +222,7 @@ struct OrderTerm: Hashable, Sendable {
 ///
 /// At least one signal is always enabled: an order with none would fall back to
 /// identifier order, which is not something a user asks for by unticking a box.
-struct FrameOrder: Equatable, Sendable {
+struct FrameOrder: Equatable, Sendable, Codable {
     var minimalVisualDistance: OrderTerm
     var time: OrderTerm
     var face: OrderTerm
@@ -407,7 +407,7 @@ private struct RatingProbabilityScores {
 /// limit the end is not consulted, and a frame that has no value for the signal at
 /// all — the face score of a landscape — passes. Once a face limit is set, though,
 /// a missing face cannot be inside the range, so those frames drop out.
-struct FrameLimit: Hashable, Sendable {
+struct FrameLimit: Hashable, Sendable, Codable {
     var low: Double?
     var high: Double?
 
@@ -425,7 +425,7 @@ struct FrameLimit: Hashable, Sendable {
 }
 
 /// One independent limit per ordering and rating signal.
-struct FrameLimits: Hashable, Sendable {
+struct FrameLimits: Hashable, Sendable, Codable {
     var time: FrameLimit = .unlimited
     var face: FrameLimit = .unlimited
     var art: FrameLimit = .unlimited
