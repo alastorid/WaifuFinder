@@ -89,97 +89,104 @@ struct TagFilterView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            if session.settings.tagAdvancedMode {
-                advancedControls
-            }
-            if showsTaggingStatus {
-                TaggingPanelStatus(session: session, panel: .tags)
-            }
-            if hasActiveTags || !showsTaggingStatus {
-                if session.tagVocabulary == nil && !hasActiveTags {
-                    Text("Install WD Tagger in Settings to filter by tags.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if tags.isEmpty {
-                    Text(session.isSummarizingTags ? "Updating tags…" : session.frames.isEmpty
-                         ? "Tags will appear after a video is analyzed."
-                         : "No tags among the frames currently shown.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                        TextField("Quick filter tags", text: $quickFilterText)
-                            .textFieldStyle(.plain)
-                            .font(.caption)
-                            .accessibilityLabel("Quick filter tags")
-                            .help("Search available tags. Wanted and unwanted tags stay visible.")
-                        if !quickFilterText.isEmpty {
-                            Button {
-                                quickFilterText = ""
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Clear quick filter")
-                            .accessibilityLabel("Clear quick filter")
-                        }
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-
-                    TagChipFlow(spacing: 5, groupTagCount: commonGroupTagCount) {
-                        if commonGroupTagCount > 0 {
-                            commonTagGroupBackground
-                        }
-                        if !commonTags.isEmpty {
-                            commonGroupChip
-                        }
-                        // The group's tags are inside the group while it is open and
-                        // absent while it is not, which is what the flow's group size
-                        // counts, so the two cannot drift apart.
-                        ForEach(visibleCommonTags.prefix(commonGroupTagCount), id: \.self) { tag in
-                            tagChip(for: tag)
-                        }
-                        ForEach(visibleStandaloneTags, id: \.self) { tag in
-                            tagChip(for: tag)
-                        }
-                    }
-                    .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
-                        GeometryReader { geometry in
-                            let selectedFrames: [String: CGRect] = Dictionary(uniqueKeysWithValues: anchors.compactMap { tag, anchor -> (String, CGRect)? in
-                                guard enabled else { return nil }
-                                return (tag, geometry[anchor])
-                            })
-                            TagRightClickMonitor(tagFrames: selectedFrames) { tag in
-                                rightClickTag(tag)
-                            }
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .allowsHitTesting(false)
-                        }
-                    }
-
-                    if !hasVisibleTags {
-                        Text("No tags match this quick filter.")
+            if session.isLoadingPhotosAlbum {
+                Text("Loading...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                if session.settings.tagAdvancedMode {
+                    advancedControls
+                }
+                if showsTaggingStatus {
+                    TaggingPanelStatus(session: session, panel: .tags)
+                }
+                if hasActiveTags || !showsTaggingStatus {
+                    if session.tagVocabulary == nil && !hasActiveTags {
+                        Text("Install WD Tagger in Settings to filter by tags.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if tags.isEmpty {
+                        Text(session.isSummarizingTags ? "Updating tags…" : session.frames.isEmpty
+                             ? "Tags will appear after a video is analyzed."
+                             : "No tags among the frames currently shown.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            TextField("Quick filter tags", text: $quickFilterText)
+                                .textFieldStyle(.plain)
+                                .font(.caption)
+                                .accessibilityLabel("Quick filter tags")
+                                .help("Search available tags. Wanted and unwanted tags stay visible.")
+                            if !quickFilterText.isEmpty {
+                                Button {
+                                    quickFilterText = ""
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Clear quick filter")
+                                .accessibilityLabel("Clear quick filter")
+                            }
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 5)
+                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
+                        TagChipFlow(spacing: 5, groupTagCount: commonGroupTagCount) {
+                            if commonGroupTagCount > 0 {
+                                commonTagGroupBackground
+                            }
+                            if !commonTags.isEmpty {
+                                commonGroupChip
+                            }
+                            // The group's tags are inside the group while it is open and
+                            // absent while it is not, which is what the flow's group size
+                            // counts, so the two cannot drift apart.
+                            ForEach(visibleCommonTags.prefix(commonGroupTagCount), id: \.self) { tag in
+                                tagChip(for: tag)
+                            }
+                            ForEach(visibleStandaloneTags, id: \.self) { tag in
+                                tagChip(for: tag)
+                            }
+                        }
+                        .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
+                            GeometryReader { geometry in
+                                let selectedFrames: [String: CGRect] = Dictionary(uniqueKeysWithValues: anchors.compactMap { tag, anchor -> (String, CGRect)? in
+                                    guard enabled else { return nil }
+                                    return (tag, geometry[anchor])
+                                })
+                                TagRightClickMonitor(tagFrames: selectedFrames) { tag in
+                                    rightClickTag(tag)
+                                }
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .allowsHitTesting(false)
+                            }
+                        }
+
+                        if !hasVisibleTags {
+                            Text("No tags match this quick filter.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+
+                        Text("Required tags must match; unwanted tags remove matching frames. Available tags update with the frames shown and rank by average confidence above the threshold.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Text("Required tags must match; unwanted tags remove matching frames. Available tags update with the frames shown and rank by average confidence above the threshold.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if !showsTaggingStatus, session.untaggedFrameCountForTagging > 0 {
-                    TaggingStartButton(session: session, panel: .tags)
+                    if !showsTaggingStatus, session.untaggedFrameCountForTagging > 0 {
+                        TaggingStartButton(session: session, panel: .tags)
+                    }
                 }
             }
         }
@@ -205,20 +212,19 @@ struct TagFilterView: View {
             HStack(spacing: 8) {
                 Text("Top").frame(width: 58, alignment: .leading)
                 ValueSlider(bounds: 1...99, value: Double(session.settings.tagTopCount), step: 1,
-                            onChange: setTopCount, onCommit: setTopCount)
+                            onChange: setTopCount, onCommit: setTopCount,
+                            format: { $0.rounded() == 99 ? "all" : "\(Int($0.rounded()))" })
                     .accessibilityLabel("Top frames per tag")
                     .accessibilityValue(topCountText)
-                Text(topCountText).frame(width: 30, alignment: .trailing)
             }
             .help("Keep the top N frames for every tag, or for each selected tag. Set to all to remove the limit.")
             HStack(spacing: 8) {
                 Text("Threshold").frame(width: 58, alignment: .leading)
                 ValueSlider(bounds: 0.35...1, value: Double(session.settings.taggerThreshold), step: 0.01,
-                            onChange: setThreshold, onCommit: setThreshold)
+                            onChange: setThreshold, onCommit: setThreshold,
+                            format: { String(format: "%.2f", $0) })
                     .accessibilityLabel("Tag threshold")
                     .accessibilityValue(String(format: "%.2f", session.settings.taggerThreshold))
-                Text(String(format: "%.2f", session.settings.taggerThreshold))
-                    .frame(width: 30, alignment: .trailing)
             }
             .help("Filter using stored FP8 tag scores. Lowering the threshold restores matches without retagging.")
         }

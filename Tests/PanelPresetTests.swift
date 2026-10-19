@@ -59,8 +59,8 @@ func registerPanelPresetTests() {
             checkEqual(reopened.regroupPending, false, "no stale pending indicator")
             reopened.clearPanelSettings(selectedSlot: nil)
             checkEqual(reopened.settings.revealAllGroups, false, "clear returns to limited mode")
-            checkEqual(reopened.settings.tagAdvancedMode, false, "clear returns to Basic")
-            checkEqual(reopened.settings.tagTopCount, 7, "clear resets Top")
+            checkEqual(reopened.settings.tagAdvancedMode, true, "clear returns to Advanced")
+            checkEqual(reopened.settings.tagTopCount, 99, "clear resets Top to all")
             checkEqual(reopened.settings.taggerThreshold, 0.35, "clear resets threshold")
         }
     })

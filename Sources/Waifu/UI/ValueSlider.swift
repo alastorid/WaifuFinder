@@ -22,12 +22,19 @@ struct ValueSlider: View {
     let step: Double
     let onChange: (Double) -> Void
     let onCommit: (Double) -> Void
+    /// Optional value pill, matching the labelled handles in RangeSlider.
+    var format: ((Double) -> String)? = nil
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var dragging = false
     @FocusState private var isFocused: Bool
 
-    private let knob: CGFloat = 12
+    private var knob: CGFloat { format == nil ? 12 : 14 }
+    private var handleWidth: CGFloat {
+        guard let format else { return knob }
+        let digits = max(format(bounds.lowerBound).count, format(bounds.upperBound).count, format(value).count)
+        return max(knob, CGFloat(digits) * 0.62 * 9 + 8)
+    }
     private let track: CGFloat = 4
     private let space = "waifu.value-slider"
 
@@ -35,32 +42,25 @@ struct ValueSlider: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let width = max(geometry.size.width, knob)
-            let travel = max(width - knob, 1)
-            let position = knob / 2 + CGFloat((value - bounds.lowerBound) / span) * travel
+            let width = max(geometry.size.width, handleWidth)
+            let travel = max(width - handleWidth, 1)
+            let position = handleWidth / 2 + CGFloat((value - bounds.lowerBound) / span) * travel
 
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Color.secondary.opacity(0.18))
                     .frame(height: track)
-                    .padding(.horizontal, knob / 2)
+                    .padding(.horizontal, handleWidth / 2)
 
                 Capsule()
                     .fill((isEnabled ? Color.accentColor : Color.secondary).opacity(0.55))
-                    .frame(width: max(0, position - knob / 2), height: track)
-                    .offset(x: knob / 2)
+                    .frame(width: max(0, position - handleWidth / 2), height: track)
+                    .offset(x: handleWidth / 2)
 
-                Circle()
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .overlay {
-                        Circle().strokeBorder(isFocused || dragging ? Color.accentColor
-                                                                  : Color.secondary.opacity(0.5),
-                                              lineWidth: 1)
-                    }
-                    .frame(width: knob, height: knob)
-                    .shadow(radius: dragging ? 3 : 1)
-                    .offset(x: position - knob / 2)
+                handle
+                    .offset(x: position - handleWidth / 2)
             }
+            .frame(width: width, height: knob)
             .coordinateSpace(name: space)
             // The halo is the affordance for the arrow keys: without it there is nothing
             // on screen to say this control can be stepped from the keyboard.
@@ -68,7 +68,7 @@ struct ValueSlider: View {
                 if isFocused {
                     Capsule()
                         .strokeBorder(Color.accentColor.opacity(0.45), lineWidth: 1)
-                        .padding(.horizontal, knob / 2)
+                        .padding(.horizontal, handleWidth / 2)
                         .padding(.vertical, -3)
                 }
             }
@@ -100,9 +100,41 @@ struct ValueSlider: View {
         .onKeyPress(.rightArrow) { commitStep(1); return .handled }
     }
 
+    @ViewBuilder
+    private var handle: some View {
+        if let format {
+            Text(format(value))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .foregroundStyle(isFocused || dragging ? Color.accentColor : Color.secondary)
+                .frame(width: handleWidth, height: knob)
+                .background {
+                    RoundedRectangle(cornerRadius: knob / 2, style: .continuous)
+                        .fill(dragging ? Color.accentColor.opacity(0.18)
+                                      : Color(nsColor: .controlBackgroundColor))
+                        .shadow(radius: dragging ? 2 : 0)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: knob / 2, style: .continuous)
+                        .strokeBorder(isFocused || dragging ? Color.accentColor : Color.secondary.opacity(0.55),
+                                      lineWidth: 1)
+                }
+        } else {
+            Circle()
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay {
+                    Circle().strokeBorder(isFocused || dragging ? Color.accentColor : Color.secondary.opacity(0.5),
+                                          lineWidth: 1)
+                }
+                .frame(width: knob, height: knob)
+                .shadow(radius: dragging ? 3 : 1)
+        }
+    }
+
     /// The value under an x position, clamped to the bounds.
     private func value(at x: CGFloat, travel: CGFloat) -> Double {
-        let ratio = Double((x - knob / 2) / travel)
+        let ratio = Double((x - handleWidth / 2) / travel)
         return bounds.lowerBound + min(max(ratio, 0), 1) * span
     }
 

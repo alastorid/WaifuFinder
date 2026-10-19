@@ -403,8 +403,8 @@ focused frame in motion.
   the background and reuses cached vectors on Metal for larger selections, with
   the same average on the CPU for small selections or when Metal is unavailable.
   See [tag summary computation](docs/Tag-summary.md) for caching and fallback rules. Right-click
-  the **Tags** header to choose **Basic** (default) or **Advanced**. Advanced adds inline
-  **Top** (1–99, default 7; 99 displays **all**) and **Threshold** (0.35–1, default 0.35)
+  the **Tags** header to choose **Basic** or **Advanced** (default). Advanced adds inline
+  **Top** (1–99, default **all**) and **Threshold** (0.35–1, default 0.35)
   sliders above the tag search. Top combines the top N frames for every tag when none are selected; selected tags
   keep their AND rule with a separate Top N ranking for each, before group caps. Basic leaves Top off.
   Threshold filters stored FP8 scores without discarding scores below the chosen value,

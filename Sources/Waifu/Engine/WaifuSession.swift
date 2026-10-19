@@ -161,7 +161,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     // MARK: Video state
 
     @Published private(set) var video: VideoInfo?
-    @Published private(set) var progress: AnalysisProgress = .init()
+    @Published private(set) var progress: AnalysisProgress = .init() {
+        didSet {
+            guard oldValue.isRunning != progress.isRunning, photosAlbumURL != nil else { return }
+            scheduleTagSummary()
+        }
+    }
     @Published private(set) var isRegrouping = false
     let regroupProgress = RegroupProgress()
 
@@ -431,8 +436,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var updated = settings
         updated.perGroupFrameCount = min(max(preset.perGroupCount, 1), 33)
         updated.revealAllGroups = preset.revealAllGroups ?? false
-        updated.tagAdvancedMode = preset.tagAdvancedMode ?? false
-        updated.tagTopCount = min(max(preset.tagTopCount ?? 7, 1), 99)
+        updated.tagAdvancedMode = preset.tagAdvancedMode ?? true
+        updated.tagTopCount = min(max(preset.tagTopCount ?? 99, 1), 99)
         let tagThreshold = preset.tagThreshold ?? 0.35
         updated.taggerThreshold = tagThreshold.isFinite ? min(max(tagThreshold, 0.35), 1) : 0.35
         // Leave the applied threshold intact until regroup() detects and persists the change.
@@ -809,6 +814,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     /// Loads a video file, clears prior state, and starts the analysis pipeline.
     @Published private(set) var photosAlbumURL: URL?
+    var isLoadingPhotosAlbum: Bool { photosAlbumURL != nil && progress.isRunning }
     private var importedMedia: PreparedMedia?
 
     func loadVideo(at url: URL) {
@@ -2102,6 +2108,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// invalidate an input revision; ordering is deliberately absent from the key.
     private func invalidateTagSummaries() {
         tagSummaryRevision &+= 1
+        cancelTagSummaryWork()
+    }
+
+    private func cancelTagSummaryWork() {
         tagSummaryGeneration = UUID()
         tagSummaryTask?.cancel()
         tagSummaryTask = nil
@@ -2111,17 +2121,20 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if isSummarizingTags { isSummarizingTags = false }
     }
 
+    private func clearPublishedTagSummary() {
+        if !tagFacetTags.isEmpty { tagFacetTags = [] }
+        if !tagCommonTags.isEmpty { tagCommonTags = [] }
+    }
+
     private func scheduleTagSummary() {
+        if isLoadingPhotosAlbum {
+            cancelTagSummaryWork()
+            clearPublishedTagSummary()
+            return
+        }
         guard let vocabulary = tagVocabulary, !displayedFrames.isEmpty else {
-            tagSummaryGeneration = UUID()
-            tagSummaryTask?.cancel()
-            tagSummaryTask = nil
-            pendingTagSummaryInput = nil
-            completedTagSummaryInput = nil
-            completedTagSummaryLabels = nil
-            if !tagFacetTags.isEmpty { tagFacetTags = [] }
-            if !tagCommonTags.isEmpty { tagCommonTags = [] }
-            if isSummarizingTags { isSummarizingTags = false }
+            cancelTagSummaryWork()
+            clearPublishedTagSummary()
             return
         }
         let input = TagSummaryInput(ids: Set(displayedFrames.map(\.id)), revision: tagSummaryRevision,

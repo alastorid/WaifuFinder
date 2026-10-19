@@ -26,9 +26,9 @@ struct WaifuSettings: Sendable, Equatable, Codable {
     /// Kept to read older settings files. Tagging now starts from its UI panels.
     var taggerEnabled: Bool = false
     var taggerThreshold: Float = 0.35
-    var tagAdvancedMode = false
+    var tagAdvancedMode = true
     /// 99 means all matching frames; applied only in Advanced mode.
-    var tagTopCount = 7
+    var tagTopCount = 99
 
     // MARK: Decode
 
@@ -92,8 +92,8 @@ struct WaifuSettings: Sendable, Equatable, Codable {
         analysisMode = try values.decodeIfPresent(AnalysisMode.self, forKey: .analysisMode) ?? .full
         taggerEnabled = try values.decodeIfPresent(Bool.self, forKey: .taggerEnabled) ?? false
         taggerThreshold = try values.decodeIfPresent(Float.self, forKey: .taggerThreshold) ?? 0.35
-        tagAdvancedMode = try values.decodeIfPresent(Bool.self, forKey: .tagAdvancedMode) ?? false
-        tagTopCount = try values.decodeIfPresent(Int.self, forKey: .tagTopCount) ?? 7
+        tagAdvancedMode = try values.decodeIfPresent(Bool.self, forKey: .tagAdvancedMode) ?? true
+        tagTopCount = try values.decodeIfPresent(Int.self, forKey: .tagTopCount) ?? 99
         analysisWidth = try values.decodeIfPresent(Int.self, forKey: .analysisWidth) ?? analysisWidth
         similarityThreshold = try values.decodeIfPresent(Float.self, forKey: .similarityThreshold) ?? similarityThreshold
         maximumGroupSize = try values.decodeIfPresent(Int.self, forKey: .maximumGroupSize) ?? maximumGroupSize
