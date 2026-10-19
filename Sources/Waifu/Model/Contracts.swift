@@ -131,7 +131,8 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
     /// Cropped analysis image width / height, available before its JPEG loads.
     let thumbnailAspectRatio: Double?
 
-    /// Uncompressed lossless Float32 model heads; absent in older sessions.
+    /// Sparse FP8 model heads compressed with LZ4; absent in older sessions.
+    /// Values below the fixed storage threshold reconstruct as zero.
     var tagProbabilities: Data?
     /// Vocabulary index layout that produced `tagProbabilities`.
     var tagVocabularyFingerprint: UInt64?

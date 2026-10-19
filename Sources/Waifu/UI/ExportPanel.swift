@@ -19,18 +19,11 @@ struct ExportPanel: View {
 
     var body: some View {
         Color.clear
-            .fileImporter(isPresented: $isPresented, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
-                switch result {
-                case .success(let directories):
-                    guard let directory = directories.first else { return }
-                    selectedDirectory = directory
-                    startExport(to: directory)
-                case .failure(let error):
-                    exportResults = []
-                    selectedDirectory = nil
-                    exportError = error.localizedDescription
-                    showResults = true
-                }
+            .onAppear {
+                if isPresented { presentFolderPicker() }
+            }
+            .onChange(of: isPresented) { _, presented in
+                if presented { presentFolderPicker() }
             }
             .sheet(isPresented: $showResults) {
                 ExportResultsSheet(
@@ -39,6 +32,25 @@ struct ExportPanel: View {
                     directory: selectedDirectory
                 )
             }
+    }
+
+    /// Presents a folder picker whose primary action reflects the export operation.
+    private func presentFolderPicker() {
+        selectedDirectory = nil
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Save"
+        panel.title = "Choose Export Folder"
+        panel.message = "Choose where to save the exported frames."
+        panel.begin { response in
+            isPresented = false
+            guard response == .OK, let directory = panel.url else { return }
+            selectedDirectory = directory
+            startExport(to: directory)
+        }
     }
 
     /// Starts the export asynchronously.

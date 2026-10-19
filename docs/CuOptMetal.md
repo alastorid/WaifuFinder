@@ -72,12 +72,12 @@ the album's tagging vectors again on the UI thread. Frame and filter changes reb
 the snapshot; starting a route leaves the existing grid mounted when its displayed
 sequence and layout are unchanged.
 
-Ordinary score rebuilds read the four rating heads directly from live WDT2
-Float32 storage instead of decoding the complete 10,861-head vector per photo.
-Rating limits use the same selective reader, and trait filters and trait-score
-sorting read only their queried heads. The reader validates the payload layout
-and accessed values; the full decoder still validates whole vectors for consumers
-that need them. Legacy WDT1 compressed metadata retains the full decode fallback.
+Ordinary score rebuilds read the four rating heads from live WDT3 sparse FP8/LZ4
+storage without expanding the complete 10,861-head Float32 vector per photo.
+Rating limits, trait filters and trait-score sorting use the same selective reader.
+It validates the sparse layout and searches the requested heads; scores below the
+fixed 0.35 storage cutoff reconstruct as zero. Legacy WDT2 supports direct Float32
+reads; WDT1 compressed metadata retains the full decode fallback.
 
 These cutoffs were chosen for this first implementation, not imposed by cuOpt or
 Metal. A 200,000-frame input is not rejected: it uses the CPU fallback. Sequencing

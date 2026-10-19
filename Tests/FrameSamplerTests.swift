@@ -25,23 +25,28 @@ func registerFrameSamplerTests() {
     Registry.shared.add(suite: suite, TestCase(
         name: "native-frame concurrency scales down for large sources and small memory budgets", knownBug: nil) {
         let normal = FrameProcessingConcurrency(width: 1920, height: 1080,
-                                               processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
-        checkEqual(normal.preparationWorkers, 2, "ordinary video can prepare two frames concurrently")
-        check(normal.scoringWorkers > 2, "ordinary video can fill more than the previous two scoring slots")
+                                               processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024,
+                                               performanceCoreCount: 4)
+        checkEqual(normal.preparationWorkers, 4, "ordinary video can prepare four frames concurrently")
+        checkEqual(normal.scoringWorkers, 4, "ordinary video retains four scoring workers alongside preparation")
         let large = FrameProcessingConcurrency(width: 7680, height: 4320,
-                                              processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
+                                              processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024,
+                                              performanceCoreCount: 4)
         check(large.preparationWorkers + large.scoringWorkers < normal.preparationWorkers + normal.scoringWorkers,
               "8K inputs reduce native image residency")
         let small = FrameProcessingConcurrency(width: 3840, height: 2160,
-                                              processorCount: 8, physicalMemory: 4 * 1024 * 1024 * 1024)
+                                              processorCount: 8, physicalMemory: 4 * 1024 * 1024 * 1024,
+                                              performanceCoreCount: 4)
         checkEqual(small.preparationWorkers, 1, "a tight memory budget avoids parallel native rasters")
         checkEqual(small.scoringWorkers, 1, "one scoring slot still permits progress under a tight budget")
         let single = FrameProcessingConcurrency(width: 1920, height: 1080,
-                                               processorCount: 1, physicalMemory: 16 * 1024 * 1024 * 1024)
+                                               processorCount: 1, physicalMemory: 16 * 1024 * 1024 * 1024,
+                                               performanceCoreCount: 4)
         checkEqual(single.preparationWorkers, 1, "one processor avoids parallel preparation")
         checkEqual(single.scoringWorkers, 1, "one processor avoids oversubscribing CPU scoring")
         let enlarged = FrameProcessingConcurrency(width: 1920, height: 1080, analysisWidth: 4096,
-                                                 processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024)
+                                                 processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024,
+                                                 performanceCoreCount: 4)
         check(enlarged.preparationWorkers + enlarged.scoringWorkers < normal.preparationWorkers + normal.scoringWorkers,
               "large analysis rasters count toward the same working budget")
     })

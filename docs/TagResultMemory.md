@@ -127,10 +127,15 @@ needed instead of reserving the maximum vector size for every frame.
 - The disk-cache actor keeps the mapped file and its key/offset index in memory;
   it does not build score arrays for other videos. During restoration, one
   matching payload at a time is expanded for result reconstruction, then released.
-  The frame model retains an uncompressed Float32 runtime probability vector
-  (`WDT2`, 43,448 bytes per tagged frame) for filtering and sorting. Only preparing
-  a database save compresses the sparse FP8 values. Legacy compressed `WDT1`
-  frame metadata remains readable.
+  The frame model retains sparse E4M3 FP8 scores compressed per frame with
+  Apple's LZ4 (`WDT3`). Values below the fixed 0.35 storage cutoff reconstruct as
+  zero; display thresholds cannot recover discarded scores. Scores exactly at
+  0.35 stay equal, while a score originally above it remains strictly above it
+  after quantization. Other values are approximate, so close scores can tie or
+  cross a display-filter boundary. Selective filtering expands only sparse pairs;
+  full Float32 rows are temporary or held in the bounded tag-summary cache.
+  Legacy `WDT1`/`WDT2` metadata remains readable. Disk records keep their existing
+  sparse FP8/zlib format; restoring a record now creates compact live storage.
 - While tagging is active, completed batches stay in the session's runtime
   frames; they are not written to disk batch by batch. Cache-sync requests caused
   by published tag updates or newly added candidates are deferred while the run
@@ -178,3 +183,13 @@ cache keeps its frame indices across tag updates because tag scores do not affec
 tagger eligibility; its untagged counts are invalidated and refreshed. Both caches
 are cleared when a new analysis replaces the current frame set. Sorting, grouping,
 and the per-group cap are still applied after a cached filter result is retrieved.
+
+### Live-score memory check
+
+The sparse-FP8/LZ4 regression fixture retains 1,000 separately encoded rows with
+33 heads at or above 0.35. The optimized production codec measured 125,000 payload
+bytes in total (125 bytes per row), versus 43,448,000 bytes for WDT2: a 99.71%
+payload reduction. Encoding took about 14 ms and 10,000 selective four-rating-head
+reads about 3 ms on the development machine. These are synthetic payload and
+codec measurements, not a whole-app footprint measurement; frame metadata,
+FeaturePrints, images and bounded summary caches still consume memory.

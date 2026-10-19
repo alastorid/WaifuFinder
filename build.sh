@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-APP="$ROOT/dist/WaifuFinder.app"
+APP="${WAIFU_APP_PATH:-$ROOT/dist/WaifuFinder.app}"
 BINARY="$APP/Contents/MacOS/WaifuFinder"
 DEPLOYMENT_TARGET="15.0"
 CONFIGURATION="${WAIFU_BUILD_CONFIGURATION:-release}"

@@ -390,6 +390,29 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     func loadPanelPreset(_ id: UUID) {
         guard canLoadPanelPreset, let preset = panelPresets.first(where: { $0.id == id }) else { return }
+        applyPanelPreset(preset)
+    }
+
+    /// Clears the live panel, and resets the selected slot to defaults when one exists.
+    func clearPanelSettings(selectedSlot: Int?) {
+        guard canLoadPanelPreset else { return }
+        let preset: PanelPreset
+        if let selectedSlot, panelPresets.indices.contains(selectedSlot) {
+            let previous = panelPresets[selectedSlot]
+            preset = PanelPreset(id: previous.id, name: previous.name,
+                                 order: .defaultOrder, limits: .none, tags: TagFilter(), faces: .all,
+                                 groupingEnabled: false, groupingThreshold: WaifuSettings.default.similarityThreshold,
+                                 groupRows: true, perGroupCount: WaifuSettings.default.perGroupFrameCount)
+            var updated = panelPresets
+            updated[selectedSlot] = preset
+            if persistPanelPresets(updated) { panelPresets = updated }
+        } else {
+            preset = PanelPreset.defaultSlot(1)
+        }
+        applyPanelPreset(preset)
+    }
+
+    private func applyPanelPreset(_ preset: PanelPreset) {
         let threshold = preset.groupingThreshold.isFinite
             ? min(max(preset.groupingThreshold, 0.05), 1.2) : WaifuSettings.default.similarityThreshold
         let needsRegroup = threshold != settings.similarityThreshold

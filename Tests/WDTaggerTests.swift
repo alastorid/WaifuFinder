@@ -180,11 +180,66 @@ func registerWDTaggerTests() {
         checkEqual(TagVocabulary.normalized("0_0"), "0_0", "kaomoji keeps underscores")
         checkEqual(vocabulary.autocomplete(query: "", limit: 12), [], "empty query has no suggestions")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "live probabilities stay uncompressed and reject malformed buffers", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "live scores use sparse FP8 LZ4 with bounded quantization and strict cutoff", knownBug: nil) {
+        var probabilities = [Float](repeating: 0, count: TagVocabulary.headCount)
+        let threshold = TagProbabilityCodec.storageThreshold
+        let scores: [Float] = [0, threshold.nextDown, threshold, threshold.nextUp, 0.3501, 0.375, 0.5, 0.75, 0.9, 1]
+        for (index, score) in scores.enumerated() { probabilities[index] = score }
+        probabilities[TagVocabulary.headCount - 1] = 1
+        guard let encoded = TagProbabilityCodec.encode(probabilities),
+              let decoded = TagProbabilityCodec.decode(encoded) else {
+            check(false, "compact scores round trip"); return
+        }
+        checkEqual(encoded.prefix(4), Data("WDT3".utf8), "new rows use FP8 LZ4")
+        check(encoded.count < 128, "a sparse row occupies under 128 bytes instead of 43 KB")
+        for index in probabilities.indices {
+            if probabilities[index] < threshold {
+                checkEqual(decoded[index], 0, "below-cutoff scores are discarded")
+            } else {
+                checkClose(Double(decoded[index]), Double(probabilities[index]), tolerance: 0.03125, "FP8 error stays within half a quantization step")
+            }
+        }
+        checkEqual(decoded[2], threshold, "equality stays exactly at the cutoff")
+        check(decoded[3] > threshold && decoded[4] > threshold, "rounding cannot remove a just-above-cutoff tag")
+        checkEqual(decoded[8], 0.875, "0.9 rounds to its nearest E4M3 value")
+        let indices = [TagVocabulary.headCount - 1, 8, 0, 8, 3]
+        checkEqual(TagProbabilityCodec.values(in: encoded, at: indices), indices.map { decoded[$0] },
+                   "selective reads preserve order, duplicates, zeros and the final head")
+        var unaligned = Data([0xff]); unaligned.append(encoded)
+        checkEqual(TagProbabilityCodec.decode(unaligned.dropFirst()), decoded, "sliced storage is supported")
+        checkNil(TagProbabilityCodec.values(in: encoded, at: [-1]), "negative head fails")
+        checkNil(TagProbabilityCodec.value(in: encoded, at: TagVocabulary.headCount), "past-end head fails")
+        checkNil(TagProbabilityCodec.decode(encoded.dropLast()), "truncated LZ4 fails")
+        checkNil(TagProbabilityCodec.decode(encoded + Data([0])), "trailing bytes fail")
+        var corrupt = encoded
+        corrupt.replaceSubrange(4..<8, with: [0xff, 0xff, 0xff, 0xff])
+        checkNil(TagProbabilityCodec.decode(corrupt), "unbounded decompression length fails")
+        for value: Float in [.nan, .infinity, -0.1, 1.1] {
+            probabilities[0] = value
+            checkNil(TagProbabilityCodec.encode(probabilities), "invalid source values fail before quantization")
+        }
+        let zero = TagProbabilityCodec.encode([Float](repeating: 0, count: TagVocabulary.headCount))!
+        checkEqual(TagProbabilityCodec.decode(zero), [Float](repeating: 0, count: TagVocabulary.headCount), "empty sparse row is valid")
+
+        // Measure retained payloads for distinct rows, not shared copies of one Data.
+        var retained: [Data] = []
+        var row = [Float](repeating: 0.01, count: TagVocabulary.headCount)
+        for index in 0..<32 { row[index * 17] = 0.75 }
+        for index in 0..<1_000 {
+            row[TagVocabulary.headCount - 1] = Float(500 + index % 500) / 1_000
+            retained.append(TagProbabilityCodec.encode(row)!)
+        }
+        let compactBytes = retained.reduce(0) { $0 + $1.count }
+        let oldBytes = retained.count * (4 + TagVocabulary.headCount * 4)
+        check(compactBytes < oldBytes / 100, "representative sparse payloads shrink by more than 99 percent")
+        print("      live tag payloads: \(oldBytes) -> \(compactBytes) bytes for 1,000 distinct rows")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "legacy Float32 probabilities remain readable and reject malformed buffers", knownBug: nil) {
         let probabilities = (0..<10_861).map { Float($0 % 100) / 100 }
-        let encoded = TagProbabilityCodec.encode(probabilities)!
-        checkEqual(encoded.prefix(4), Data("WDT2".utf8), "live scores use the uncompressed format")
-        checkEqual(encoded.count, 4 + probabilities.count * 4, "live storage is exactly one Float32 per head")
+        var encoded = Data("WDT2".utf8)
+        let words = probabilities.map { $0.bitPattern.littleEndian }
+        words.withUnsafeBytes { encoded.append(contentsOf: $0) }
+        checkEqual(encoded.count, 4 + probabilities.count * 4, "legacy storage has one Float32 per head")
         checkEqual(TagProbabilityCodec.decode(encoded), probabilities, "lossless Float32 roundtrip")
         checkNil(TagProbabilityCodec.decode(encoded.prefix(encoded.count / 2)), "truncated bytes fail decoding")
         checkNil(TagProbabilityCodec.decode(encoded + Data([0])), "trailing bytes fail decoding")
@@ -233,7 +288,7 @@ func registerWDTaggerTests() {
     Registry.shared.add(suite: suite, TestCase(name: "tagging pipeline batches eight and preserves source image order and frame metadata", knownBug: nil) {
         let vocabulary = try TagVocabulary.load(from: taggerFixtureDirectory().appendingPathComponent("wd-tagger-labels.csv"))
         var values = [Float](repeating: 0, count: 10_861)
-        values[0] = 0.9; values[vocabulary.generalIndices[0]] = 0.75
+        values[0] = 0.875; values[vocabulary.generalIndices[0]] = 0.75
         let result = try vocabulary.result(probabilities: values)
         let tagger = RecordingTagger(result: result)
         let samples = try (0..<19).map { index in

@@ -145,8 +145,9 @@ Two things that is easy to mistake for, both of which a maintainer has to keep t
   compressed FeaturePrint (~2.5 KB) and a thumbnail key, under 10 KB in all. That grows
   linearly and is affordable: measured at 4.3 MB for 599 frames, which extrapolates to
   ≈360 MB at the reference video's 84,067.
-  Tagging additionally retains 43,448 bytes of uncompressed Float32 scores per
-  tagged frame, avoiding compression and decompression during live filtering.
+  Tagging additionally retains an LZ4-compressed sparse FP8 row per tagged frame.
+  Values below 0.35 are discarded. The retained size follows the number of scores
+  above the cutoff, rather than allocating 43,448 Float32 bytes per frame.
 - **The reader decodes every frame of the file**, one at a time; a `full` pass
   analyses every one, a `quick` pass one a second. Memory is per frame in
   flight; *work* is per frame of the file. The reader advances serially;

@@ -64,7 +64,7 @@ func registerTagSummaryTests() {
         let byIndex = Dictionary(uniqueKeysWithValues: result.tags.map { ($0.index, $0) })
         checkEqual(byIndex[4]?.matchingFrames, 1, "only 0.9 crosses 0.5")
         checkEqual(byIndex[4]?.scoredFrames, 1, "a low probability never dilutes the mean")
-        checkClose(byIndex[4]?.mean ?? -1, 0.9, tolerance: 1e-6, "conditional mean")
+        checkClose(byIndex[4]?.mean ?? -1, 0.875, tolerance: 1e-6, "conditional mean uses the quantized confidence")
         checkNil(byIndex[6], "a probability equal to threshold is excluded")
         checkEqual(result.labels(using: vocabulary).common, ["tag 3"], "common requires every displayed frame")
         checkEqual(result.labels(using: vocabulary).ranked, ["tag 0", "tag 1", "tag 3"], "rank by conditional confidence")

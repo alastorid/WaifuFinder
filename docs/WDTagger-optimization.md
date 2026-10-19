@@ -207,10 +207,12 @@ converter. Run inference in an isolated environment with MLX and NumPy, passing
 --repeats 3 --compile`. Add `--force-fused --pad-head-dim 64` for the padded probe.
 The tool is experimental and does not install a model or change the app runtime.
 
-Live session score vectors are separate from the benchmark process footprint:
-10,861 Float32 values plus a four-byte header use 43,448 bytes per tagged frame,
-about 434 MB per 10,000 frames before other session data. Long-session memory
-also warrants examining score storage and access, beyond model workspaces.
+Live session score vectors are separate from the benchmark process footprint.
+Previously, 10,861 Float32 values plus a four-byte header used 43,448 bytes per
+frame, about 434 MB per 10,000 frames before allocator overhead. Live storage now
+zeros scores below 0.35, quantizes retained values to E4M3 FP8 and compresses sparse
+index/value pairs with Apple's LZ4. See `TagResultMemory.md` for precision and
+threshold semantics.
 
 ## Native Swift/Metal follow-up
 

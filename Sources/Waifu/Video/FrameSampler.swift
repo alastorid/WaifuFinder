@@ -54,16 +54,17 @@ enum FrameSamplingError: Error, LocalizedError, Equatable {
 // ## Bounded parallel preparation
 //
 // The source reader advances sequentially. Each selected pixel buffer is then
-// cropped and resized on a background task, with at most two preparation tasks
-// retained. They can complete in either order; `next()` returns them in source
-// order. This overlaps raster work with decoding and scoring without buffering
-// the video. FrameProcessingConcurrency reduces concurrency for large sources.
+// cropped and resized on a background task, with a memory- and core-bounded
+// preparation window. Tasks can complete in either order; `next()` returns them
+// in source order. This overlaps raster work with decoding and scoring without
+// buffering the video. FrameProcessingConcurrency reduces concurrency for large
+// sources.
 // Each task drains its temporary image objects before returning its two images.
 //
 // Native picture pixels supply both face scores; a smaller raster supplies
 // aesthetics, FeaturePrint and thumbnails. Its longest edge is analysisWidth.
 // A caller that stops pulling triggers no more decoding; already queued work is
-// limited to the small preparation window.
+// limited to the bounded preparation window.
 //
 // ## Frame ownership
 //
@@ -328,7 +329,7 @@ private actor FrameSamplingProducer {
         do {
             try Task.checkCancellation()
             if !isPrepared { try await prepare() }
-            // Read serially, then prepare at most two native frames in parallel.
+            // Read serially, then prepare a bounded number of native frames in parallel.
             // A slow consumer never causes additional decoding or queued work.
             while !isFinished, prepared.count < preparationWorkers {
                 guard let decoded = try nextDecodedFrame() else { break }

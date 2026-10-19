@@ -3,11 +3,11 @@ import SwiftUI
 /// Three fixed memories, selected and recalled through the same segmented control.
 struct PanelPresetManager: View {
     @ObservedObject var session: WaifuSession
-    @State private var selectedSlot = 0
+    @State private var selectedSlot: Int?
 
     var body: some View {
         HStack(spacing: 8) {
-            Text("Presets")
+            Text("Preset")
                 .font(.headline)
 
             HStack(spacing: 0) {
@@ -41,9 +41,19 @@ struct PanelPresetManager: View {
             .help("Select a number to load its saved settings")
 
             Button("Memory") {
-                session.savePanelPreset(at: selectedSlot)
+                if let selectedSlot { session.savePanelPreset(at: selectedSlot) }
             }
-            .help("Save current right-panel settings to preset \(selectedSlot + 1)")
+            .disabled(selectedSlot == nil)
+            .help(selectedSlot.map { "Save current right-panel settings to preset \($0 + 1)" }
+                  ?? "Select a preset number first")
+            .fixedSize()
+
+            Button("Clear") {
+                session.clearPanelSettings(selectedSlot: selectedSlot)
+            }
+            .disabled(!session.canLoadPanelPreset)
+            .help(selectedSlot.map { "Reset preset \($0 + 1) and the current settings to defaults" }
+                  ?? "Reset current filtering and ordering settings to defaults")
             .fixedSize()
         }
         .controlSize(.small)
