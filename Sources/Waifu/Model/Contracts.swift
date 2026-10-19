@@ -33,7 +33,7 @@ struct FrameID: Sendable, Hashable, Codable, Equatable, CustomStringConvertible 
     let raw: String
 
     init(sampleIndex: Int) {
-        self.raw = String(format: "f%06d", max(0, sampleIndex))
+        self.raw = String(format: "f%06lld", Int64(max(0, sampleIndex)))
     }
 
     /// `nil` for anything that is not a well-formed frame identifier, rather
@@ -473,7 +473,7 @@ struct ExportRequest: Sendable, Equatable {
     /// The stem is the source file's name without its extension, so exports
     /// from two different videos never collide by name in one directory.
     func fileName(for frame: FrameID, sourceStem: String) -> String {
-        let padded = String(format: "%06d", frame.sampleIndex)
+        let padded = String(format: "%06lld", Int64(frame.sampleIndex))
         return "\(sourceStem)-\(padded).\(format.fileExtension)"
     }
 }

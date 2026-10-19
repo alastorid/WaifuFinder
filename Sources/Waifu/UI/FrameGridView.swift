@@ -398,7 +398,8 @@ struct FrameGridView: View {
         Divider()
         Button("Copy Timecode") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(timecode(frame.timeSeconds), forType: .string)
+            let sourceTime = session.video.map { VideoCollection.resolve($0.url, seconds: frame.timeSeconds).seconds } ?? frame.timeSeconds
+            NSPasteboard.general.setString(timecode(sourceTime), forType: .string)
         }
     }
 }
@@ -673,7 +674,7 @@ private struct FrameCell: View {
 
     /// Zero-based decoded source ordinal, also used in exports and diagnostics.
     private var frameNumberOverlay: some View {
-        Text("\(frame.id.sampleIndex)")
+        Text("\(sourceURL.flatMap { VideoCollection.get($0) } == nil ? frame.id.sampleIndex : VideoCollection.localIndex(frame.id.sampleIndex))")
             .font(.system(size: 10, weight: .medium, design: .monospaced))
             .foregroundStyle(.white)
             .padding(.horizontal, 3)

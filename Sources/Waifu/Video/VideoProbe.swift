@@ -88,6 +88,7 @@ enum VideoProbeError: Error, LocalizedError, Equatable {
 ///   `AVError` for anything else.
 struct VideoProbe {
     static func probe(_ url: URL) async throws -> VideoInfo {
+        if let collection = VideoCollection.get(url) { return collection.info }
         if let album = PhotosMedia.shared.album(url) {
             return VideoInfo(url: url, durationSeconds: album.duration,
                 width: album.items.map { $0.asset.pixelWidth }.max() ?? 1,

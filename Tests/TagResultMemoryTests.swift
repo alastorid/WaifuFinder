@@ -245,7 +245,7 @@ func registerTagResultMemoryTests() {
 
 /// The real label list is the only honest vocabulary: the cache fingerprint and
 /// the restored rating both come out of it.
-private func tagVocabularyFixture() throws -> TagVocabulary {
+func tagVocabularyFixture() throws -> TagVocabulary {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     let directory = ProcessInfo.processInfo.environment["WAIFU_TEST_TAGGER_DIR"].map { URL(fileURLWithPath: $0) }
         ?? WDTaggerConfiguration.availableDirectory

@@ -145,7 +145,7 @@ struct DropZone: View {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.title = "Select videos to analyze"
-        panel.message = "Choose videos to join and analyze together"
+        panel.message = "Choose videos to analyze together"
         if panel.runModal() == .OK {
             session.loadVideos(at: panel.urls)
         }

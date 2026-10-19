@@ -66,10 +66,12 @@ struct TagResultCacheIdentity: Hashable, Sendable {
 struct TagResultCacheKeys: Hashable, Sendable {
     let source: TagResultCacheIdentity?
     private let bySampleIndex: [Int: TagResultCacheIdentity]
+    private let recordIndices: [Int: Int]
 
-    init(source: TagResultCacheIdentity?, bySampleIndex: [Int: TagResultCacheIdentity] = [:]) {
+    init(source: TagResultCacheIdentity?, bySampleIndex: [Int: TagResultCacheIdentity] = [:], recordIndices: [Int: Int] = [:]) {
         self.source = source
         self.bySampleIndex = bySampleIndex
+        self.recordIndices = recordIndices
     }
 
     static let none = TagResultCacheKeys(source: nil)
@@ -89,7 +91,7 @@ struct TagResultCacheKeys: Hashable, Sendable {
     /// at the same ordinal: storing the album position as well would make the
     /// entry unreachable the next time the album is fetched in another order.
     func recordIndex(for frame: AnalyzedFrame) -> Int {
-        bySampleIndex.isEmpty ? frame.id.sampleIndex : 0
+        recordIndices[frame.id.sampleIndex] ?? (bySampleIndex.isEmpty ? frame.id.sampleIndex : 0)
     }
 
     var identities: [TagResultCacheIdentity] {
@@ -101,6 +103,21 @@ struct TagResultCacheKeys: Hashable, Sendable {
     static func make(videoURL: URL?, frames: [AnalyzedFrame], vocabulary: TagVocabulary?,
                      analysisWidth: Int, analysisMode: AnalysisMode) -> TagResultCacheKeys {
         guard let videoURL, let vocabulary else { return .none }
+        if let collection = VideoCollection.get(videoURL) {
+            let identities = collection.members.map { member in
+                TagResultCacheIdentity(videoURL: member.video.url, vocabulary: vocabulary,
+                    analysisWidth: analysisWidth, analysisMode: analysisMode)
+            }
+            var bySampleIndex: [Int: TagResultCacheIdentity] = [:]
+            var indices: [Int: Int] = [:]
+            for frame in frames {
+                let source = VideoCollection.sourceIndex(frame.id.sampleIndex)
+                guard identities.indices.contains(source), let identity = identities[source] else { continue }
+                bySampleIndex[frame.id.sampleIndex] = identity
+                indices[frame.id.sampleIndex] = VideoCollection.localIndex(frame.id.sampleIndex)
+            }
+            return TagResultCacheKeys(source: nil, bySampleIndex: bySampleIndex, recordIndices: indices)
+        }
         if PhotosMedia.shared.album(videoURL) != nil {
             var bySampleIndex: [Int: TagResultCacheIdentity] = [:]
             bySampleIndex.reserveCapacity(frames.count)

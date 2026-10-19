@@ -78,6 +78,15 @@ final class FrameExporter: FrameExporting {
                     // Get source stem for naming
                     let sourceStem = sourceURL.deletingPathExtension().lastPathComponent
 
+                    let collection = VideoCollection.get(sourceURL)
+                    func name(for frame: FrameID) -> String {
+                        if let member = collection?.member(for: frame) {
+                            return request.fileName(for: FrameID(sampleIndex: VideoCollection.localIndex(frame.sampleIndex)),
+                                sourceStem: member.video.url.deletingPathExtension().lastPathComponent)
+                        }
+                        return request.fileName(for: frame, sourceStem: sourceStem)
+                    }
+
                     // If using thumbnails, we don't need to open the video
                     if request.useThumbnails {
                         guard let store = thumbnailStore else {
@@ -86,7 +95,7 @@ final class FrameExporter: FrameExporting {
                                 _ = "thumb-\(frameID.raw)"
                                 continuation.yield(with: .failure(ExportError.writeFailed(
                                     frameID: frameID,
-                                    url: request.destinationDirectory.appendingPathComponent(request.fileName(for: frameID, sourceStem: sourceStem)),
+                                    url: request.destinationDirectory.appendingPathComponent(name(for: frameID)),
                                     underlying: "Thumbnails requested but no thumbnail store configured"
                                 )))
                             }
@@ -97,7 +106,7 @@ final class FrameExporter: FrameExporting {
                         // Export each frame from thumbnail store
                         for frameID in request.frameIDs {
                             let key = "thumb-\(frameID.raw)"
-                            let fileName = request.fileName(for: frameID, sourceStem: sourceStem)
+                            let fileName = name(for: frameID)
                             let destURL = request.destinationDirectory.appendingPathComponent(fileName)
 
                             let finalURL = request.overwrite ? destURL : uniqueDestinationURL(base: destURL)
@@ -126,11 +135,20 @@ final class FrameExporter: FrameExporting {
                         return
                     }
 
-                    if PhotosMedia.isPhotos(sourceURL) {
+                    if PhotosMedia.isPhotos(sourceURL) || collection != nil {
                         for frameID in request.frameIDs {
                             try Task.checkCancellation()
-                            let image = try await PhotosMedia.shared.image(sourceURL, seconds: request.frameTimes[frameID] ?? Double(frameID.sampleIndex))
-                            let destination = request.destinationDirectory.appendingPathComponent(request.fileName(for: frameID, sourceStem: sourceStem))
+                            let image: CGImage
+                            if let collection {
+                                guard let resolved = collection.resolve(frame: frameID, seconds: request.frameTimes[frameID]) else {
+                                    throw ExportError.sourceUnreadable(sourceURL)
+                                }
+                                image = try await PhotosMedia.shared.image(resolved.url, seconds: resolved.seconds)
+                            } else {
+                                image = try await PhotosMedia.shared.image(sourceURL,
+                                    seconds: request.frameTimes[frameID] ?? Double(frameID.sampleIndex))
+                            }
+                            let destination = request.destinationDirectory.appendingPathComponent(name(for: frameID))
                             let final = request.overwrite ? destination : uniqueDestinationURL(base: destination)
                             let count = try writeImage(image, to: final, format: request.format, quality: request.jpegQuality)
                             continuation.yield(ExportResult(frameID: frameID, url: final, byteCount: count))
@@ -149,7 +167,7 @@ final class FrameExporter: FrameExporting {
                     // Export each frame by seeking to its timestamp
                     for frameID in request.frameIDs {
                         let frameTimeSeconds = if let time = request.frameTimes[frameID] { time } else { await frameTimeForFrameID(frameID, in: asset) }
-                        let fileName = request.fileName(for: frameID, sourceStem: sourceStem)
+                        let fileName = name(for: frameID)
                         let destURL = request.destinationDirectory.appendingPathComponent(fileName)
 
                         let finalURL: URL

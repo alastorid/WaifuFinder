@@ -86,10 +86,12 @@ final class AnalysisResultMemory: ObservableObject {
     @Published private(set) var fileSize: Int64 = 0
     @Published private(set) var errorMessage: String?
 
-    let fileURL = AnalysisResultDiskCache.defaultFileURL
-    private let disk = AnalysisResultDiskCache.shared
+    let fileURL: URL
+    private let disk: AnalysisResultDiskCache
 
-    private init() {
+    init(disk: AnalysisResultDiskCache = .shared) {
+        self.disk = disk
+        self.fileURL = disk.fileURL
         Task { await refresh() }
     }
 
@@ -142,6 +144,29 @@ final class AnalysisResultMemory: ObservableObject {
         let finished = DispatchSemaphore(value: 0)
         Task.detached(priority: .utility) {
             _ = try? await disk.remember(records, for: identity, retentionDays: retentionDays)
+            finished.signal()
+        }
+        finished.wait()
+    }
+
+    func remember(identity keys: VideoAnalysisCacheKeys, frames: [AnalyzedFrame]) async {
+        guard rememberAnalysisResults else { return }
+        for (identity, records) in keys.records(from: frames) {
+            do { apply(try await disk.remember(records, for: identity, retentionDays: retentionDays)) }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func flushAtTermination(identity keys: VideoAnalysisCacheKeys, frames: [AnalyzedFrame]) {
+        guard rememberAnalysisResults else { return }
+        let grouped = keys.records(from: frames)
+        guard !grouped.isEmpty else { return }
+        let disk = self.disk, retentionDays = self.retentionDays
+        let finished = DispatchSemaphore(value: 0)
+        Task.detached(priority: .utility) {
+            for (identity, records) in grouped {
+                _ = try? await disk.remember(records, for: identity, retentionDays: retentionDays)
+            }
             finished.signal()
         }
         finished.wait()
@@ -290,7 +315,7 @@ actor AnalysisResultDiskCache {
     }
 
     private static let magic = Data([0x57, 0x41, 0x4d, 0x31]) // WAM1
-    private let fileURL = AnalysisResultDiskCache.defaultFileURL
+    nonisolated let fileURL: URL
     private var isLoaded = false
     private var mappedData: Data?
     private var latestRecordsByIdentity: [AnalysisResultCacheIdentity: [Int: Location]] = [:]
@@ -304,6 +329,10 @@ actor AnalysisResultDiskCache {
         let payloadOffset: Int
         let payloadLength: Int
         let savedAtMilliseconds: UInt64
+    }
+
+    init(fileURL: URL = AnalysisResultDiskCache.defaultFileURL) {
+        self.fileURL = fileURL
     }
 
     func stats(retentionDays: Int) throws -> AnalysisResultCacheStats {

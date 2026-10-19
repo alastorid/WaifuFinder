@@ -577,9 +577,10 @@ final class PhotosMedia: @unchecked Sendable {
     }
 
     func image(_ url: URL, seconds: Double) async throws -> CGImage {
+        let (url, seconds) = VideoCollection.resolve(url, seconds: seconds)
         let (resolved, time) = resolve(url, seconds: seconds)
         guard let item = item(resolved) else {
-            return try await PreviewFrameReader(asset: AVURLAsset(url: resolved)).image(at: time)
+            return try await PreviewFrameReader(asset: VideoAssetFactory.asset(for: resolved)).image(at: time)
         }
         if !item.isStill { return try await PreviewFrameReader(asset: try await videoAsset(resolved).value).image(at: time) }
         let options = PHImageRequestOptions()

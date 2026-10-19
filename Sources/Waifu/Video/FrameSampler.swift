@@ -91,6 +91,10 @@ final class AVFoundationFrameSampler: FrameSampling {
         mode: AnalysisMode,
         onProgress: @escaping @Sendable (Int) -> Void
     ) -> AsyncThrowingStream<SampledFrame, Error> {
+        if let collection = VideoCollection.get(url) {
+            let producer = VideoCollectionSampler(collection: collection, width: analysisWidth, mode: mode, onProgress: onProgress)
+            return AsyncThrowingStream(unfolding: { try await producer.next() })
+        }
         if let album = PhotosMedia.shared.album(url) {
             let producer = PhotosAlbumSampler(album: album, width: analysisWidth, mode: mode)
             return AsyncThrowingStream(unfolding: { try await producer.next() })

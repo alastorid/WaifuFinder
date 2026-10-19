@@ -14,6 +14,7 @@ struct VideoPreviewPanel: View {
     @ObservedObject var preview: PreviewController
     @State private var selectedThumbnail: NSImage?
     @State private var photosPlayerSource: URL?
+    @State private var videoPlayerOffset: Double?
 
     /// The frame the preview is currently parked on, if any.
     private var focusedFrame: AnalyzedFrame? {
@@ -53,17 +54,20 @@ struct VideoPreviewPanel: View {
         }
         // A new video replaces the item; re-running the analysis does not (the URL
         // is unchanged), so the playhead is not thrown away by "Analyze".
-        .onChange(of: session.video?.url) { _, _ in syncPlayer() }
+        .onChange(of: session.video?.url) { _, _ in
+            photosPlayerSource = nil; videoPlayerOffset = nil
+            syncPlayer()
+        }
         // The one rule that makes this a *frame* preview: whatever the grid focuses,
         // the video shows.
         .onChange(of: session.focusedFrameID) { _, id in
             guard session.previewFrame == nil else { return }
             guard let id, let frame = session.frame(id: id) else { return }
-            if session.video.map({ PhotosMedia.isPhotos($0.url) }) == true { syncPlayer() }
+            if session.video.map({ PhotosMedia.isPhotos($0.url) || VideoCollection.get($0.url) != nil }) == true { syncPlayer() }
             else { preview.seek(to: frame.timeSeconds) }
         }
         .onChange(of: session.previewFrame == nil) { _, closed in
-            if closed, let frame = focusedFrame { preview.seek(to: frame.timeSeconds) }
+            if closed, focusedFrame != nil { syncPlayer(); if let frame = focusedFrame { preview.seek(to: frame.timeSeconds) } }
             if !closed { preview.pause() }
         }
     }
@@ -172,6 +176,18 @@ struct VideoPreviewPanel: View {
 
     private func syncPlayer() {
         if let url = session.video?.url {
+            if let collection = VideoCollection.get(url) {
+                let seconds = focusedFrame?.timeSeconds ?? 0
+                let member = collection.member(at: seconds)
+                if photosPlayerSource != member.video.url || videoPlayerOffset != member.offset {
+                    photosPlayerSource = member.video.url
+                    videoPlayerOffset = member.offset
+                    preview.load(asset: VideoAssetFactory.asset(for: member.video.url), offset: member.offset,
+                                 mediaDuration: member.video.durationSeconds, timelineDuration: collection.info.durationSeconds)
+                }
+                preview.seek(to: seconds)
+                return
+            }
             if PhotosMedia.isPhotos(url) {
                 let (source, time) = PhotosMedia.shared.resolve(url, seconds: focusedFrame?.timeSeconds ?? 0)
                 if PhotosMedia.shared.isStill(source) {

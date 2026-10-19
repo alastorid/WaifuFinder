@@ -303,7 +303,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard let video else { return }
         uncover?.dispose()
         previewFrame = nil
-        if PhotosMedia.isPhotos(video.url) {
+        if let collection = VideoCollection.get(video.url) {
+            let member = collection.member(at: seconds)
+            let resolved = collection.resolve(seconds: seconds)
+            uncover = UncoverSession(video: member.video, seconds: resolved.seconds, backendFactory: remoteBackendFactory)
+        } else if PhotosMedia.isPhotos(video.url) {
             let (source, time) = PhotosMedia.shared.resolve(video.url, seconds: seconds)
             guard let item = PhotosMedia.shared.item(source) else { return }
             let info = VideoInfo(url: source, durationSeconds: item.duration, width: item.asset.pixelWidth,
@@ -625,7 +629,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingVocabularyFingerprint: UInt64?
     private var lastTaggingCandidateKey: TaggingCandidateCacheKey?
     private var tagMemoryRestoreToken = UUID()
-    private var analysisCacheIdentity: AnalysisResultCacheIdentity?
+    private var analysisCacheIdentity: VideoAnalysisCacheKeys?
     nonisolated private let thumbnailCache = ThumbnailCache()
     private struct ThumbnailRequest {
         let id: UUID
@@ -713,7 +717,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         loadVideos(at: [url])
     }
 
-    /// Imports a drop as one continuous video, preserving the supplied order.
+    /// Loads original videos into one results workspace, preserving the supplied order.
     func loadVideos(at urls: [URL]) {
         guard let url = urls.first else { return }
         Diag.trace(.analysis, message: "load source photos=\(PhotosMedia.shared.album(url)?.items.count ?? 0)")
@@ -732,7 +736,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let stem = url.deletingPathExtension().lastPathComponent
         currentVideoStem = urls.count > 1 ? "\(stem) and \(urls.count - 1) more" : stem
 
-        progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: urls.count > 1 ? "Preparing \(urls.count) videos…" : PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
+        progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: urls.count > 1 ? "Reading \(urls.count) videos…" : PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
 
         let token = analysisGeneration, config = settings.validated()
         analysisTask = Task.detached { [weak self] in
@@ -1433,7 +1437,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let started = Date()
         var progress = AnalysisProgress(phase: .probing, total: 1, message: "Reading video…")
         var analyzed: [AnalyzedFrame] = []
-        var cacheIdentity: AnalysisResultCacheIdentity?
+        var cacheIdentity: VideoAnalysisCacheKeys?
         do {
             let videoInfo: VideoInfo
             if let url {
@@ -1446,7 +1450,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
             let album = PhotosMedia.shared.album(videoInfo.url)
             let analysisWidth = album == nil ? settings.analysisWidth : PhotosMedia.analysisPixelSize
-            cacheIdentity = AnalysisResultCacheIdentity(videoURL: videoInfo.url,
+            cacheIdentity = VideoAnalysisCacheKeys.make(videoURL: videoInfo.url,
                                                         analysisWidth: analysisWidth,
                                                         minimumFaceAreaFraction: settings.minimumFaceAreaFraction, analysisMode: settings.analysisMode)
             await acceptAnalysisCacheIdentity(cacheIdentity, token: token)
@@ -1463,7 +1467,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             // fraction of a count it never had. Full and Quick both compute
             // their totals exactly from the probe and stay determinate.
             progress.isIndeterminate = album == nil && mode == .keyframe
-            progress.total = album?.items.count ?? max(1, mode.analysedFrameCount(frameCount: videoInfo.estimatedFrameCount,
+            progress.total = album?.items.count ?? VideoCollection.get(videoInfo.url)?.estimatedCount(mode: mode) ?? max(1, mode.analysedFrameCount(frameCount: videoInfo.estimatedFrameCount,
                                                          frameRate: videoInfo.frameRate,
                                                          durationSeconds: videoInfo.durationSeconds))
             progress.message = switch mode {
@@ -1600,10 +1604,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func acceptVideo(_ video: VideoInfo, token: UUID, prepared: PreparedMedia) -> Bool {
         guard analysisGeneration == token else { return false }
         importedMedia = prepared
+        currentVideoStem = video.url.deletingPathExtension().lastPathComponent
         self.video = video
         return true
     }
-    private func acceptAnalysisCacheIdentity(_ identity: AnalysisResultCacheIdentity?, token: UUID) {
+    private func acceptAnalysisCacheIdentity(_ identity: VideoAnalysisCacheKeys?, token: UUID) {
         guard analysisGeneration == token else { return }
         analysisCacheIdentity = identity
     }

@@ -4,14 +4,17 @@ import Foundation
 final class PreparedMedia: Sendable {
     let url: URL
     let directory: URL?
+    private let inputs: [PreparedMedia]
     private let mimeTypeOverride: String?
-    init(url: URL, directory: URL? = nil, mimeTypeOverride: String? = nil) {
+    init(url: URL, directory: URL? = nil, mimeTypeOverride: String? = nil, inputs: [PreparedMedia] = []) {
+        self.inputs = inputs
         self.url = url
         self.directory = directory
         self.mimeTypeOverride = mimeTypeOverride
         if let mimeTypeOverride { VideoAssetFactory.setMIMEType(mimeTypeOverride, for: url) }
     }
     deinit {
+        VideoCollection.release(url)
         if PhotosMedia.isPhotos(url) { PhotosMedia.shared.release(url) }
         if mimeTypeOverride != nil { VideoAssetFactory.setMIMEType(nil, for: url) }
         if let directory { try? FileManager.default.removeItem(at: directory) }

@@ -33,7 +33,7 @@ signing removes a protection; it does not verify the app’s safety. Release bui
 are not Apple-notarized. Continue only if you trust the official download.
 After setup, open WaifuFinder from Applications as usual and eject the disk image.
 
-WaifuFinder takes a video file (or joins several), decodes it frame by frame, asks Apple's Vision models
+WaifuFinder takes one or more video files, decodes it frame by frame, asks Apple's Vision models
 what is interesting about each frame, clusters the frames that show the same shot, ranks
 within each cluster, and lets you browse, compare and export the survivors. It is built
 for the case where the interesting material is scattered through an hour of footage and
@@ -698,11 +698,12 @@ misnamed downloads (including `.dms`) work when their contents are supported vid
 Files chosen locally are also inspected regardless of suffix.
 
 Drop multiple videos together, or select multiple files in **Browse files…**, to
-join them in the supplied order and analyze them as one continuous video. The app
-first renders a temporary joined video with Apple’s native exporter, retaining
-audio and fitting different sizes and orientations without stretching. This
-preparation takes extra time and temporary disk space. Analysis, previews, and
-frame exports all use the joined timeline; source files remain untouched.
+analyze them in one workspace. The app reads each original directly, preserving
+its frame rate, size, orientation and audio. Sorting, grouping, filtering and tagging
+work across all results. Preview, export and restoration use the selected frame’s
+original video and local timestamp. Analysis and tag caches stay keyed by the
+original video and frame, so opening a video alone or in a different collection
+reuses the same results. No joined video or intermediate media file is created.
 
 Direct media URLs are downloaded to a temporary local file before analysis so
 frame sampling, preview, restoration and export share a seekable source. Finite,

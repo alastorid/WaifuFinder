@@ -20,6 +20,7 @@ final class ThumbnailRegenerator: @unchecked Sendable {
     private init() {}
 
     func jpegData(for url: URL, timeSeconds: Double, analysisWidth: Int) async throws -> Data {
+        let (url, timeSeconds) = VideoCollection.resolve(url, seconds: timeSeconds)
         if PhotosMedia.isPhotos(url) {
             let image = try await PhotosMedia.shared.analysisImage(url, seconds: timeSeconds, maxPixelSize: analysisWidth)
             let picture = image.cropping(to: FramePictureArea.bounds(image)) ?? image
