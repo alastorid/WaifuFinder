@@ -160,69 +160,75 @@ struct FrameOrderPanel: View {
         // refuses it too; disabling the control says so before the click.
         let lockedOn = term.enabled && session.frameOrder.enabledCount <= 1
 
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Toggle(isOn: enabledBinding(key)) {
-                    HStack(spacing: 6) {
-                        Text(key.label).font(.callout)
-                        if isVisualOrder, session.isSortingVisualDistance {
-                            VisualSortSpinner()
-                        }
+        return HStack(spacing: 8) {
+            Toggle(isOn: enabledBinding(key)) {
+                HStack(spacing: 6) {
+                    Text(key.label).font(.callout)
+                    if isVisualOrder, session.isSortingVisualDistance {
+                        VisualSortSpinner()
                     }
                 }
-                .toggleStyle(.checkbox)
-                .disabled(lockedOn)
-                .help(key.detail)
-
-                Spacer(minLength: 0)
-
-                if !limit.isUnlimited {
-                    Button {
-                        session.frameLimits.setLimit(.unlimited, for: key)
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Clear the \(key.label) range")
-                }
-
-                Button {
-                    session.frameOrder.toggleDirection(of: key)
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: isVisualOrder
-                              ? (term.ascending ? "arrow.right" : "arrow.left")
-                              : (term.ascending ? "arrow.up" : "arrow.down"))
-                        Text(direction)
-                    }
-                    .font(.system(size: 10))
-                }
-                .buttonStyle(.borderless)
-                .disabled(!term.enabled)
-                .help(isVisualOrder
-                      ? "\(key.label): \(direction). Click to reverse the sequence."
-                      : (term.ascending
-                         ? "\(key.label) ascending — click for descending"
-                         : "\(key.label) descending — click for ascending"))
             }
+            .toggleStyle(.checkbox)
+            .fixedSize()
+            .disabled(lockedOn)
+            .help(key.detail)
 
             if key.supportsFiltering {
-                if let bounds = session.limitBounds.range(for: key) {
-                    let low = clamp(limit.low ?? bounds.lowerBound, to: bounds)
-                    let high = clamp(limit.high ?? bounds.upperBound, to: bounds)
-                    RangeSlider(bounds: bounds, low: low, high: high,
-                                format: { valueText(key, $0) }) { newLow, newHigh in
-                        session.frameLimits.setLimit(FrameLimit(low: newLow, high: newHigh), for: key)
-                    }
-                    .padding(.leading, 2)
-                    .padding(.trailing, 2)
-                    .help("\(key.label) — \(valueText(key, low)) to \(valueText(key, high)). Drag either end of the bar.")
-                } else {
-                    Text("no \(key.label.lowercased()) values on screen")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+                signalRange(key, limit: limit)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 0)
             }
+
+            if !limit.isUnlimited {
+                Button {
+                    session.frameLimits.setLimit(.unlimited, for: key)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .buttonStyle(.borderless)
+                .help("Clear the \(key.label) range")
+            }
+
+            Button {
+                session.frameOrder.toggleDirection(of: key)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: isVisualOrder
+                          ? (term.ascending ? "arrow.right" : "arrow.left")
+                          : (term.ascending ? "arrow.up" : "arrow.down"))
+                    Text(direction)
+                }
+                .font(.system(size: 10))
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .disabled(!term.enabled)
+            .help(isVisualOrder
+                  ? "\(key.label): \(direction). Click to reverse the sequence."
+                  : (term.ascending
+                     ? "\(key.label) ascending — click for descending"
+                     : "\(key.label) descending — click for ascending"))
+        }
+    }
+
+    @ViewBuilder
+    private func signalRange(_ key: FrameSortKey, limit: FrameLimit) -> some View {
+        if let bounds = session.limitBounds.range(for: key) {
+            let low = clamp(limit.low ?? bounds.lowerBound, to: bounds)
+            let high = clamp(limit.high ?? bounds.upperBound, to: bounds)
+            RangeSlider(bounds: bounds, low: low, high: high,
+                        format: { valueText(key, $0) }) { newLow, newHigh in
+                session.frameLimits.setLimit(FrameLimit(low: newLow, high: newHigh), for: key)
+            }
+            .padding(.horizontal, 2)
+            .help("\(key.label) — \(valueText(key, low)) to \(valueText(key, high)). Drag either end of the bar.")
+        } else {
+            Text("no \(key.label.lowercased()) values on screen")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
         }
     }
 
@@ -275,40 +281,27 @@ struct FrameOrderPanel: View {
         } content: {
             VStack(alignment: .leading, spacing: 10) {
                 if session.groupingEnabled {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text("Similarity")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(String(format: "%.2f", session.groupingThreshold))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .frame(width: 58, alignment: .leading)
+                        ValueSlider(
+                            bounds: groupingBounds,
+                            value: Double(session.groupingThreshold),
+                            step: Double(groupingStep),
+                            // Update the preview continuously, then regroup on release.
+                            onChange: { session.groupingThreshold = Float($0) },
+                            onCommit: { value in
+                                session.groupingThreshold = Float(value)
+                                session.regroup()
+                            },
+                            format: { String(format: "%.2f", $0) }
+                        )
+                        .accessibilityLabel("Similarity")
+                        .accessibilityValue(String(format: "%.2f", session.groupingThreshold))
+                        .help("Lower values make more, smaller groups; higher values make fewer, larger groups. ←/→ step by \(String(format: "%.2f", groupingStep)).")
                     }
-
-                    ValueSlider(
-                        bounds: groupingBounds,
-                        value: Double(session.groupingThreshold),
-                        step: Double(groupingStep),
-                        // A drag reports continuously but re-groups only at the end: the work is
-                        // thousands of distance computations, and a drag passes through dozens of
-                        // values whose results are thrown away.
-                        onChange: { session.groupingThreshold = Float($0) },
-                        onCommit: { value in
-                            session.groupingThreshold = Float(value)
-                            session.regroup()
-                        }
-                    )
-                    .help("Tighter makes more, smaller groups; looser makes fewer, larger ones. ←/→ step by \(String(format: "%.2f", groupingStep)).")
-
-                    HStack {
-                        Text("tighter")
-                        Spacer()
-                        Text(session.regroupPending ? "applying…" : "")
-                        Spacer()
-                        Text("looser")
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
                 } else {
                     Text("Frames are shown together. Per-group limits and group rows are paused.")
                         .font(.caption)
@@ -318,8 +311,13 @@ struct FrameOrderPanel: View {
 
                 perGroupSection
 
-                Toggle("One group per line", isOn: groupRowsBinding)
-                    .toggleStyle(.checkbox)
+                Toggle(isOn: groupRowsBinding) {
+                    Text("Group view")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
                     .disabled(!session.groupingEnabled || session.frameOrder.minimalVisualDistance.enabled)
                     .help(!session.groupingEnabled
                           ? "Turn grouping on to lay out one group per line."
@@ -413,52 +411,34 @@ struct FrameOrderPanel: View {
 
     // MARK: - Per-group cap
     private var perGroupSection: some View {
-        let revealAll = session.settings.revealAllGroups
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 0) {
-                capModeButton("Show first \(session.settings.perGroupFrameCount) items", revealAll: false)
-                Rectangle().fill(Color.secondary.opacity(0.25))
-                    .frame(width: 1, height: 12)
-                capModeButton("Reveal all", revealAll: true)
-            }
-            .background(Color.secondary.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
-            }
-            .disabled(!session.groupingEnabled)
-
+        HStack(spacing: 8) {
+            Text("Top")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 58, alignment: .leading)
             ValueSlider(
-                bounds: 1...33,
-                value: Double(session.settings.perGroupFrameCount),
+                bounds: 1...34,
+                value: session.settings.revealAllGroups ? 34 : Double(session.settings.perGroupFrameCount),
                 step: 1,
-                onChange: { perGroupCountBinding.wrappedValue = Int($0.rounded()) },
-                onCommit: { perGroupCountBinding.wrappedValue = Int($0.rounded()) }
+                onChange: setGroupTop,
+                onCommit: setGroupTop,
+                format: { $0.rounded() == 34 ? "all" : "\(Int($0.rounded()))" }
             )
-            .disabled(!session.groupingEnabled || revealAll)
-            .accessibilityLabel("Items per group")
-            .accessibilityValue("\(session.settings.perGroupFrameCount)")
-            .help("Show the first 1–33 items in each group, ranked by the order above. Use +N more in the grid to reveal an individual group.")
+            .disabled(!session.groupingEnabled)
+            .accessibilityLabel("Top items per group")
+            .accessibilityValue(session.settings.revealAllGroups ? "all" : "\(session.settings.perGroupFrameCount)")
+            .help("Keep the top 1–33 items in each group. Move fully right to reveal all. Use +N more in the grid to reveal an individual group.")
         }
     }
 
-    private func capModeButton(_ title: String, revealAll: Bool) -> some View {
-        Button {
-            var settings = session.settings
-            settings.revealAllGroups = revealAll
-            session.settings = settings
-        } label: {
-            Text(title)
-                .font(.caption)
-                .monospacedDigit()
-                .frame(maxWidth: .infinity, minHeight: 21)
-                .background(session.settings.revealAllGroups == revealAll
-                            ? Color.accentColor.opacity(0.2) : Color.clear)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(session.settings.revealAllGroups == revealAll ? .isSelected : [])
+    /// One settings write keeps the count and reveal mode in sync. The extra
+    /// endpoint preserves 33 as a finite cap and existing saved preferences.
+    private func setGroupTop(_ value: Double) {
+        let count = min(max(Int(value.rounded()), 1), 34)
+        var settings = session.settings
+        settings.revealAllGroups = count == 34
+        if count < 34 { settings.perGroupFrameCount = count }
+        session.settings = settings
     }
 
     // MARK: - Show
@@ -482,23 +462,6 @@ struct FrameOrderPanel: View {
                 .help("Filter by significant faces, including small faces scored in Face definition mode.")
             }
         }
-    }
-
-    /// Reads and writes `settings` through one whole value.
-    ///
-    /// `$session.settings.perGroupFrameCount` would work, but it hands SwiftUI a
-    /// binding that mutates a *field of a field* of an `@Published` property, which is
-    /// read-modify-written by the dynamic-property machinery. A whole-value write is
-    /// one access, and it keeps the `didSet` — persist, and re-arrange — firing once.
-    private var perGroupCountBinding: Binding<Int> {
-        Binding(
-            get: { session.settings.perGroupFrameCount },
-            set: { value in
-                var settings = session.settings
-                settings.perGroupFrameCount = min(max(value, 1), 33)
-                session.settings = settings
-            }
-        )
     }
 
     // MARK: - Summary and actions

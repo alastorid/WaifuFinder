@@ -416,10 +416,11 @@ focused frame in motion.
 - **Grouping** (right, off by default) — the FeaturePrint distance within which two frames are the same
   shot, as a live slider: tighter makes more, smaller groups, looser makes fewer, larger
   ones. It re-groups when released (drag) or on each step (←/→), without re-scoring.
-- **Show first n items / Reveal all** (Grouping panel) — how many frames of each group the grid keeps, best first by the
-  current order (7 by default), using a slider from 1 to 33. Reveal all lifts every group cap
-  and greys out the slider. Frames in no group are never capped; the tail of each
-  capped group's line has a "+N more" tile to reveal that group.
+- **Top** (Grouping panel) — an inline slider for how many frames of each group the grid keeps,
+  best first by the current order (7 by default). Choose 1–33, or move fully right to **all**
+  to reveal every group. Similarity and Top show their values on their handles.
+  Frames in no group are never capped; the tail of each capped group's line has a
+  "+N more" tile to reveal that group. **Group view** switches one group per line on or off.
 - **Show** (right) — a compact Faces control: All (default), With faces, or Without
   faces; and one-group-per-line vs one continuous grid. The face filter uses the same
   significance threshold as ranking, so tiny detected faces count as without faces.
