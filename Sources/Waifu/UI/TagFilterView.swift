@@ -213,20 +213,22 @@ struct TagFilterView: View {
                 Text("Top").frame(width: 58, alignment: .leading)
                 ValueSlider(bounds: 1...99, value: Double(session.settings.tagTopCount), step: 1,
                             onChange: setTopCount, onCommit: setTopCount,
+                            resetValue: Double(WaifuSettings.default.tagTopCount),
                             format: { $0.rounded() == 99 ? "all" : "\(Int($0.rounded()))" })
                     .accessibilityLabel("Top frames per tag")
                     .accessibilityValue(topCountText)
             }
-            .help("Keep the top N frames for every tag, or for each selected tag. Set to all to remove the limit.")
+            .help("Keep the top N frames for every tag, or for each selected tag. Set to all to remove the limit. Double-click to restore the default.")
             HStack(spacing: 8) {
                 Text("Threshold").frame(width: 58, alignment: .leading)
                 ValueSlider(bounds: 0.35...1, value: Double(session.settings.taggerThreshold), step: 0.01,
                             onChange: setThreshold, onCommit: setThreshold,
+                            resetValue: Double(WaifuSettings.default.taggerThreshold),
                             format: { String(format: "%.2f", $0) })
                     .accessibilityLabel("Tag threshold")
                     .accessibilityValue(String(format: "%.2f", session.settings.taggerThreshold))
             }
-            .help("Filter using stored FP8 tag scores. Lowering the threshold restores matches without retagging.")
+            .help("Filter using stored FP8 tag scores. Lowering the threshold restores matches without retagging. Double-click to restore the default.")
         }
         .font(.caption)
         .monospacedDigit()

@@ -22,6 +22,8 @@ struct ValueSlider: View {
     let step: Double
     let onChange: (Double) -> Void
     let onCommit: (Double) -> Void
+    /// A double-click restores this value when the slider has a meaningful default.
+    var resetValue: Double? = nil
     /// Optional value pill, matching the labelled handles in RangeSlider.
     var format: ((Double) -> String)? = nil
 
@@ -89,6 +91,10 @@ struct ValueSlider: View {
                         onCommit(value(at: gesture.location.x, travel: travel))
                     }
             )
+            .simultaneousGesture(
+                TapGesture(count: 2)
+                    .onEnded { resetToDefault() }
+            )
         }
         .frame(height: knob)
         .opacity(isEnabled ? 1 : 0.45)
@@ -146,5 +152,13 @@ struct ValueSlider: View {
         let snapped = (stepped / step).rounded() * step
         guard snapped != value else { return }
         onCommit(snapped)
+    }
+
+    private func resetToDefault() {
+        guard isEnabled, let resetValue,
+              abs(value - resetValue) > max(step / 2, 1e-6) else { return }
+        isFocused = true
+        onChange(resetValue)
+        onCommit(resetValue)
     }
 }

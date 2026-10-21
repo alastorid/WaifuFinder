@@ -20,6 +20,7 @@ struct RangeSlider: View {
     /// under the track.
     let format: (Double) -> String
     let onChanged: (Double, Double) -> Void
+    let onReset: () -> Void
 
     @State private var dragging: End?
 
@@ -76,6 +77,10 @@ struct RangeSlider: View {
             .coordinateSpace(name: space)
             .contentShape(Rectangle())
             .gesture(drag(travel: travel))
+            .simultaneousGesture(
+                TapGesture(count: 2)
+                    .onEnded { onReset() }
+            )
         }
         .frame(height: knob)
         // The number is legible but small, and nothing else on screen states the span

@@ -181,16 +181,6 @@ struct FrameOrderPanel: View {
                 Spacer(minLength: 0)
             }
 
-            if !limit.isUnlimited {
-                Button {
-                    session.frameLimits.setLimit(.unlimited, for: key)
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .buttonStyle(.borderless)
-                .help("Clear the \(key.label) range")
-            }
-
             Button {
                 session.frameOrder.toggleDirection(of: key)
             } label: {
@@ -221,9 +211,11 @@ struct FrameOrderPanel: View {
             RangeSlider(bounds: bounds, low: low, high: high,
                         format: { valueText(key, $0) }) { newLow, newHigh in
                 session.frameLimits.setLimit(FrameLimit(low: newLow, high: newHigh), for: key)
+            } onReset: {
+                session.frameLimits.setLimit(.unlimited, for: key)
             }
             .padding(.horizontal, 2)
-            .help("\(key.label) — \(valueText(key, low)) to \(valueText(key, high)). Drag either end of the bar.")
+            .help("\(key.label) — \(valueText(key, low)) to \(valueText(key, high)). Drag either end of the bar; double-click to clear this range.")
         } else {
             Text("no \(key.label.lowercased()) values on screen")
                 .font(.caption)
@@ -296,11 +288,12 @@ struct FrameOrderPanel: View {
                                 session.groupingThreshold = Float(value)
                                 session.regroup()
                             },
+                            resetValue: Double(WaifuSettings.default.similarityThreshold),
                             format: { String(format: "%.2f", $0) }
                         )
                         .accessibilityLabel("Similarity")
                         .accessibilityValue(String(format: "%.2f", session.groupingThreshold))
-                        .help("Lower values make more, smaller groups; higher values make fewer, larger groups. ←/→ step by \(String(format: "%.2f", groupingStep)).")
+                        .help("Lower values make more, smaller groups; higher values make fewer, larger groups. Double-click to restore the default. ←/→ step by \(String(format: "%.2f", groupingStep)).")
                     }
                 } else {
                     Text("Frames are shown together. Per-group limits and group rows are paused.")
@@ -422,12 +415,13 @@ struct FrameOrderPanel: View {
                 step: 1,
                 onChange: setGroupTop,
                 onCommit: setGroupTop,
+                resetValue: Double(WaifuSettings.default.perGroupFrameCount),
                 format: { $0.rounded() == 34 ? "all" : "\(Int($0.rounded()))" }
             )
             .disabled(!session.groupingEnabled)
             .accessibilityLabel("Top items per group")
             .accessibilityValue(session.settings.revealAllGroups ? "all" : "\(session.settings.perGroupFrameCount)")
-            .help("Keep the top 1–33 items in each group. Move fully right to reveal all. Use +N more in the grid to reveal an individual group.")
+            .help("Keep the top 1–33 items in each group. Move fully right to reveal all. Double-click to restore the default. Use +N more in the grid to reveal an individual group.")
         }
     }
 
