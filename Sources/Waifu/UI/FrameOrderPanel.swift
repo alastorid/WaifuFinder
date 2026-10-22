@@ -127,7 +127,12 @@ struct FrameOrderPanel: View {
     private var ratingSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                if session.taggingProgress.isRunning || session.taggedFrameCount == 0 {
+                if session.isLoadingPhotosAlbum {
+                    Text("Loading...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if session.taggingProgress.isRunning || session.taggedFrameCount == 0 {
                     TaggingPanelStatus(session: session, panel: .rating)
                 } else {
                     signalRow(.ratingGeneral)
