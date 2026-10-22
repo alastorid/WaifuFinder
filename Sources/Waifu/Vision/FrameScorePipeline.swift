@@ -102,82 +102,101 @@ final class FrameScorePipeline: Sendable {
         minimumFaceAreaFraction: Float,
         onProgress: @escaping @Sendable (Int) -> Void
     ) -> AsyncThrowingStream<AnalyzedFrame, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    var buffer: [Int: AnalyzedFrame] = [:] // sampleIndex → frame
-                    var submitted: [Int] = []  // every submitted index, in order
-                    var emitted = 0             // how many have been handed on
-                    var completed = 0
+        start(frames: frames, minimumFaceAreaFraction: minimumFaceAreaFraction,
+              onProgress: onProgress).frames
+    }
 
-                    // Process frames with bounded concurrency using a task group.
-                    // We submit up to `workerCount` frames at a time, then wait
-                    // for the next one to complete before submitting another.
-                    // This keeps at most `workerCount` frames in flight.
-                    try await withThrowingTaskGroup(of: (Int, AnalyzedFrame).self) { group in
-                        var frameIterator = frames.makeAsyncIterator()
+    /// The owner can join cancellation before resuming the same source. The
+    /// checkpoint callback runs before publication, including buffered results.
+    struct Run: Sendable {
+        let frames: AsyncThrowingStream<AnalyzedFrame, Error>
+        let task: Task<Void, Never>
+    }
 
-                        // Prime the group with up to workerCount frames.
-                        while submitted.count < workerCount {
-                            guard let frame = try await frameIterator.next() else { break }
-                            let sampleIndex = frame.sampleIndex
-                            submitted.append(sampleIndex)
-                            group.addTask {
-                                let result = try await self.scoreAndStore(frame: frame)
-                                return (sampleIndex, result)
-                            }
+    func start(
+        frames: AsyncThrowingStream<SampledFrame, Error>,
+        minimumFaceAreaFraction: Float,
+        onProgress: @escaping @Sendable (Int) -> Void,
+        onFrame: (@Sendable (AnalyzedFrame) async -> Void)? = nil
+    ) -> Run {
+        let (stream, continuation) = AsyncThrowingStream<AnalyzedFrame, Error>.makeStream()
+        let task = Task {
+            do {
+                var buffer: [Int: AnalyzedFrame] = [:] // sampleIndex → frame
+                var submitted: [Int] = []  // every submitted index, in order
+                var emitted = 0             // how many have been handed on
+                var completed = 0
+
+                // Process frames with bounded concurrency using a task group.
+                // We submit up to `workerCount` frames at a time, then wait
+                // for the next one to complete before submitting another.
+                // This keeps at most `workerCount` frames in flight.
+                try await withThrowingTaskGroup(of: (Int, AnalyzedFrame).self) { group in
+                    var frameIterator = frames.makeAsyncIterator()
+
+                    // Prime the group with up to workerCount frames.
+                    while submitted.count < workerCount {
+                        guard let frame = try await frameIterator.next() else { break }
+                        let sampleIndex = frame.sampleIndex
+                        submitted.append(sampleIndex)
+                        group.addTask {
+                            let result = try await self.scoreAndStore(frame: frame)
+                            return (sampleIndex, result)
                         }
+                    }
 
-                        // Drain results, emitting in order, and submit new work.
-                        while let (sampleIndex, analyzedFrame) = try await group.next() {
-                            // Check cancellation between frames.
-                            if Task.isCancelled { throw CancellationError() }
+                    // Drain results, emitting in order, and submit new work.
+                    while let (sampleIndex, analyzedFrame) = try await group.next() {
+                        // Check cancellation between frames.
+                        if Task.isCancelled { throw CancellationError() }
 
-                            buffer[sampleIndex] = analyzedFrame
+                        buffer[sampleIndex] = analyzedFrame
 
-                            // Emit any frames that are now next in order. The
-                            // submission queue *is* the order: a quick pass's
-                            // indices have gaps, so the next frame to emit is
-                            // the queue's head, not the last index plus one.
-                            // Counting every submission, primed or not, is what
-                            // keeps the final flush's bound honest.
-                            while emitted < submitted.count, let frame = buffer.removeValue(forKey: submitted[emitted]) {
-                                continuation.yield(frame)
-                                emitted += 1
-                                completed += 1
-                                onProgress(completed)
-                            }
-
-                            // Submit the next frame if any remain.
-                            if let nextFrame = try await frameIterator.next() {
-                                let nextSampleIndex = nextFrame.sampleIndex
-                                submitted.append(nextSampleIndex)
-                                group.addTask {
-                                    let result = try await self.scoreAndStore(frame: nextFrame)
-                                    return (nextSampleIndex, result)
-                                }
-                            }
-                        }
-
-                        // After the group finishes, emit any remaining buffered
-                        // frames — the tail of the submission queue whose
-                        // results landed after the last drain.
+                        // Emit any frames that are now next in order. The
+                        // submission queue *is* the order: a quick pass's
+                        // indices have gaps, so the next frame to emit is
+                        // the queue's head, not the last index plus one.
+                        // Counting every submission, primed or not, is what
+                        // keeps the final flush's bound honest.
                         while emitted < submitted.count, let frame = buffer.removeValue(forKey: submitted[emitted]) {
+                            await onFrame?(frame)
                             continuation.yield(frame)
                             emitted += 1
                             completed += 1
                             onProgress(completed)
                         }
+
+                        // Submit the next frame if any remain.
+                        if let nextFrame = try await frameIterator.next() {
+                            let nextSampleIndex = nextFrame.sampleIndex
+                            submitted.append(nextSampleIndex)
+                            group.addTask {
+                                let result = try await self.scoreAndStore(frame: nextFrame)
+                                return (nextSampleIndex, result)
+                            }
+                        }
                     }
 
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
+                    // After the group finishes, emit any remaining buffered
+                    // frames — the tail of the submission queue whose
+                    // results landed after the last drain.
+                    while emitted < submitted.count, let frame = buffer.removeValue(forKey: submitted[emitted]) {
+                        await onFrame?(frame)
+                        continuation.yield(frame)
+                        emitted += 1
+                        completed += 1
+                        onProgress(completed)
+                    }
                 }
-            }
 
-            continuation.onTermination = { _ in task.cancel() }
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
         }
+
+        continuation.onTermination = { _ in task.cancel() }
+        return Run(frames: stream, task: task)
     }
 
     /// Scores one frame and retains its thumbnail in memory, returning the `AnalyzedFrame`.

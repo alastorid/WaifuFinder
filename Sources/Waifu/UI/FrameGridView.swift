@@ -381,9 +381,16 @@ struct FrameGridView: View {
     @ViewBuilder
     private func contextMenu(for frame: AnalyzedFrame) -> some View {
         let isSelected = session.selectedFrameIDs.contains(frame.id)
+        let photoURL = session.video.flatMap {
+            PhotosMedia.shared.photoItemURL(for: $0.url, seconds: frame.timeSeconds)
+        }
 
         Button("Preview") { session.showPreview(frame) }
-        Button(isSelected ? "Deselect" : "Select") { session.select(frame.id) }
+        if let photoURL {
+            Button("View in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
+        } else {
+            Button(isSelected ? "Deselect" : "Select") { session.select(frame.id) }
+        }
 
         if let groupID = frame.groupID,
            let group = session.groups.first(where: { $0.id == groupID }) {
@@ -391,14 +398,15 @@ struct FrameGridView: View {
             Button("Select All in Group") { session.selectAll(in: group) }
         }
 
-        if let sourceURL = session.video?.url,
-           let photoURL = PhotosMedia.shared.photoItemURL(for: sourceURL, seconds: frame.timeSeconds) {
+        if photoURL != nil {
             Divider()
-            Button("Sync order") { session.syncPhotosOrder(for: frame) }
+            Button("Set Album Order in Photos.app") { session.syncPhotosOrder(for: frame) }
                 .disabled(session.isSyncingPhotosOrder || session.photosAlbumURL.flatMap { PhotosMedia.shared.album($0) }?.canReorder != true)
                 .help("Write the displayed order to Photos. With multiple photos selected, sync only that selection in its displayed order.")
+            Button("Set Keywords from Tags") { session.writePhotosTags(for: frame) }
+                .disabled(session.isWritingPhotosTags || session.tagVocabulary == nil || frame.tagProbabilities == nil || frame.tagRating == nil)
+                .help("Replace this photo’s keywords with its rating and tags above the current threshold. Applies to the selection when multiple photos are selected.")
             Button("Mark unordered") { session.resetPhotosOrderState() }
-            Button("Show in Photos") { PhotosAppIntegration.reveal(photoURL) }
         }
 
         Divider()

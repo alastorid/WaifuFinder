@@ -278,6 +278,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published private(set) var selectedFrameIDs: Set<FrameID> = []
     private var selectionAnchor: FrameID?
     @Published private(set) var isSyncingPhotosOrder = false
+    @Published private(set) var isWritingPhotosTags = false
     @Published private(set) var photosOrderSyncMessage: String?
 
     // MARK: UI state
@@ -540,6 +541,37 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         syncPhotosOrder(forPhotoIdentifiers: identifiers)
     }
 
+    func writePhotosTags(for frame: AnalyzedFrame) {
+        guard !isWritingPhotosTags, let sourceURL = video?.url else { return }
+        let targets = selectedFrameIDs.count > 1 && selectedFrameIDs.contains(frame.id)
+            ? displayOrderFrames.filter { selectedFrameIDs.contains($0.id) } : [frame]
+        do {
+            guard let vocabulary = tagVocabulary else {
+                throw PhotosMedia.failure("Load the tagger vocabulary before writing keywords.")
+            }
+            // Prepare every replacement before touching Photos so missing scores cannot clear keywords.
+            let updates = try targets.map { target in
+                guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: target.timeSeconds) else {
+                    throw PhotosMedia.failure("This photo is no longer available in Photos.")
+                }
+                return PhotosKeywords.Update(assetIdentifier: identifier,
+                    keywords: try PhotosKeywords.keywords(for: target, vocabulary: vocabulary,
+                                                          threshold: settings.taggerThreshold))
+            }
+            isWritingPhotosTags = true
+            Task {
+                defer { isWritingPhotosTags = false }
+                do {
+                    try await PhotosMedia.shared.replaceKeywords(updates)
+                } catch {
+                    errorMessage = "Couldn’t write tags to Photos: \(error.localizedDescription)"
+                }
+            }
+        } catch {
+            errorMessage = "Couldn’t write tags to Photos: \(error.localizedDescription)"
+        }
+    }
+
     func resetPhotosOrderState() {
         guard let albumURL = photosAlbumURL,
               let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
@@ -709,6 +741,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var terminationObserver: AnyCancellable?
     private var analysisTask: Task<Void, Never>?
     private var analysisGeneration = UUID()
+    private var photosAnalysisCheckpoint: PhotosAnalysisCheckpoint?
     private var taggingTask: Task<Void, Never>?
     private var taggingGeneration = UUID()
     private var taggingDemandActive = false
@@ -843,8 +876,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: urls.count > 1 ? "Reading \(urls.count) videos…" : PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
 
         let token = analysisGeneration, config = settings.validated()
+        let checkpoint = photosAlbumURL.map { PhotosAnalysisCheckpoint(sourceURL: $0, settings: config) }
+        photosAnalysisCheckpoint = checkpoint
         analysisTask = Task.detached { [weak self] in
-            await self?.runAnalysisPipeline(for: url, existing: nil, settings: config, token: token, preparedSource: preparedSource, sourceURLs: urls)
+            await self?.runAnalysisPipeline(for: url, existing: nil, settings: config, token: token,
+                                           preparedSource: preparedSource, sourceURLs: urls, photosCheckpoint: checkpoint)
         }
     }
 
@@ -880,8 +916,48 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         progress = AnalysisProgress(phase: .sampling, processed: 0, total: 1, elapsed: 0, message: "Decoding and scoring every frame…")
 
         let token = analysisGeneration, config = settings.validated(), existing = video
+        let checkpoint = photosAlbumURL.map { PhotosAnalysisCheckpoint(sourceURL: $0, settings: config) }
+        photosAnalysisCheckpoint = checkpoint
         analysisTask = Task.detached { [weak self] in
-            await self?.runAnalysisPipeline(for: nil, existing: existing, settings: config, token: token)
+            await self?.runAnalysisPipeline(for: nil, existing: existing, settings: config, token: token,
+                                           photosCheckpoint: checkpoint)
+        }
+    }
+
+    /// Change PhotoKit policy without clearing the grid, tags, selection, or
+    /// thumbnail cache. Serializing retries also handles rapid switch changes.
+    func photosDownloadPolicyChanged(allowNetwork: Bool) {
+        guard let sourceURL = photosAlbumURL, let album = PhotosMedia.shared.album(sourceURL),
+              let checkpoint = photosAnalysisCheckpoint, checkpoint.sourceURL == sourceURL else { return }
+        if !allowNetwork {
+            if taggingProgress.isRunning { cancelTagging(keepingCompletedResults: true) }
+            for request in thumbnailRequests.values { request.task.cancel() }
+            thumbnailRequests.removeAll()
+        }
+        // Turning downloads off after a finished/cancelled pass needs no work.
+        // Turning them on only retries when there are unfinished photos.
+        guard allowNetwork || progress.isRunning,
+              progress.phase != .complete || frames.count < album.items.count else { return }
+        let previousTask = analysisTask
+        cancel()
+        errorMessage = nil
+        progress = AnalysisProgress(phase: .sampling, processed: frames.count, total: album.items.count,
+                                    elapsed: 0, message: "Loading remaining photos…")
+        let token = analysisGeneration, existing = video, prepared = importedMedia
+        // Keep scores compatible with the original pass, while honoring the
+        // current grouping controls when the combined result is regrouped.
+        var config = checkpoint.settings
+        config.similarityThreshold = settings.similarityThreshold
+        config.maximumGroupSize = settings.maximumGroupSize
+        let resumeSettings = config
+        analysisTask = Task.detached { [weak self] in
+            // The cancelled pass checkpoints even results not yet shown in the
+            // grid. Wait for it before deciding which items need another read.
+            await previousTask?.value
+            guard !Task.isCancelled else { return }
+            await self?.runAnalysisPipeline(for: existing == nil ? sourceURL : nil, existing: existing,
+                                           settings: resumeSettings, token: token, preparedSource: prepared,
+                                           photosCheckpoint: checkpoint, allowNetwork: allowNetwork)
         }
     }
 
@@ -889,7 +965,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func cancel() {
         analysisTask?.cancel()
         analysisGeneration = UUID()
-        analysisTask = nil
+        // Retain the handle until replacement: a later Photos retry must also
+        // join a pass that the user already cancelled with the stop button.
         isRegrouping = false
         if progress.phase != .complete && progress.phase != .idle {
             progress.phase = .cancelled
@@ -1537,11 +1614,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Decode, score, accumulate and group away from the UI actor. Only small
     /// progress values cross actors during the pass; the grid receives one result.
     private nonisolated func runAnalysisPipeline(for url: URL?, existing: VideoInfo?,
-                                                settings: WaifuSettings, token: UUID, preparedSource: PreparedMedia? = nil, sourceURLs: [URL]? = nil) async {
+                                                settings: WaifuSettings, token: UUID, preparedSource: PreparedMedia? = nil,
+                                                sourceURLs: [URL]? = nil, photosCheckpoint: PhotosAnalysisCheckpoint? = nil,
+                                                allowNetwork: Bool = PhotosMedia.downloadFromICloud) async {
         let started = Date()
         var progress = AnalysisProgress(phase: .probing, total: 1, message: "Reading video…")
         var analyzed: [AnalyzedFrame] = []
         var cacheIdentity: VideoAnalysisCacheKeys?
+        var scoringTask: Task<Void, Never>?
+        var photosSampler: PhotosAlbumSampler?
         do {
             let videoInfo: VideoInfo
             if let url {
@@ -1553,6 +1634,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             else { throw AnalysisError.noVideo }
 
             let album = PhotosMedia.shared.album(videoInfo.url)
+            let retained = await photosCheckpoint?.frames() ?? []
+            try Task.checkCancellation()
             let analysisWidth = album == nil ? settings.analysisWidth : PhotosMedia.analysisPixelSize
             cacheIdentity = VideoAnalysisCacheKeys.make(videoURL: videoInfo.url,
                                                         analysisWidth: analysisWidth,
@@ -1574,14 +1657,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.total = album?.items.count ?? VideoCollection.get(videoInfo.url)?.estimatedCount(mode: mode) ?? max(1, mode.analysedFrameCount(frameCount: videoInfo.estimatedFrameCount,
                                                          frameRate: videoInfo.frameRate,
                                                          durationSeconds: videoInfo.durationSeconds))
-            progress.message = switch mode {
-            case .keyframe: "Scoring and grouping keyframes…"
-            case .quick: "Scoring and grouping one frame a second…"
-            case .full: "Scoring and grouping every frame…"
+            if !retained.isEmpty {
+                progress.message = "Loading remaining photos and updating groups…"
+            } else {
+                progress.message = switch mode {
+                case .keyframe: "Scoring and grouping keyframes…"
+                case .quick: "Scoring and grouping one frame a second…"
+                case .full: "Scoring and grouping every frame…"
+                }
             }
             await acceptProgress(progress, token: token)
-            let sampled = AVFoundationFrameSampler().sample(videoInfo.url, analysisWidth: analysisWidth,
-                                                             mode: mode, onProgress: { _ in })
+            photosSampler = album.map {
+                PhotosAlbumSampler(album: $0, width: analysisWidth, mode: mode,
+                                   completedIndices: Set(retained.map { $0.id.sampleIndex }), allowNetwork: allowNetwork)
+            }
+            let sampled: AsyncThrowingStream<SampledFrame, Error>
+            if let photosSampler {
+                sampled = AsyncThrowingStream(unfolding: { try await photosSampler.next() })
+            } else {
+                sampled = AVFoundationFrameSampler().sample(videoInfo.url, analysisWidth: analysisWidth,
+                                                           mode: mode, onProgress: { _ in })
+            }
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                                                 videoStem: videoInfo.url.deletingPathExtension().lastPathComponent)
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
@@ -1592,13 +1688,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                                 analysisWidth: analysisWidth).scoringWorkers,
                                               cacheSuffix: "-\(token.uuidString)",
                                               cachedResults: cachedAnalysisResults)
-            let scoredFrames = pipeline.run(frames: sampled,
-                                            minimumFaceAreaFraction: settings.minimumFaceAreaFraction,
-                                            onProgress: { _ in })
+            let checkpointFrame: (@Sendable (AnalyzedFrame) async -> Void)?
+            if let photosCheckpoint {
+                checkpointFrame = { frame in await photosCheckpoint.retain(frame) }
+            } else {
+                checkpointFrame = nil
+            }
+            let scoring = pipeline.start(frames: sampled, minimumFaceAreaFraction: settings.minimumFaceAreaFraction,
+                                         onProgress: { _ in }, onFrame: checkpointFrame)
+            scoringTask = scoring.task
+            let scoredFrames = retained.isEmpty ? scoring.frames : PhotosAnalysisCheckpoint.merging(retained, with: scoring.frames)
             let grouping = IncrementalFrameGrouper(settings: settings.grouping)
             var lastPulse = started
             var lastPhotosUpdate = started
-            if album != nil { PhotosMedia.shared.resetSkippedItems(videoInfo.url) }
             for try await frame in scoredFrames {
                 try Task.checkCancellation()
                 analyzed.append(frame)
@@ -1614,7 +1716,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 // Start with a useful batch rather than mounting a singleton
                 // grid that is immediately replaced by the rest of the album.
                 // Small albums publish in full through completeAnalysis below.
-                if album != nil && analyzed.count >= 64 && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
+                // A retry keeps the complete existing grid visible while gaps
+                // are filled; publishing a prefix would hide its retained tail.
+                if album != nil && retained.isEmpty && analyzed.count >= 64 && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
                     let liveGroups = try grouping.snapshot()
                     let liveFrames = Self.assignGroups(liveGroups, to: analyzed)
                     await acceptLivePhotos(frames: liveFrames, groups: liveGroups, token: token)
@@ -1651,15 +1755,23 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.groupsIdentified = groups.count
             progress.groupedFrames = analyzed.count
             progress.elapsed = Date().timeIntervalSince(started)
-            let skipped = album == nil ? 0 : PhotosMedia.shared.skippedItemCount(videoInfo.url)
+            let skipped = await photosSampler?.unavailableItemCount ?? 0
             progress.message = skipped == 0 ? "Complete" : "Complete · \(skipped) items unavailable locally"
             if let cacheIdentity {
                 await AnalysisResultMemory.shared.remember(identity: cacheIdentity, frames: finalFrames)
             }
             await completeAnalysis(frames: finalFrames, groups: groups, progress: progress, token: token)
         } catch {
-            if PhotosMedia.shared.album(url ?? existing?.url ?? URL(fileURLWithPath: "/")) != nil, !analyzed.isEmpty {
-                await acceptLivePhotos(frames: analyzed, groups: [], token: token)
+            // Async stream producers own separate tasks. Join them explicitly
+            // so no old PhotoKit request or checkpoint write outlives a retry.
+            scoringTask?.cancel()
+            await scoringTask?.value
+            await photosSampler?.cancel()
+            if let photosCheckpoint {
+                // Include retained photos after an earlier missing item, even
+                // when a cancelled merge never reached them in source order.
+                analyzed = await photosCheckpoint.frames()
+                await acceptPartialPhotos(frames: analyzed, token: token)
             }
             if let cacheIdentity, !analyzed.isEmpty {
                 await AnalysisResultMemory.shared.remember(identity: cacheIdentity, frames: analyzed)
@@ -1696,6 +1808,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard analysisGeneration == token else { return }
         self.groups = groups
         updateAnalyzedFrames(frames, isProgressive: true)
+    }
+
+    private func acceptPartialPhotos(frames: [AnalyzedFrame], token: UUID) {
+        guard analysisGeneration == token else { return }
+        let partial = frames.map { frame in
+            var copy = frame
+            copy.groupID = frameByID[frame.id]?.groupID
+            return copy
+        }
+        updateAnalyzedFrames(partial, isProgressive: true)
     }
 
     /// Both progressive and final snapshots share candidate invalidation and
@@ -1768,6 +1890,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     private func clearResults() {
+        photosAnalysisCheckpoint = nil
         defersVisualOrder = false
         thumbnailGeneration = UUID()
         for request in thumbnailRequests.values { request.task.cancel() }

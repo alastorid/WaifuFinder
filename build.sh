@@ -280,7 +280,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>NSLocalNetworkUsageDescription</key><string>Connect to another Mac for remote tagging and reconstruction, or share this Mac’s installed models.</string>
     <key>NSPhotoLibraryUsageDescription</key><string>Choose a Photos album to analyze its photos directly in WaifuFinder.</string>
-    <key>NSAppleEventsUsageDescription</key><string>WaifuFinder can show a selected photo in Photos when you choose Show in Photos from its thumbnail menu.</string>
+    <key>NSAppleEventsUsageDescription</key><string>WaifuFinder can reveal photos and replace their keywords with ratings and tags when you choose View in Photos.app or Set Keywords from Tags from a thumbnail menu.</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict>

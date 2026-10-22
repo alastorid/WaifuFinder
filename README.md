@@ -791,8 +791,11 @@ state** clears the app's private markers without changing the album in Photos.
 
 **Download from iCloud** is off by default. Off uses locally available renditions
 and skips missing ones rather than blocking the rest of the album. Enable it to
-fetch missing media as needed; changing the switch restarts the analysis pass and
-retries skipped photos. Originals are requested only for explicit full-resolution
+fetch missing media as needed. Changing the switch preserves completed analysis,
+tags, selection, and cached thumbnails. Enabling it retries unfinished photos;
+disabling it cancels pending analysis downloads and continues with local media.
+Grouping is updated over the combined results without decoding completed photos
+again. Originals are requested only for explicit full-resolution
 preview, restoration or export and follow the same iCloud policy. No underlying
 originals are exported into an import folder, and the app never opens the private
 Photos library filesystem.

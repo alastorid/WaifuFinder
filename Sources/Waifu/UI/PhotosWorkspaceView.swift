@@ -86,10 +86,8 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { libraryRevision += 1 }
         }
-        .onChange(of: downloadFromICloud) { _, _ in
-            // Restart the bounded pass so previously skipped items are retried,
-            // and turning the switch off cancels pending cloud requests.
-            if album != nil, session.video != nil { session.analyze() }
+        .onChange(of: downloadFromICloud) { _, enabled in
+            session.photosDownloadPolicyChanged(allowNetwork: enabled)
         }
         .onChange(of: selectedAlbum) { _, selection in openAlbum(selection) }
         .onDisappear { selectionTask?.cancel(); selectionGeneration = UUID() }

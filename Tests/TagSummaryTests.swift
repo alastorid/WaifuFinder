@@ -25,6 +25,55 @@ private func summaryFrame(_ id: Int, _ scores: [Int: Float]) -> AnalyzedFrame {
 func registerTagSummaryTests() {
     let suite = "frame arrangement: tag summary"
 
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keywords use live threshold, all qualifying tags and rating first", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        var scores = Dictionary(uniqueKeysWithValues: (4..<24).map { ($0, Float(0.75)) })
+        scores[24] = 0.5
+        scores[25] = 0.25
+        scores[26] = 0.875
+        scores[4 + TagVocabulary.generalCount] = 0.75
+        var frame = summaryFrame(0, scores)
+        frame.tagRating = .explicit
+        frame.topTags = ["stale top tag"]
+        let keywords = try PhotosKeywords.keywords(for: frame, vocabulary: vocabulary)
+        checkEqual(keywords.first, "explicit", "rating is a plain keyword at the start")
+        checkEqual(keywords.count, 24, "includes general and character tags beyond the top 15")
+        checkEqual(keywords[1], "tag 22", "other keywords follow confidence order")
+        check(!keywords.contains("stale top tag"), "never uses cached top tags")
+        let raised = try PhotosKeywords.keywords(for: frame, vocabulary: vocabulary, threshold: 0.75)
+        checkEqual(raised, ["explicit", "tag 22"], "strictly above the current threshold")
+        checkEqual(try PhotosKeywords.keywords(for: frame, vocabulary: vocabulary, threshold: 1),
+                   ["explicit"], "rating remains when no tags qualify")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword replacement rejects unavailable or mismatched scores", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        var frame = summaryFrame(0, [4: 0.75])
+        frame.tagVocabularyFingerprint = vocabulary.cacheFingerprint &+ 1
+        do {
+            _ = try PhotosKeywords.keywords(for: frame, vocabulary: vocabulary)
+            check(false, "mismatched vocabulary must not write keywords")
+        } catch {}
+        frame.tagVocabularyFingerprint = nil
+        frame.tagProbabilities = nil
+        do {
+            _ = try PhotosKeywords.keywords(for: frame, vocabulary: vocabulary)
+            check(false, "missing scores must not clear existing keywords")
+        } catch {}
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword script replaces each asset with safely quoted text", knownBug: nil) {
+        let source = PhotosKeywords.replacementScript(for: [
+            .init(assetIdentifier: "asset\"\\id", keywords: ["explicit", "a,b", "quoted\"tag", "line\nbreak"]),
+            .init(assetIdentifier: "second", keywords: ["general"])
+        ])
+        check(source.contains("set keywords of media item id \"asset\\\"\\\\id\" to {\"explicit\", \"a,b\", \"quoted\\\"tag\", \"line\\nbreak\"}"),
+              "commas, quotes, slashes and line breaks remain literal keyword text")
+        check(source.contains("set keywords of media item id \"second\" to {\"general\"}"),
+              "each photo receives its own replacement list")
+        check(!source.contains("activate"), "writing does not request foreground control")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail Top reasons follow rankings, group caps and partial reveals", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let group = FrameGroupID(raw: "top-badges")

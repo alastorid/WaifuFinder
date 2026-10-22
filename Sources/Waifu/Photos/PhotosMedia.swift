@@ -32,10 +32,6 @@ final class PhotosMedia: @unchecked Sendable {
     static let shared = PhotosMedia()
     static let analysisPixelSize = 512
     static var downloadFromICloud: Bool { UserDefaults.standard.bool(forKey: "photosDownloadFromICloud") }
-    private var skippedItems: [URL: Int] = [:]
-    func resetSkippedItems(_ url: URL) { lock.withLock { skippedItems[url] = 0 } }
-    func noteUnavailable(_ url: URL) { lock.withLock { skippedItems[url, default: 0] += 1 } }
-    func skippedItemCount(_ url: URL) -> Int { lock.withLock { skippedItems[url] ?? 0 } }
     static func isUnavailableLocally(_ error: Error) -> Bool {
         let error = error as NSError
         return error.domain == "Waifu.Photos" && error.code == 2
@@ -165,6 +161,22 @@ final class PhotosMedia: @unchecked Sendable {
                 let message = errorInfo["NSAppleScriptErrorMessage"] as? String
                     ?? "Allow WaifuFinder to control Photos in System Settings → Privacy & Security → Automation."
                 throw Self.failure(message)
+            }
+        }.value
+    }
+
+    /// Photos exposes keywords through its public scripting dictionary, not PhotoKit.
+    func replaceKeywords(_ updates: [PhotosKeywords.Update]) async throws {
+        guard !updates.isEmpty else { return }
+        try await Task.detached(priority: .userInitiated) {
+            guard let script = NSAppleScript(source: PhotosKeywords.replacementScript(for: updates)) else {
+                throw Self.failure("Could not prepare the Photos keyword request.")
+            }
+            var errorInfo: NSDictionary?
+            _ = script.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                throw Self.failure(errorInfo["NSAppleScriptErrorMessage"] as? String
+                    ?? "Allow WaifuFinder to control Photos in System Settings → Privacy & Security → Automation.")
             }
         }.value
     }
@@ -514,7 +526,6 @@ final class PhotosMedia: @unchecked Sendable {
 
     func release(_ url: URL) {
         lock.withLock {
-            skippedItems.removeValue(forKey: url)
             guard let album = albums.removeValue(forKey: url) else { return }
             for item in album.items {
                 items.removeValue(forKey: item.url)
