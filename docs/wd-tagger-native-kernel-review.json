@@ -11718,6 +11718,63 @@
       "Synthetic arithmetic inputs only; no natural-image corpus this round",
       "No GPU trace or occupancy counters; barrier reasoning is source-level",
       "M4, M5 and M3 Pro/Max remain unmeasured on kernel revision v3"
-    ]
+    ],
+    "m4": {
+      "device": "Mac mini, base Apple M4 (10-core GPU), 16 GB, macOS 26.4.1",
+      "method": "SSH benchmark on a fresh clone; pinned MLX 0.31.1 metallib; same 64 synthetic RGBA inputs, weights and budgets as the M3 pass; thermal-gated pauses between paired runs",
+      "kernelRevision": "swinv2-native-metal32-fused-qkv-v3",
+      "crossMachineDeterminism": "Every M4 configuration produced probabilities byte-identical to the base-M3 reference run",
+      "checks": {
+        "kernelChecksAllTiles": 633,
+        "profileChecks": 41
+      },
+      "singleRunSweep": {
+        "note": "Exploratory; later runs drifted hot. The cooled paired comparison below is the evidence source",
+        "inheritedAutomatic": [
+          24.021,
+          24.01,
+          23.262
+        ],
+        "universal": [
+          23.984,
+          22.579
+        ],
+        "qkvfc2_64x64x16": 24.072,
+        "qkvfc2_relaxed64": 23.858,
+        "attentionQueryRows32": 22.821,
+        "fc2_64x64x64": 22.288,
+        "global64x64x32": 22.521
+      },
+      "pairedCooledThreeWay": {
+        "rounds": 3,
+        "inherited": [
+          24.054,
+          24.024,
+          23.962
+        ],
+        "k16": [
+          24.076,
+          24.111,
+          24.075
+        ],
+        "universal": [
+          24.009,
+          24.0,
+          24.048
+        ],
+        "k16PairwiseWins": "6 of 6",
+        "k16MedianGainVsInherited": 0.0022,
+        "k16MedianGainVsUniversal": 0.0028,
+        "probabilitiesByteIdentical": true
+      },
+      "registeredProfile": {
+        "identifier": "measured-m4-b8-round4",
+        "match": "exact device: Apple M4",
+        "workload": "batch 8, standard fused graph",
+        "stages": "Stage 3 QKV/FC2 64x64x16 (WM=2/WN=2); other GEMMs 32x64x32; attention query rows 16; dense bias",
+        "verification": "Automatic selection resolves to the entry on the profiled Mac mini; probabilities byte-identical; 23.99 fps confirmation run"
+      },
+      "unmeasured": "M4 Pro/Max, M5 and later remain unmeasured and inherit via family-9 compatibility"
+    }
   }
 }

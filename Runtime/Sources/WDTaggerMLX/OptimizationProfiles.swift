@@ -169,11 +169,22 @@ public enum WDOptimizationRegistry {
     stages[2].tiles[.qkv] = .m64n64k32; stages[2].tiles[.fc2] = .m64n64k32
     return stages
   }
+  /// Round 4 base-M4 measurement: 64×64×16 (WM=2/WN=2) won all six cooled paired
+  /// rounds against the M3-derived inheritance and the universal baseline.
+  private static var m4Stages: [WDStageKernelConfiguration] {
+    var stages = Array(repeating: WDStageKernelConfiguration(attentionQueryRows: 16), count: 4)
+    stages[2].tiles[.qkv] = .m64n64k16; stages[2].tiles[.fc2] = .m64n64k16
+    return stages
+  }
   public static let profiles: [WDGPUOptimizationProfile] = [
     .init(identifier: "measured-m3-b8-round2", provenance: .measured, match: .exactDevice("Apple M3"),
       workload: .init(batches: [8]), requiresStandardFused: true, stages: m3Stages,
       evidence: "docs/wd-tagger-native-kernel-review.json#round2; 1.5–1.9% prediction gain; exact on 64 synthetic inputs",
       reason: "Exact measured base M3 and batch-eight workload"),
+    .init(identifier: "measured-m4-b8-round4", provenance: .measured, match: .exactDevice("Apple M4"),
+      workload: .init(batches: [8]), requiresStandardFused: true, stages: m4Stages,
+      evidence: "docs/wd-tagger-native-kernel-review.json#round4; 6/6 cooled paired wins, median +0.2–0.3% over inherited and universal; byte-identical probabilities",
+      reason: "Exact measured base M4 (Mac mini) and batch-eight workload"),
     .init(identifier: "apple-family9-m3-derived-b8", provenance: .inherited, match: .appleFamily9,
       workload: .init(batches: [8]), requiresStandardFused: true, stages: m3Stages,
       evidence: "Inherited Round 2 configuration; unmeasured on this device",

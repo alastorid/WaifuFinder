@@ -452,3 +452,37 @@ including lane-ownership audits for every new effective QKV shape at two/six/mod
 head counts). Full-model output remains byte-identical on all 64 inputs for every
 retained change. Raw samples are appended under `round4` in the
 [evidence JSON](wd-tagger-native-kernel-review.json).
+
+### Round 4 addendum — measured base-M4 profile
+
+A Mac mini with a base Apple M4 (10-core GPU, 16 GB, macOS 26.4.1) was profiled
+over SSH against the same pinned MLX 0.31.1 metallib, the Round 4 kernel revision
+`fused-qkv-v3`, the same 64 synthetic RGBA inputs and identical weights. All 633
+native checks pass on that device, and **every M4 configuration measured in this
+pass produced probabilities byte-identical to the base-M3 reference run** —
+cross-machine determinism for this graph holds exactly.
+
+The device previously selected the M3-derived inheritance as an unmeasured
+candidate. A cooled, interleaved three-way comparison (three rounds each,
+thermal-gated pauses between runs, batch eight) produced:
+
+| Configuration | Round 1 | Round 2 | Round 3 | Median |
+|---|---:|---:|---:|---:|
+| Inherited M3-derived (Stage 3 64×64×32, query-16) | 24.054 | 24.024 | 23.962 | 24.024 |
+| **Stage 3 QKV/FC2 64×64×16 (WM=2/WN=2), query-16** | **24.076** | **24.111** | **24.075** | **24.076** |
+| Universal 32×64×32, query-32 | 24.009 | 24.000 | 24.048 | 24.009 |
+
+The 64×64×16 geometry won all six pairwise comparisons (median +0.22% over the
+inherited configuration, +0.28% over universal) — a small but consistent,
+paired result, and notably a *different* Stage 3 geometry from base M3, where
+64×64×16 measured neutral. Single-run sweeps on the same device also rejected
+relaxed 64×64×32, global 64×64×32, FC2 64×64×64, and query-32 attention.
+
+`measured-m4-b8-round4` is now registered: exact `Apple M4` device identity,
+batch eight, standard fused graph, Stage 3 QKV/FC2 64×64×16, other GEMMs
+32×64×32, query-16 attention, dense bias. Automatic selection on the profiled
+Mac mini was re-verified to resolve to this entry with byte-identical output.
+The gain is deliberately recorded as ~0.2–0.3%, not extrapolated to M4 Pro/Max
+or M5; those remain unmeasured and continue to inherit via family-9
+compatibility. Raw paired samples are under `round4.m4` in the
+[evidence JSON](wd-tagger-native-kernel-review.json).

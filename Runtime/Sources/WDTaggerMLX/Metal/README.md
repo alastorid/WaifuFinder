@@ -59,16 +59,21 @@ limit**. Physical register spills and resident SIMD-group counts were not measur
 | Default execution | Stage 3 QKV / FC2 | Other GEMMs | Attention Q×K tile |
 |---|---|---|---|
 | Base Apple M3, batch 8, native fused QKV and standard normalization | 64×64×32 | 32×64×32 | 16×32, 64 threads |
+| Base Apple M4, batch 8, native fused QKV and standard normalization | 64×64×16 | 32×64×32 | 16×32, 64 threads |
 | Unmeasured devices reporting Apple family 9 compatibility, batch 8, native fused QKV and standard normalization | 64×64×32 (inherited) | 32×64×32 | 16×32, 64 threads |
 | Other compatible devices, smaller batches, or comparison implementations | 32×64×32 | 32×64×32 | 32×32, 128 threads |
 
 The M3 combination improved adjacent full-model prediction throughput by
-**1.5–1.9%** in three comparisons; all output probabilities matched the control
-exactly on 64 synthetic inputs. This is not a whole-app throughput measurement.
-The exact-name gate now identifies **measurement provenance only**. Compatible
-family-9 devices provisionally inherit this configuration, with no performance
-claim for M3 variants, M4 or subsequent chips. See the registry policy below.
-Existing 448 MiB scheduling and 64 MiB cache defaults remain.
+**1.5–1.9%** in three comparisons; the M4 entry (Round 4) won all six cooled
+paired rounds against the inheritance and universal baseline by a median
+**0.2–0.3%** — a different Stage 3 geometry from M3, where 64×64×16 measured
+neutral. All output probabilities matched the control exactly on 64 synthetic
+inputs on both devices. These are not whole-app throughput measurements.
+The exact-name gates identify **measurement provenance only**. Compatible
+family-9 devices provisionally inherit the M3-derived configuration, with no
+performance claim for M3 variants, M4 Pro/Max, M5 or subsequent chips. See the
+registry policy below. Existing 448 MiB scheduling and 64 MiB cache defaults
+remain.
 
 ### Capability-aware registry and precedence
 
