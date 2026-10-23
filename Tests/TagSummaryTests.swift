@@ -1,4 +1,5 @@
 import Foundation
+import CoreServices
 import Metal
 
 private func summaryVocabulary(firstTag: String = "tag_0") throws -> TagVocabulary {
@@ -62,16 +63,55 @@ func registerTagSummaryTests() {
         } catch {}
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword script replaces each asset with safely quoted text", knownBug: nil) {
-        let source = PhotosKeywords.replacementScript(for: [
-            .init(assetIdentifier: "asset\"\\id", keywords: ["explicit", "a,b", "quoted\"tag", "line\nbreak"]),
-            .init(assetIdentifier: "second", keywords: ["general"])
-        ])
-        check(source.contains("set keywords of media item id \"asset\\\"\\\\id\" to {\"explicit\", \"a,b\", \"quoted\\\"tag\", \"line\\nbreak\"}"),
-              "commas, quotes, slashes and line breaks remain literal keyword text")
-        check(source.contains("set keywords of media item id \"second\" to {\"general\"}"),
-              "each photo receives its own replacement list")
-        check(!source.contains("activate"), "writing does not request foreground control")
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword event targets the exact photo and preserves plain text keywords", knownBug: nil) {
+        let tags = ["explicit", "a,b", "quoted\"tag", "line\nbreak", "\\backslash", "猫"]
+        let event = try PhotosKeywordWriter.event(for: .init(assetIdentifier: "asset\"\\id", keywords: tags))
+        checkEqual(event.eventClass, AEEventClass(kAECoreSuite), "standard Apple event suite")
+        checkEqual(event.eventID, AEEventID(kAESetData), "replaces the keyword property")
+        let property = event.paramDescriptor(forKeyword: keyDirectObject)
+        checkEqual(property?.descriptorType, DescType(typeObjectSpecifier), "property is an object specifier")
+        checkEqual(property?.forKeyword(OSType(keyAEKeyData))?.typeCodeValue, PhotosKeywordWriter.keywordsProperty, "keywords property")
+        let photo = property?.forKeyword(OSType(keyAEContainer))
+        checkEqual(photo?.forKeyword(OSType(keyAEDesiredClass))?.typeCodeValue, PhotosKeywordWriter.mediaItemClass, "media item")
+        checkEqual(photo?.forKeyword(OSType(keyAEKeyForm))?.enumCodeValue, OSType(formUniqueID), "uses stable ID, not an index")
+        checkEqual(photo?.forKeyword(OSType(keyAEKeyData))?.stringValue, "asset\"\\id", "exact asset ID")
+        let data = event.paramDescriptor(forKeyword: keyAEData)
+        let values = (1...tags.count).compactMap { data?.atIndex($0)?.stringValue }
+        checkEqual(values, tags, "text is passed directly, with no script escaping or delimiters")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword cancellation finishes the in-flight photo then stops", knownBug: nil) {
+        let probe = KeywordWriteProbe(pauseFirst: true)
+        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["general"]) }
+        let task = Task {
+            try await PhotosKeywordWriter.run(updates, write: { try await probe.write($0) },
+                                              progress: { await probe.report($0) })
+        }
+        await probe.waitForFirstWrite()
+        task.cancel()
+        await probe.release()
+        do {
+            try await task.value
+            check(false, "cancellation must stop the job")
+        } catch is CancellationError {} catch { throw error }
+        checkEqual(await probe.identifiers, ["photo 0"], "never starts the next photo")
+        checkEqual(await probe.counts, [1], "confirms the photo that finished before stopping")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword progress counts only confirmed writes and stops on failure", knownBug: nil) {
+        let probe = KeywordWriteProbe(failSecond: true)
+        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["general"]) }
+        do {
+            try await PhotosKeywordWriter.run(updates, write: { try await probe.write($0) },
+                                              progress: { await probe.report($0) })
+            check(false, "a failed write must surface an error")
+        } catch {}
+        checkEqual(await probe.identifiers, ["photo 0", "photo 1"], "stops before later photos")
+        checkEqual(await probe.counts, [1], "failed photo is not counted")
+        let completed = KeywordWriteProbe()
+        try await PhotosKeywordWriter.run(updates, write: { try await completed.write($0) },
+                                          progress: { await completed.report($0) })
+        checkEqual(await completed.counts, [1, 2, 3], "each confirmed photo advances progress")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail Top reasons follow rankings, group caps and partial reveals", knownBug: nil) {
@@ -135,7 +175,7 @@ func registerTagSummaryTests() {
             session.settings.taggerThreshold = 0.85
             checkEqual(session.displayedFrames.count, 0, "dynamic threshold applies to each required tag")
             session.settings.taggerThreshold = 0.35
-            checkEqual(session.displayedFrames.count, 3, "lowering threshold restores FP8-backed matches")
+            checkEqual(session.displayedFrames.count, 3, "lowering threshold restores UInt8-backed matches")
         }
     })
 
@@ -162,7 +202,7 @@ func registerTagSummaryTests() {
                    "all removes the limit without selected tags too")
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "raising and lowering dynamic threshold preserves sparse FP8 scores", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "raising and lowering dynamic threshold preserves sparse UInt8 scores", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let frames = [summaryFrame(0, [4: 0.5]), summaryFrame(1, [4: 0.9])]
         let originalPayloads = frames.map(\.tagProbabilities)
@@ -172,7 +212,7 @@ func registerTagSummaryTests() {
         checkEqual(high.keepingTopFrames(frames, count: 7, vocabulary: vocabulary).count, 1, "raised threshold narrows matches")
         checkEqual(low.keepingTopFrames(frames, count: 7, vocabulary: vocabulary).count, 2, "lowering threshold restores matches")
         checkEqual(frames.map(\.tagProbabilities), originalPayloads, "compressed scores remain intact")
-        checkEqual(frames[0].tagProbabilities?.prefix(4), Data("WDT3".utf8), "FP8 storage is retained")
+        checkEqual(frames[0].tagProbabilities?.prefix(4), Data("WDT4".utf8), "UInt8 storage is retained")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "selected tag scores compose with ratings and strict trait filters", knownBug: nil) {
@@ -214,7 +254,7 @@ func registerTagSummaryTests() {
         let byIndex = Dictionary(uniqueKeysWithValues: result.tags.map { ($0.index, $0) })
         checkEqual(byIndex[4]?.matchingFrames, 1, "only 0.9 crosses 0.5")
         checkEqual(byIndex[4]?.scoredFrames, 1, "a low probability never dilutes the mean")
-        checkClose(byIndex[4]?.mean ?? -1, 0.875, tolerance: 1e-6, "conditional mean uses the quantized confidence")
+        checkClose(byIndex[4]?.mean ?? -1, Double(229) / 255, tolerance: 1e-6, "conditional mean uses the quantized confidence")
         checkNil(byIndex[6], "a probability equal to threshold is excluded")
         checkEqual(result.labels(using: vocabulary).common, ["tag 3"], "common requires every displayed frame")
         checkEqual(result.labels(using: vocabulary).ranked, ["tag 0", "tag 1", "tag 3"], "rank by conditional confidence")
@@ -242,7 +282,7 @@ func registerTagSummaryTests() {
         legacy.topTags = ["tag_0", "tag_4"]
         frames.append(legacy)
         frames.append(FrameFixture.make(id: "f000134", time: 134, artScore: 1))
-        let computer = TagSummaryComputer(chunkByteLimit: vocabulary.generalIndices.count * 4 * 17,
+        let computer = TagSummaryComputer(chunkByteLimit: vocabulary.generalIndices.count * 17,
                                           metalProvider: { metal })
         let cpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35, backend: .cpu)
         let gpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35, backend: .metal)
@@ -263,7 +303,7 @@ func registerTagSummaryTests() {
         guard MTLCreateSystemDefaultDevice()?.hasUnifiedMemory == true else { throw SkipTest(reason: "Apple Silicon Metal unavailable") }
         let vocabulary = try summaryVocabulary()
         let metal = try MetalTagSummary()
-        let rowBytes = vocabulary.generalIndices.count * 4
+        let rowBytes = vocabulary.generalIndices.count + 2 * MemoryLayout<Int>.stride
         let computer = TagSummaryComputer(cacheByteLimit: rowBytes * 3, chunkByteLimit: rowBytes * 2, metalProvider: { metal })
         let reference = TagSummaryComputer(cacheByteLimit: 0)
         var frames = (0..<7).map { summaryFrame($0, [4: Float($0 + 1) / 10, 5: 0.9]) }
@@ -295,17 +335,65 @@ func registerTagSummaryTests() {
         }
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "automatic reduction falls back when Metal is unavailable", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "integer reductions match decoded scores at every byte and cutoff boundary", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
-        let frames = (0..<1_536).map { summaryFrame($0, [4: 0.8, 5: $0 % 2 == 0 ? 0.9 : 0.1]) }
+        let codes = Array(89...255)
+        let frames = codes.enumerated().map { row, code in
+            summaryFrame(row, [4: code == 89 ? Float(0.35).nextUp : Float(code) / 255, 5: 0.35])
+        }
+        let values = frames.map { TagProbabilityCodec.value(in: $0.tagProbabilities!, at: 4)! }
+        let computer = TagSummaryComputer()
+        let thresholds: [Float] = [0, Float(0.35).nextDown, 0.35, Float(0.35).nextUp, 0.5, Float(127) / 255, Float(254) / 255, 1]
+        for threshold in thresholds {
+            let admitted = values.filter { $0 > threshold }
+            let cpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: threshold, backend: .cpu)
+            let tag = cpu.tags.first { $0.index == 4 }
+            checkEqual(tag?.scoredFrames ?? 0, admitted.count, "integer threshold matches decoded probabilities")
+            if !admitted.isEmpty {
+                let expected = admitted.reduce(0.0) { $0 + Double($1) } / Double(admitted.count)
+                checkClose(tag?.mean ?? -1, expected, tolerance: 1e-7, "integer sum converts to the correct mean")
+            }
+            if MTLCreateSystemDefaultDevice()?.hasUnifiedMemory == true {
+                let gpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: threshold, backend: .metal)
+                checkEqual(gpu.tags.map(\.matchingFrames), cpu.tags.map(\.matchingFrames), "byte GPU membership matches CPU")
+                checkEqual(gpu.tags.map(\.mean), cpu.tags.map(\.mean), "integer CPU/GPU means agree exactly")
+            }
+        }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "automatic sparse summaries avoid GPU dispatch and keep byte-sized matrices", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = (0..<1_800).map { summaryFrame($0, [4: 0.8, 5: 0.9]) }
         let attempts = TickLog()
         let computer = TagSummaryComputer(metalProvider: { attempts.record(1); return nil })
         let automatic = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35)
-        let cpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35, backend: .cpu)
-        checkEqual(automatic.gpuChunks, 0, "no unavailable GPU is used")
-        checkEqual(attempts.all, [1], "a GPU-eligible selection actually attempts Metal before falling back")
-        checkEqual(automatic.labels(using: vocabulary).ranked, cpu.labels(using: vocabulary).ranked, "fallback uses the same conditional average")
-        checkEqual(automatic.labels(using: vocabulary).common, cpu.labels(using: vocabulary).common, "fallback preserves common tags")
+        checkEqual(attempts.all, [], "sparse selections use the faster populated-column CPU path")
+        checkEqual(automatic.tags.map(\.matchingFrames), [1_800, 1_800], "all sparse tag memberships are counted")
+        if MTLCreateSystemDefaultDevice()?.hasUnifiedMemory == true {
+            let metal = try MetalTagSummary()
+            let buffer = try metal.matrixBuffer(rows: 17, columns: vocabulary.generalIndices.count)
+            checkEqual(buffer.length, 17 * vocabulary.generalIndices.count, "Metal retains one byte per score")
+        }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "automatic reduction falls back when Metal is unavailable", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let dense = summaryFrame(0, Dictionary(uniqueKeysWithValues: (4..<1_200).map { ($0, Float(0.8)) })).tagProbabilities
+        let attempts = TickLog()
+        let computer = TagSummaryComputer(metalProvider: { attempts.record(1); return nil })
+        for count in [128, 512, 1_536] {
+            let frames = (0..<count).map { index in
+                var frame = FrameFixture.make(id: String(format: "f%06d", index), time: Double(index), artScore: 1)
+                frame.tagProbabilities = dense
+                return frame
+            }
+            let automatic = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35)
+            let cpu = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35, backend: .cpu)
+            checkEqual(automatic.gpuChunks, 0, "no unavailable GPU is used")
+            checkEqual(automatic.labels(using: vocabulary).ranked, cpu.labels(using: vocabulary).ranked, "fallback uses the same conditional average")
+            checkEqual(automatic.labels(using: vocabulary).common, cpu.labels(using: vocabulary).common, "fallback preserves common tags")
+        }
+        checkEqual(attempts.all, [1, 1], "dense selections attempt Metal at 512 frames; small ones use CPU")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "vector cache survives ordering, thresholds and derived tag changes but refreshes edited probabilities", knownBug: nil) {
@@ -409,4 +497,40 @@ func registerTagSummaryTests() {
             checkEqual(session.tagCommonTags, [], "obsolete work cannot restore cleared tags")
         }.value
     })
+}
+
+private actor KeywordWriteProbe {
+    var identifiers: [String] = []
+    var counts: [Int] = []
+    let pauseFirst: Bool
+    let failSecond: Bool
+    var firstStarted = false
+    var startWaiter: CheckedContinuation<Void, Never>?
+    var writeWaiter: CheckedContinuation<Void, Never>?
+
+    init(pauseFirst: Bool = false, failSecond: Bool = false) {
+        self.pauseFirst = pauseFirst
+        self.failSecond = failSecond
+    }
+
+    func write(_ update: PhotosKeywords.Update) async throws {
+        identifiers.append(update.assetIdentifier)
+        if pauseFirst && identifiers.count == 1 {
+            await withCheckedContinuation { continuation in
+                writeWaiter = continuation
+                firstStarted = true
+                startWaiter?.resume()
+                startWaiter = nil
+            }
+        }
+        if failSecond && identifiers.count == 2 { throw PhotosMedia.failure("Simulated failure") }
+    }
+
+    func waitForFirstWrite() async {
+        if firstStarted { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func release() { writeWaiter?.resume(); writeWaiter = nil }
+    func report(_ count: Int) { counts.append(count) }
 }

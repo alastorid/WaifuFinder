@@ -27,6 +27,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     }
 
     @State private var libraryRevision = 0
+    @State private var keywordRefreshPending = false
     @State private var albums: [PhotosAlbum] = []
     @State private var selectedAlbum: String?
     @State private var loading = true
@@ -73,6 +74,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
             ToolbarItem(placement: .principal) { albumTitle }
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
+                    PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
                     albumControls
                     trailingControls()
                 }
@@ -81,10 +83,23 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         .task(id: libraryRevision) { await refreshLibrary() }
         .onReceive(NotificationCenter.default.publisher(for: PhotosLibraryChanges.notification)
             .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)) { _ in
+                if session.isWritingPhotosTags {
+                    keywordRefreshPending = true
+                } else {
+                    libraryRevision += 1
+                }
+        }
+        .onChange(of: session.isWritingPhotosTags) { _, running in
+            if !running && keywordRefreshPending {
+                keywordRefreshPending = false
                 libraryRevision += 1
+            }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { libraryRevision += 1 }
+            if phase == .active {
+                if session.isWritingPhotosTags { keywordRefreshPending = true }
+                else { libraryRevision += 1 }
+            }
         }
         .onChange(of: downloadFromICloud) { _, enabled in
             session.photosDownloadPolicyChanged(allowNetwork: enabled)

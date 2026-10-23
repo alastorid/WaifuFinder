@@ -228,7 +228,7 @@ struct TagFilterView: View {
                     .accessibilityLabel("Tag threshold")
                     .accessibilityValue(String(format: "%.2f", session.settings.taggerThreshold))
             }
-            .help("Filter using stored FP8 tag scores. Lowering the threshold restores matches without retagging. Double-click to restore the default.")
+            .help("Filter using stored UInt8 tag scores. Lowering the threshold restores matches without retagging. Double-click to restore the default.")
         }
         .font(.caption)
         .monospacedDigit()

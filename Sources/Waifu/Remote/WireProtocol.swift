@@ -54,7 +54,7 @@ struct RemoteFlags: OptionSet, Sendable {
 // MARK: - Limits
 
 enum RemoteLimits {
-    static let protocolVersion: UInt16 = 1
+    static let protocolVersion: UInt16 = 2
     static let headerBytes = 24
     /// A frame is bounded so a hostile or buggy peer cannot make the reader
     /// allocate without limit. Anything larger is split across frames.

@@ -9,8 +9,26 @@ enum PhotosKeywords {
 
     static func keywords(for frame: AnalyzedFrame, vocabulary: TagVocabulary,
                          threshold: Float = 0.35) throws -> [String] {
+        try keywords(for: frame, vocabulary: vocabulary, fingerprint: vocabulary.cacheFingerprint,
+                     threshold: threshold)
+    }
+
+    /// Validate the vocabulary once per job, rather than rehashing every label for every photo.
+    static func prepare(_ frames: [AnalyzedFrame], vocabulary: TagVocabulary, threshold: Float,
+                        identifier: (AnalyzedFrame) throws -> String) throws -> [Update] {
+        let fingerprint = vocabulary.cacheFingerprint
+        return try frames.map { frame in
+            try Task.checkCancellation()
+            return Update(assetIdentifier: try identifier(frame),
+                          keywords: try keywords(for: frame, vocabulary: vocabulary,
+                                                 fingerprint: fingerprint, threshold: threshold))
+        }
+    }
+
+    private static func keywords(for frame: AnalyzedFrame, vocabulary: TagVocabulary,
+                                 fingerprint: UInt64, threshold: Float) throws -> [String] {
         guard threshold.isFinite, (0.35...1).contains(threshold),
-              frame.tagVocabularyFingerprint == nil || frame.tagVocabularyFingerprint == vocabulary.cacheFingerprint,
+              frame.tagVocabularyFingerprint == nil || frame.tagVocabularyFingerprint == fingerprint,
               let rating = frame.tagRating,
               let data = frame.tagProbabilities,
               let scores = TagProbabilityCodec.sparseValues(in: data) else {
@@ -27,19 +45,4 @@ enum PhotosKeywords {
         }
     }
 
-    static func replacementScript(for updates: [Update]) -> String {
-        let assignments = updates.map { update in
-            let keywords = update.keywords.map(literal).joined(separator: ", ")
-            return "set keywords of media item id \(literal(update.assetIdentifier)) to {\(keywords)}"
-        }.joined(separator: "\n")
-        return "tell application id \"com.apple.Photos\"\n\(assignments)\nend tell"
-    }
-
-    private static func literal(_ text: String) -> String {
-        "\"" + text.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\t", with: "\\t") + "\""
-    }
 }

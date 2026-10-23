@@ -110,7 +110,7 @@ struct TagFilter: Equatable, Sendable, Codable {
     }
 
     /// Rank within the already-filtered candidate set, before group caps and
-    /// display ordering. Read sparse FP8 scores without mutating their payloads.
+    /// display ordering. Read sparse UInt8 scores without mutating their payloads.
     /// With no selection, combine the winners for every general tag. Otherwise
     /// intersect each required tag's winners, preserving the all-required rule.
     struct TopSelection {

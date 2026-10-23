@@ -18,9 +18,8 @@ extension RemoteServerSession {
 
     /// `tagBatch` → `tagResult`.
     ///
-    /// The response carries probability rows and nothing else. The client applies
-    /// its own threshold through `TagVocabulary.result`, which is why a remote
-    /// tagging run produces rows the local disk cache can also read.
+    /// The response carries UInt8/LZ4 score rows, including all four rating probabilities.
+    /// The client applies its own display threshold over the retained scores.
     func handleTagBatch(_ envelope: RemoteEnvelope) async {
         await resources.touch()
         do {
@@ -38,19 +37,11 @@ extension RemoteServerSession {
 
             guard await ModelLibrary.shared.active == nil else { throw RemoteError.busy }
             let backend = try await catalog.tagger()
-            let rows = try await backend.probabilityRows(batch: images)
+            let results = try await backend.tag(batch: images)
             try Task.checkCancellation()
-            guard rows.count == batchCount else { throw TaggerError.invalidProbabilities }
-
-            var payload = WireWriter(capacity: 9 + batchCount * TagVocabulary.headCount * 4)
-            payload.u8(UInt8(rows.count))
-            payload.u64(try await catalog.vocabularyFingerprint())
-            for row in rows {
-                guard row.count == TagVocabulary.headCount else { throw TaggerError.invalidProbabilities }
-                payload.u32(UInt32(row.count * 4))
-                payload.floats(row)
-            }
-            try await connection.send(.tagResult, payload: payload.bytes, streamID: envelope.streamID)
+            guard results.count == batchCount else { throw TaggerError.invalidProbabilities }
+            let payload = try RemoteTagScorePayload.encode(results, fingerprint: await catalog.vocabularyFingerprint())
+            try await connection.send(.tagResult, payload: payload, streamID: envelope.streamID)
         } catch {
             guard !Task.isCancelled else { return }
             try? await connection.sendError(envelope, Self.describe(error))

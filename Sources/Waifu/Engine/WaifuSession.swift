@@ -279,6 +279,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var selectionAnchor: FrameID?
     @Published private(set) var isSyncingPhotosOrder = false
     @Published private(set) var isWritingPhotosTags = false
+    let photosKeywordJob = PhotosKeywordJobStatus()
+    private var photosKeywordTask: Task<Void, Never>?
     @Published private(set) var photosOrderSyncMessage: String?
 
     // MARK: UI state
@@ -543,33 +545,60 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     func writePhotosTags(for frame: AnalyzedFrame) {
         guard !isWritingPhotosTags, let sourceURL = video?.url else { return }
+        guard let vocabulary = tagVocabulary else {
+            errorMessage = "Load the tagger vocabulary before writing keywords."
+            return
+        }
         let targets = selectedFrameIDs.count > 1 && selectedFrameIDs.contains(frame.id)
             ? displayOrderFrames.filter { selectedFrameIDs.contains($0.id) } : [frame]
-        do {
-            guard let vocabulary = tagVocabulary else {
-                throw PhotosMedia.failure("Load the tagger vocabulary before writing keywords.")
+        guard !targets.isEmpty else { return }
+        let threshold = settings.taggerThreshold
+        let status = photosKeywordJob
+        isWritingPhotosTags = true
+        status.progress = PhotosKeywordJobProgress(total: targets.count)
+        photosKeywordTask = Task {
+            defer {
+                status.progress = nil
+                isWritingPhotosTags = false
+                photosKeywordTask = nil
             }
-            // Prepare every replacement before touching Photos so missing scores cannot clear keywords.
-            let updates = try targets.map { target in
-                guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: target.timeSeconds) else {
-                    throw PhotosMedia.failure("This photo is no longer available in Photos.")
+            let worker = Task.detached(priority: .userInitiated) {
+                // Prepare the complete job off the main actor before changing any photo.
+                let updates = try PhotosKeywords.prepare(targets, vocabulary: vocabulary, threshold: threshold) { target in
+                    guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: target.timeSeconds) else {
+                        throw PhotosMedia.failure("This photo is no longer available in Photos.")
+                    }
+                    return identifier
                 }
-                return PhotosKeywords.Update(assetIdentifier: identifier,
-                    keywords: try PhotosKeywords.keywords(for: target, vocabulary: vocabulary,
-                                                          threshold: settings.taggerThreshold))
-            }
-            isWritingPhotosTags = true
-            Task {
-                defer { isWritingPhotosTags = false }
-                do {
-                    try await PhotosMedia.shared.replaceKeywords(updates)
-                } catch {
-                    errorMessage = "Couldn’t write tags to Photos: \(error.localizedDescription)"
+                try Task.checkCancellation()
+                try await PhotosKeywordWriter.openPhotosIfNeeded()
+                try Task.checkCancellation()
+                await MainActor.run {
+                    if status.progress?.phase != .stopping { status.progress?.phase = .writing }
+                }
+                try await PhotosKeywordWriter.run(updates) { count in
+                    await MainActor.run { status.progress?.completed = count }
                 }
             }
-        } catch {
-            errorMessage = "Couldn’t write tags to Photos: \(error.localizedDescription)"
+            do {
+                try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
+            } catch is CancellationError {
+                // Already-written keywords are retained; the next photo is never started.
+            } catch {
+                let completed = status.progress?.completed ?? 0
+                errorMessage = "Couldn’t write tags to Photos (\(completed)/\(targets.count) photos updated): \(error.localizedDescription)"
+            }
         }
+    }
+
+    func cancelPhotosKeywordJob() {
+        guard isWritingPhotosTags else { return }
+        photosKeywordJob.progress?.phase = .stopping
+        photosKeywordTask?.cancel()
     }
 
     func resetPhotosOrderState() {
@@ -737,7 +766,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var remoteVocabularyChanges: AnyCancellable?
     private var modelChanges: AnyCancellable?
     private var tagMemorySettingChanges: AnyCancellable?
-    private var analysisMemorySettingChanges: AnyCancellable?
     private var terminationObserver: AnyCancellable?
     private var analysisTask: Task<Void, Never>?
     private var analysisGeneration = UUID()
@@ -761,7 +789,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingVocabularyFingerprint: UInt64?
     private var lastTaggingCandidateKey: TaggingCandidateCacheKey?
     private var tagMemoryRestoreToken = UUID()
-    private var analysisCacheIdentity: VideoAnalysisCacheKeys?
     nonisolated private let thumbnailCache = ThumbnailCache()
     private var thumbnailRequests: [String: ThumbnailRequest] = [:]
     private let settingsURL: URL
@@ -823,20 +850,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     self?.restoreRememberedTagResults()
                 }
             }
-        analysisMemorySettingChanges = AnalysisResultMemory.shared.$rememberAnalysisResults
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] enabled in
-                MainActor.assumeIsolated {
-                    guard enabled else { return }
-                    self?.persistAnalysisResultsForCurrentVideo()
-                }
-            }
         terminationObserver = NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.persistTagResultsAtExit()
-                    self?.persistAnalysisResultsAtExit()
                 }
             }
         // The live knob starts where the persisted rule left off.
@@ -1165,7 +1182,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 var updates: [AnalyzedFrame] = []
                 updates.reserveCapacity(batch.count)
                 for (item, result) in zip(batch, results) {
-                    guard let encoded = TagProbabilityCodec.encode(result.probabilities) else {
+                    guard let encoded = result.encodedProbabilities ?? TagProbabilityCodec.encode(result.probabilities) else {
                         throw ModelInstaller.fail("The tagger returned invalid probabilities.")
                     }
                     var frame = item.frame
@@ -1620,7 +1637,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let started = Date()
         var progress = AnalysisProgress(phase: .probing, total: 1, message: "Reading video…")
         var analyzed: [AnalyzedFrame] = []
-        var cacheIdentity: VideoAnalysisCacheKeys?
         var scoringTask: Task<Void, Never>?
         var photosSampler: PhotosAlbumSampler?
         do {
@@ -1637,16 +1653,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let retained = await photosCheckpoint?.frames() ?? []
             try Task.checkCancellation()
             let analysisWidth = album == nil ? settings.analysisWidth : PhotosMedia.analysisPixelSize
-            cacheIdentity = VideoAnalysisCacheKeys.make(videoURL: videoInfo.url,
-                                                        analysisWidth: analysisWidth,
-                                                        minimumFaceAreaFraction: settings.minimumFaceAreaFraction, analysisMode: settings.analysisMode)
-            await acceptAnalysisCacheIdentity(cacheIdentity, token: token)
-            let cachedAnalysisResults: [Int: Data] = if let cacheIdentity {
-                await AnalysisResultMemory.shared.cachedResults(for: cacheIdentity)
-            } else {
-                [:]
-            }
-
             let mode = settings.analysisMode
             progress.phase = .scoring
             // The keyframe pass cannot know how many sync samples the file
@@ -1686,8 +1692,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                                 width: album?.items.allSatisfy(\.isStill) == true ? analysisWidth : videoInfo.width,
                                                 height: album?.items.allSatisfy(\.isStill) == true ? analysisWidth : videoInfo.height,
                                                 analysisWidth: analysisWidth).scoringWorkers,
-                                              cacheSuffix: "-\(token.uuidString)",
-                                              cachedResults: cachedAnalysisResults)
+                                              cacheSuffix: "-\(token.uuidString)")
             let checkpointFrame: (@Sendable (AnalyzedFrame) async -> Void)?
             if let photosCheckpoint {
                 checkpointFrame = { frame in await photosCheckpoint.retain(frame) }
@@ -1757,9 +1762,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.elapsed = Date().timeIntervalSince(started)
             let skipped = await photosSampler?.unavailableItemCount ?? 0
             progress.message = skipped == 0 ? "Complete" : "Complete · \(skipped) items unavailable locally"
-            if let cacheIdentity {
-                await AnalysisResultMemory.shared.remember(identity: cacheIdentity, frames: finalFrames)
-            }
             await completeAnalysis(frames: finalFrames, groups: groups, progress: progress, token: token)
         } catch {
             // Async stream producers own separate tasks. Join them explicitly
@@ -1772,9 +1774,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 // when a cancelled merge never reached them in source order.
                 analyzed = await photosCheckpoint.frames()
                 await acceptPartialPhotos(frames: analyzed, token: token)
-            }
-            if let cacheIdentity, !analyzed.isEmpty {
-                await AnalysisResultMemory.shared.remember(identity: cacheIdentity, frames: analyzed)
             }
             progress.phase = error is CancellationError ? .cancelled : .failed
             progress.elapsed = Date().timeIntervalSince(started)
@@ -1833,10 +1832,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         currentVideoStem = video.url.deletingPathExtension().lastPathComponent
         self.video = video
         return true
-    }
-    private func acceptAnalysisCacheIdentity(_ identity: VideoAnalysisCacheKeys?, token: UUID) {
-        guard analysisGeneration == token else { return }
-        analysisCacheIdentity = identity
     }
     private func acceptProgress(_ progress: AnalysisProgress, token: UUID) {
         guard analysisGeneration == token, !self.progress.isTerminal else { return }
@@ -1906,7 +1901,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         tagMemoryRestoreToken = UUID()
         restoringTagMemory = false
         taggingCacheKeys = .none
-        analysisCacheIdentity = nil
         taggingVocabularyFingerprint = nil
         taggingProgress = TaggingProgress()
         taggingQueue = []
@@ -2025,17 +2019,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             frames: frames + Array(pendingTaggedFrames.values),
             keys: keys
         )
-    }
-
-    private func persistAnalysisResultsForCurrentVideo() {
-        guard let identity = analysisCacheIdentity, !frames.isEmpty else { return }
-        let snapshot = frames
-        Task { await AnalysisResultMemory.shared.remember(identity: identity, frames: snapshot) }
-    }
-
-    private func persistAnalysisResultsAtExit() {
-        guard let identity = analysisCacheIdentity else { return }
-        AnalysisResultMemory.shared.flushAtTermination(identity: identity, frames: frames)
     }
 
     /// Rebuilds `displayedFrames`, `displayedRows`, `limitBounds` and

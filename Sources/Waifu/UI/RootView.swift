@@ -106,6 +106,11 @@ struct RootView: View {
             }
         }
         .toolbar {
+            if showWelcomeScreen && !showPhotosWorkspace && session.isWritingPhotosTags {
+                ToolbarItem(placement: .primaryAction) {
+                    PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                }
+            }
             if !showWelcomeScreen && !showPhotosWorkspace && (session.video != nil || session.progress.isRunning) {
                 ToolbarItem(placement: .navigation) {
                     Button(action: returnToWelcome) {
@@ -119,6 +124,7 @@ struct RootView: View {
             if !showPhotosWorkspace && session.video != nil {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
+                        PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
                         if session.uncover == nil {
                             if photosAlbum != nil {
                                 Button { showPhotosWorkspace = true } label: {

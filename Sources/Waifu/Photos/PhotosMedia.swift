@@ -165,22 +165,6 @@ final class PhotosMedia: @unchecked Sendable {
         }.value
     }
 
-    /// Photos exposes keywords through its public scripting dictionary, not PhotoKit.
-    func replaceKeywords(_ updates: [PhotosKeywords.Update]) async throws {
-        guard !updates.isEmpty else { return }
-        try await Task.detached(priority: .userInitiated) {
-            guard let script = NSAppleScript(source: PhotosKeywords.replacementScript(for: updates)) else {
-                throw Self.failure("Could not prepare the Photos keyword request.")
-            }
-            var errorInfo: NSDictionary?
-            _ = script.executeAndReturnError(&errorInfo)
-            if let errorInfo {
-                throw Self.failure(errorInfo["NSAppleScriptErrorMessage"] as? String
-                    ?? "Allow WaifuFinder to control Photos in System Settings → Privacy & Security → Automation.")
-            }
-        }.value
-    }
-
     func resolve(_ url: URL, seconds: Double) -> (URL, Double) {
         guard let album = album(url), let index = Self.itemIndex(offsets: album.offsets, seconds: seconds) else { return (url, seconds) }
         let item = album.items[index]

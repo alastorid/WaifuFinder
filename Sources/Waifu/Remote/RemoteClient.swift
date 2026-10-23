@@ -625,7 +625,7 @@ final class RemoteClient: ObservableObject {
     // MARK: Requests
 
     /// Sends a tagging batch. Returns one probability row per image.
-    func tag(images: [CGImage], codec: RemoteTagImageCodec) async throws -> [[Float]] {
+    func tag(images: [CGImage], codec: RemoteTagImageCodec) async throws -> [QuantizedTagRow] {
         guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
         guard (1...WDTaggerBackend.batchSize).contains(images.count) else { throw TaggerError.invalidBatch }
         let payload = try await Self.encodeTagBatch(images, codec: codec)
@@ -652,21 +652,12 @@ final class RemoteClient: ObservableObject {
     }
 
     private nonisolated static func decodeTagResult(_ reply: RemoteEnvelope, count expectedCount: Int,
-                                                    fingerprint expected: UInt64?) async throws -> [[Float]] {
+                                                    fingerprint expected: UInt64?) async throws -> [QuantizedTagRow] {
         try Task.checkCancellation()
-        var reader = WireReader(reply.payload)
-        let count = Int(try reader.u8())
-        let fingerprint = try reader.u64()
-        guard reply.opcode == .tagResult, count == expectedCount else { throw TaggerError.invalidProbabilities }
-        if let expected, expected != fingerprint {
-            // A server that changed its labels mid-session would otherwise have
-            // its rows cached under the old vocabulary index order.
-            throw RemoteError.modelUnavailable("The server changed its tag vocabulary. Reconnect to resync.")
-        }
-        let rows = try (0..<count).map { _ in try reader.floats(TagVocabulary.headCount) }
-        guard reader.isAtEnd else { throw RemoteError.framing("Trailing probability bytes") }
-        return rows
+        guard reply.opcode == .tagResult else { throw TaggerError.invalidProbabilities }
+        return try RemoteTagScorePayload.decode(reply.payload, count: expectedCount, fingerprint: expected)
     }
+
 }
 /// Holds the key store so `replaceKeyStore` can swap it.
 final class RemoteKeyStoreBox: @unchecked Sendable {

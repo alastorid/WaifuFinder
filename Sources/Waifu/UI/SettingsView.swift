@@ -17,20 +17,7 @@ struct WaifuSettingsView: View {
 
 private struct GeneralSettingsView: View {
     @ObservedObject private var tagMemory = TagResultMemory.shared
-    @ObservedObject private var analysisMemory = AnalysisResultMemory.shared
-    @State private var cacheToDelete: CacheKind?
-
-    private enum CacheKind: String {
-        case tagging
-        case analysis
-
-        var title: String {
-            switch self {
-            case .tagging: "tagging results"
-            case .analysis: "analysis results"
-            }
-        }
-    }
+    @State private var showingDeleteTagResults = false
 
     var body: some View {
         Form {
@@ -75,7 +62,7 @@ private struct GeneralSettingsView: View {
                                 .monospacedDigit()
                         }
                         Button("Delete cached results…", role: .destructive) {
-                            cacheToDelete = .tagging
+                            showingDeleteTagResults = true
                         }
                         if let error = tagMemory.errorMessage {
                             Text("Cache status: \(error)")
@@ -88,75 +75,16 @@ private struct GeneralSettingsView: View {
                     .padding(4)
                 }
             }
-
-            Section("Analysis memory") {
-                Toggle("Remember analysis results", isOn: $analysisMemory.rememberAnalysisResults)
-                    .help("Reuse frame scores and image features when the same video is analyzed again.")
-
-                Stepper("Delete results older than \(analysisMemory.retentionDays) days",
-                        value: $analysisMemory.retentionDays,
-                        in: 1...36_500)
-                    .help("Expired results are removed when the cache is checked. The minimum is one day.")
-
-                Text("Saves aesthetics and face scores plus compressed image features. Frames are still decoded for thumbnails, and grouping and ranking are recalculated with current settings.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("File location")
-                            .font(.headline)
-                        Text(analysisMemory.fileURL.path)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack {
-                            Text("Current size")
-                            Spacer()
-                            Text(ByteCountFormatter.string(fromByteCount: analysisMemory.fileSize, countStyle: .file))
-                                .monospacedDigit()
-                        }
-                        HStack {
-                            Text("Entries")
-                            Spacer()
-                            Text(analysisMemory.entryCount.formatted())
-                                .monospacedDigit()
-                        }
-                        Button("Delete cached results…", role: .destructive) {
-                            cacheToDelete = .analysis
-                        }
-                        if let error = analysisMemory.errorMessage {
-                            Text("Cache status: \(error)")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(4)
-                }
-            }
         }.formStyle(.grouped)
             .confirmationDialog(
-                "Delete remembered \(cacheToDelete?.title ?? "cache")?",
-                isPresented: Binding(
-                    get: { cacheToDelete != nil },
-                    set: { if !$0 { cacheToDelete = nil } }
-                ),
+                "Delete remembered tagging results?",
+                isPresented: $showingDeleteTagResults,
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive) {
-                    guard let cache = cacheToDelete else { return }
-                    cacheToDelete = nil
-                    switch cache {
-                    case .tagging:
-                        Task { await tagMemory.deleteAll() }
-                    case .analysis:
-                        Task { await analysisMemory.deleteAll() }
-                    }
+                    Task { await tagMemory.deleteAll() }
                 }
-                Button("Cancel", role: .cancel) { cacheToDelete = nil }
+                Button("Cancel", role: .cancel) { }
             } message: {
                 Text("This removes the saved cache file. Results can be created again as videos are processed.")
             }

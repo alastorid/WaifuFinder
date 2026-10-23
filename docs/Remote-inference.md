@@ -24,8 +24,11 @@ once. Completed frame updates commit immediately so a slow server cannot hold up
 refilling a faster server's queue. Follow-up tagging preserves the local participation
 choice; cancellation joins in-flight tasks before releasing local model resources.
 
-The server sends full Float32 tagging probabilities. The client applies its threshold
-with `TagVocabulary.result`, preserving the normal tagging cache format. The remote
+The native worker reads Float32 model output and quantizes it on CPU before IPC. Replies
+carry exactly four UInt8 rating probabilities plus sparse UInt8 trait scores,
+LZ4-compressed using the same `WDT4` payload retained locally. There is no winner
+byte. The client derives the rating and applies its display threshold. Trait scores
+use the fixed 0.35 storage floor; all four ratings retain their full 0...1 range. The remote
 vocabulary is downloaded, checked against its fingerprint and published to the filtering
 and tagging UI. The client needs labels, but does not need local model weights.
 
@@ -94,7 +97,7 @@ a 16-byte authentication tag. Header integers are little-endian:
 | Offset | Bytes | Field |
 |---|---:|---|
 | 0 | 4 | `WFR1` |
-| 4 | 2 | version, 1 |
+| 4 | 2 | version, 2 |
 | 6 | 2 | opcode |
 | 8 | 4 | flags: final, zlib, error |
 | 12 | 4 | stream ID |
@@ -124,7 +127,14 @@ probability rows and compressed vocabulary travel as binary payloads, never JSON
   then count × { u32 byte length, bytes }. RGBA8 is 448×448. The current backend
   renders model input pixels on the client; the encoded convenience API creates JPEGs.
 - Tag result: u8 count, u64 vocabulary fingerprint, then count × { u32 byte length,
-  little-endian Float32 probability row }. Each row has 10,861 heads.
+  `WDT4` bytes }. Each row decompresses to four rating bytes, a UInt16 trait-pair
+  count, then sparse UInt16 head index / UInt8 score pairs. Apple LZ4 compression
+  happens before encryption. The client validates count, fingerprint, lengths,
+  head order and score codes; the frame pipeline keeps the received bytes without
+  converting them back to Float32 for re-encoding. Dense score arrays are only
+  temporary inputs to vocabulary label reconstruction.
+- Protocol version 2 requires both peers to be updated. Older Float32 responses
+  are unsupported; the handshake rejects protocol version 1.
 - Vocabulary: u64 fingerprint, u32 uncompressed count, then a compressed envelope
   (u64 uncompressed count, Compression-framework zlib bytes). Both size and vocabulary
   fingerprint are checked.
@@ -151,7 +161,7 @@ needs to know the UI's progress, cache or export implementation.
 directional derivation, replay and ciphertext/header tampering, compression, beacon
 expiry, capabilities and labels. End-to-end cases use real loopback sockets with
 injected deterministic model backends: admission/refusal, vocabulary verification,
-bit-identical tagging rows, PNG round trips, cancellation with model-reference release,
+identical local/remote UInt8 score payloads and all four rating probabilities, PNG round trips, cancellation with model-reference release,
 busy rejection of a second client, kick and reconnect. These tests validate
 the transport and integration; they do not measure hardware model accuracy or LAN
 multicast routing. Run `./run-tests.sh --only remote` or the full `./run-tests.sh`.

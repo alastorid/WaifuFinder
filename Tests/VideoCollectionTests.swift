@@ -77,41 +77,17 @@ func registerVideoCollectionTests() {
             session.dispose()
         }
     })
-    Registry.shared.add(suite: suite, TestCase(name: "analysis and tag cache keys survive single loads reordering and membership changes", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "tag cache keys survive single loads reordering and membership changes", knownBug: nil) {
         let directory = try Temporary.directory("collection-cache")
         let first = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
         let second = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 96, height: 64, frameRate: 4)
         let vocabulary = try tagVocabularyFixture()
         let batch = try await MediaImport.prepare([first, second])
         let reordered = try await MediaImport.prepare([second, first, second])
-        let singleAnalysis = VideoAnalysisCacheKeys.make(videoURL: second, analysisWidth: 96,
-            minimumFaceAreaFraction: 0.05, analysisMode: .full)!
-        let batchAnalysis = VideoAnalysisCacheKeys.make(videoURL: batch.url, analysisWidth: 96,
-            minimumFaceAreaFraction: 0.05, analysisMode: .full)!
-        let reorderedAnalysis = VideoAnalysisCacheKeys.make(videoURL: reordered.url, analysisWidth: 96,
-            minimumFaceAreaFraction: 0.05, analysisMode: .full)!
         let local = collectionFrame(index: 2, time: 0.5)
         let batchFrame = collectionFrame(index: try VideoCollection.frameIndex(source: 1, local: 2), time: 1.5)
         let moved = collectionFrame(index: 2, time: 0.5)
         let duplicate = collectionFrame(index: try VideoCollection.frameIndex(source: 2, local: 2), time: 2.5)
-        checkEqual(batchAnalysis.identity(for: batchFrame.id.sampleIndex), singleAnalysis.identity(for: 2), "analysis key is the original video")
-        checkEqual(reorderedAnalysis.identity(for: duplicate.id.sampleIndex), singleAnalysis.identity(for: 2), "duplicate/reordered sources reuse the same analysis")
-        let records = batchAnalysis.records(from: [batchFrame])
-        checkEqual(records[singleAnalysis.sources[0]!]!.map(\.sampleIndex), [2], "saved analysis keeps the original ordinal")
-        let analysisFile = directory.appendingPathComponent("analysis.db")
-        let analysisMemory = await MainActor.run { AnalysisResultMemory(disk: AnalysisResultDiskCache(fileURL: analysisFile)) }
-        await analysisMemory.remember(identity: batchAnalysis, frames: [batchFrame])
-        let reopenedAnalysis = await MainActor.run { AnalysisResultMemory(disk: AnalysisResultDiskCache(fileURL: analysisFile)) }
-        let singleCached = await reopenedAnalysis.cachedResults(for: singleAnalysis)
-        checkEqual(singleCached[2].flatMap(AnalysisResultCacheCodec.decode)?.artScore, 0.75,
-                   "analysis saved in a batch restores from disk for a single video")
-        let reorderedCached = await reopenedAnalysis.cachedResults(for: reorderedAnalysis)
-        checkNotNil(reorderedCached[duplicate.id.sampleIndex], "analysis follows the video after reordering and duplication")
-        await reopenedAnalysis.remember(identity: singleAnalysis, frames: [collectionFrame(index: 1, time: 0.25, score: 0.25)])
-        let batchCached = await reopenedAnalysis.cachedResults(for: batchAnalysis)
-        let workspaceIndex = try VideoCollection.frameIndex(source: 1, local: 1)
-        checkEqual(batchCached[workspaceIndex].flatMap(AnalysisResultCacheCodec.decode)?.artScore, 0.25,
-                   "analysis saved alone restores inside a collection")
         let singleTags = TagResultCacheKeys.make(videoURL: second, frames: [local], vocabulary: vocabulary, analysisWidth: 96, analysisMode: .full)
         let batchTags = TagResultCacheKeys.make(videoURL: batch.url, frames: [batchFrame], vocabulary: vocabulary, analysisWidth: 96, analysisMode: .full)
         let movedTags = TagResultCacheKeys.make(videoURL: reordered.url, frames: [moved, duplicate], vocabulary: vocabulary, analysisWidth: 96, analysisMode: .full)
@@ -145,13 +121,8 @@ func registerVideoCollectionTests() {
             analysisWidth: 96, analysisMode: .full)
         let fromSingle = await reopenedTags.restore([laterBatchFrame], keys: laterKeys, vocabulary: vocabulary, threshold: 0.35)
         checkEqual(fromSingle.restoredCount, 1, "tags saved alone restore inside a collection")
-        let previousFirst = batchAnalysis.sources[0]
         let changedDate = Date().addingTimeInterval(60)
         try FileManager.default.setAttributes([.modificationDate: changedDate], ofItemAtPath: second.path)
-        let changedAnalysis = VideoAnalysisCacheKeys.make(videoURL: batch.url, analysisWidth: 96,
-            minimumFaceAreaFraction: 0.05, analysisMode: .full)!
-        check(changedAnalysis.sources[1] != singleAnalysis.sources[0], "edited video invalidates its own analysis cache")
-        checkEqual(changedAnalysis.sources[0], previousFirst, "editing one video cannot invalidate another")
         let changedTags = TagResultCacheKeys.make(videoURL: batch.url, frames: [batchFrame], vocabulary: vocabulary,
             analysisWidth: 96, analysisMode: .full)
         check(changedTags.key(for: batchFrame) != batchTags.key(for: batchFrame), "edited video invalidates its tag cache")

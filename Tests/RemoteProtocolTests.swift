@@ -66,9 +66,13 @@ private final class StubTagger: TaggerBackend, @unchecked Sendable {
         lock.withLock { batchCount += 1 }
         try await windowProbe?.enter()
         return batch.enumerated().map { position, _ in
-            [Float]((0..<TagVocabulary.headCount).map { index in
+            var row = [Float]((0..<TagVocabulary.headCount).map { index in
                 Float((index * 31 + position * 7) % 1_000) / 4_000
             })
+            row[0] = 0.1; row[1] = 0.2; row[2] = 0.20001; row[3] = 0.15
+            row[7] = 0.5 + Float(position) / 100
+            row[8] = 0.3501; row[9] = 0.35
+            return row
         }
     }
 
@@ -375,7 +379,7 @@ func registerRemoteProtocolTests() {
         // not present-and-unavailable: the client must not offer work the server
         // cannot do.
         let capabilities = RemoteCapabilities(
-            protocolVersion: 1, appVersion: "1.4.0", serverName: "Studio", sessionID: "abc",
+            protocolVersion: Int(RemoteLimits.protocolVersion), appVersion: "1.4.0", serverName: "Studio", sessionID: "abc",
             tagger: .init(available: true, imageSize: 448, batchSize: 8, headCount: 10_861,
                           vocabularyFingerprint: 12_345),
             uncover: [
@@ -489,6 +493,29 @@ func registerRemoteProtocolTests() {
             var reader = WireReader(badStringBytes)
             return try reader.string()
         }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "UInt8 LZ4 tagging responses shrink traffic and reject malformed rows", knownBug: nil) {
+        let vocabulary = try VocabularyFixture.make()
+        var probabilities = [Float](repeating: 0.01, count: TagVocabulary.headCount)
+        probabilities[0] = 0.1; probabilities[1] = 0.2; probabilities[2] = 0.20001; probabilities[3] = 0.15
+        for index in 4..<36 { probabilities[index] = 0.75 }
+        let result = try vocabulary.result(probabilities: probabilities)
+        let payload = try RemoteTagScorePayload.encode(Array(repeating: result, count: 8), fingerprint: vocabulary.cacheFingerprint)
+        let oldBytes = 9 + 8 * (4 + TagVocabulary.headCount * 4)
+        check(payload.count < oldBytes / 100, "sparse UInt8/LZ4 returns less than one percent of Float32 traffic")
+        print("      remote tag response: \(oldBytes) -> \(payload.count) bytes per eight-frame batch")
+        let rows = try RemoteTagScorePayload.decode(payload, count: 8, fingerprint: vocabulary.cacheFingerprint)
+        checkEqual(rows.count, 8, "eight compressed rows decode")
+        checkEqual(rows.first?.scores.prefix(4), Data("WDT4".utf8), "wire rows use the production UInt8/LZ4 format")
+        for end in [0, 1, 8, 9, payload.count - 1] {
+            checkThrowsSync("truncated response") { try RemoteTagScorePayload.decode(Array(payload.prefix(end)), count: 8, fingerprint: nil) }
+        }
+        checkThrowsSync("wrong batch count") { try RemoteTagScorePayload.decode(payload, count: 7, fingerprint: nil) }
+        checkThrowsSync("wrong vocabulary") { try RemoteTagScorePayload.decode(payload, count: 8, fingerprint: 0) }
+        checkThrowsSync("trailing bytes") { try RemoteTagScorePayload.decode(payload + [0], count: 8, fingerprint: nil) }
+        var invalid = payload; invalid[13] = 0
+        checkThrowsSync("invalid compressed row header") { try RemoteTagScorePayload.decode(invalid, count: 8, fingerprint: nil) }
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "the compressed payload envelope states its size and refuses a liar", knownBug: nil) {
@@ -709,7 +736,7 @@ private enum StubCatalog {
             vocabularyFingerprint: { fingerprint },
             capabilities: { version, name, session in
                 RemoteCapabilities(
-                    protocolVersion: 1, appVersion: version, serverName: name, sessionID: session,
+                    protocolVersion: Int(RemoteLimits.protocolVersion), appVersion: version, serverName: name, sessionID: session,
                     tagger: resolved == nil ? nil
                         : .init(available: true, imageSize: WDTaggerBackend.imageSize,
                                 batchSize: WDTaggerBackend.batchSize,
@@ -813,7 +840,7 @@ private func registerRemoteEndToEndTests(suite: String) {
         try await refusedCases(vocabulary: vocabulary)
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "a remote tagging batch returns rows bit-identical to a local run", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "a remote tagging batch preserves local UInt8 payloads and all four ratings", knownBug: nil) {
         let vocabulary = try VocabularyFixture.make()
         try await taggingCase(vocabulary: vocabulary)
     })
@@ -918,21 +945,20 @@ private func taggingCase(vocabulary: TagVocabulary) async throws {
     }
     let remoteRows = try await pair.client.tag(images: images, codec: .rgba8)
     checkEqual(remoteRows.count, images.count, "one row per image")
-    checkEqual(remoteRows.first?.count, TagVocabulary.headCount, "each row is a full vocabulary of heads")
+    checkEqual(remoteRows.first.flatMap { TagProbabilityCodec.decode($0.scores) }?.count, TagVocabulary.headCount, "compact rows reconstruct the full vocabulary")
 
-    // The claim under test: these are exactly the rows the same backend hands
-    // the local pipeline, so a remote run writes rows the local disk cache can
-    // also read.
     let localRows = try await tagger.probabilityRows(batch: images)
-    check(remoteRows == localRows, "remote rows are bit-identical to local rows")
-    checkEqual(remoteRows.map { $0[7] }, localRows.map { $0[7] }, "frame order is preserved")
-
-    // The client derives results with its own threshold, from the same function
-    // the local path uses.
-    let results = try localRows.map { try vocabulary.result(probabilities: $0, threshold: 0.35) }
-    checkEqual(results.count, images.count, "one result per frame")
-    check(results.allSatisfy { $0.probabilities.count == TagVocabulary.headCount },
-          "each result carries its full row")
+    checkEqual(remoteRows.map(\.scores), localRows.compactMap(TagProbabilityCodec.encode),
+               "remote scores are the exact same UInt8/LZ4 payloads retained locally")
+    checkEqual(remoteRows.map { TagProbabilityCodec.value(in: $0.scores, at: 7) },
+               localRows.map { TagProbabilityCodec.probability(TagProbabilityCodec.quantize($0[7])) }, "frame order survives quantization")
+    for row in remoteRows {
+        let result = try row.result(vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(result.rating, .sensitive, "rating derives from the four quantized probabilities")
+        checkEqual(TagProbabilityCodec.values(in: row.scores, at: [0, 1, 2, 3]),
+                   [Float(25) / 255, Float(51) / 255, Float(51) / 255, Float(38) / 255], "all four rating probabilities survive below cutoff")
+        checkEqual(result.encodedProbabilities, row.scores, "pipeline reuses received bytes without requantization")
+    }
 
     // A second batch on the same connection must work, so the framing is
     // reusable rather than accidentally one-shot.
@@ -945,7 +971,7 @@ private func taggingCase(vocabulary: TagVocabulary) async throws {
     // the client and no decode-and-resize on the server.
     let encoded = try await pair.client.tag(images: images, codec: .encoded)
     checkEqual(encoded.count, images.count, "the encoded codec also returns one row per image")
-    check(encoded.allSatisfy { $0.count == TagVocabulary.headCount }, "and every row is complete")
+    check(encoded.allSatisfy { TagProbabilityCodec.decode($0.scores)?.count == TagVocabulary.headCount }, "and every row is complete")
     checkEqual(tagger.batches, 4, "the third batch reached the server too")
 }
 
@@ -964,8 +990,8 @@ private func queuedTaggingCase() async throws {
                 let rows = try await pair.client.tag(images: Array(repeating: image, count: count), codec: .rgba8)
                 guard rows.count == count else { throw TaggerError.invalidProbabilities }
                 for (position, row) in rows.enumerated() {
-                    guard row.count == TagVocabulary.headCount,
-                          row[7] == Float((7 * 31 + position * 7) % 1_000) / 4_000 else {
+                    guard TagProbabilityCodec.value(in: row.scores, at: 7)
+                            == TagProbabilityCodec.probability(TagProbabilityCodec.quantize(0.5 + Float(position) / 100)) else {
                         throw TaggerError.invalidProbabilities
                     }
                 }
@@ -1138,7 +1164,7 @@ private func labelCase(capabilities: RemoteCapabilities) throws {
     // A server with no algorithms offers no Uncover workspace, so the opener is
     // unmarked even though tagging still works.
     let taggingOnly = RemoteCapabilities(
-        protocolVersion: 1, appVersion: "1.0", serverName: "Tags", sessionID: nil,
+        protocolVersion: Int(RemoteLimits.protocolVersion), appVersion: "1.0", serverName: "Tags", sessionID: nil,
         tagger: capabilities.tagger, uncover: [], vision: capabilities.vision)
     let tagging = RemoteLabelContext(connected: true, serverName: "Tags", capabilities: taggingOnly)
     check(tagging.tagsRemotely, "tagging is still marked")

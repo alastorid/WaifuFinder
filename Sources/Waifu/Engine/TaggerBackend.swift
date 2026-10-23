@@ -14,13 +14,8 @@ protocol TaggerBackend: Sendable {
 
     /// The raw `Float32[10_861]` rows, before any threshold is applied.
     ///
-    /// A remote server ships these rather than `TagResult`, because the threshold
-    /// is a *client* preference: applying it on the serving machine would bake one
-    /// machine's setting into another machine's results.
-    ///
-    /// The default recovers the rows from `tag`, whose results already carry
-    /// them, so a backend that only implements `tag` still works over the wire —
-    /// it just cannot avoid its own threshold having been applied first.
+    /// Retained for numerical validation. Production tagging carries compact
+    /// UInt8/LZ4 rows, including all four rating probabilities.
     func probabilityRows(batch: [CGImage]) async throws -> [[Float]]
 }
 
@@ -35,6 +30,19 @@ struct TagResult: Sendable {
     let rating: TagRating
     let topTags: [String]
     let generalScore: Float
+    var encodedProbabilities: Data? = nil
+}
+
+/// Shared native-worker and network result with four UInt8 rating scores.
+struct QuantizedTagRow: Sendable, Equatable {
+    let scores: Data
+
+    func result(vocabulary: TagVocabulary, threshold: Float) throws -> TagResult {
+        guard let probabilities = TagProbabilityCodec.decode(scores) else { throw TaggerError.invalidProbabilities }
+        let derived = try vocabulary.result(probabilities: probabilities, threshold: threshold)
+        return TagResult(probabilities: probabilities, rating: derived.rating, topTags: derived.topTags,
+                         generalScore: derived.generalScore, encodedProbabilities: scores)
+    }
 }
 
 enum TaggerError: LocalizedError {

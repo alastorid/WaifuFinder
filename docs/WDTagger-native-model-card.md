@@ -5,7 +5,11 @@ Apache-2.0 upstream weights from [SmilingWolf](https://huggingface.co/SmilingWol
 
 The app bundles a persistent Swift/C++/Metal worker using MLX Swift 0.31.2, fused QKV projection/normalization/packing, native attention and fused GEMM epilogues. No Python runtime is used.
 
-Input: RGB Float32 [8,3,448,448] in 0...255. Preserve the app's white letterbox and resizing; do not normalize or swap channels again. Pad tails with the last real frame. Output: Float32 sigmoid [8,10861]. Labels: 4 ratings, 8106 general, 2751 character heads.
+Current app input: interleaved RGBA UInt8 `[8,448,448,4]` in 0...255. The app composites transparency onto white before writing the buffer, so alpha is opaque. The GPU patch-input kernel reads RGB only, skips the fourth byte, and normalizes to FP16 patches. Alpha is not a model feature. Preserve the app's white letterbox and resizing; do not normalize or swap channels again. Pad tails with the last real frame.
+
+The runtime also accepts planar RGB Float32 `[8,3,448,448]` in 0...255 for reference validation. This is the older input path, not the current app transport. See [direct byte input](WDTagger-native-memory.md#direct-byte-input).
+
+Model output: Float32 sigmoid `[8,10861]`: 4 ratings, 8106 general and 2751 character heads. The production worker reads these probabilities back and quantizes on CPU before IPC; the app and remote protocol retain UInt8/LZ4 scores. All four rating probabilities are preserved. See [UInt8 output transport](WDTagger-native-pipeline.md#uint8-output-transport).
 
 Two controlled batch-eight comparisons on an M3 Air measured 7.9–8.1% faster model inference than Core ML. A separate 768 MiB soft-budget run measured 15.50 fps and 950 MB peak worker process footprint. These exclude host app/image-preparation overhead; memory is not a hard cap.
 

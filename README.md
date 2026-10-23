@@ -273,8 +273,8 @@ The experimental native Swift/Metal backend and its measured tradeoffs are in
 [`docs/WDTagger-native-optimization.md`](docs/WDTagger-native-optimization.md).
 The subsequent fused QKV speed gain and selected memory budget are documented in
 [`docs/WDTagger-native-tuning.md`](docs/WDTagger-native-tuning.md).
-Frame analysis results can also be remembered to skip repeated Vision scoring;
-the cache settings and format are documented in [`docs/AnalysisResultMemory.md`](docs/AnalysisResultMemory.md).
+Frame analysis scores and image features are calculated directly from decoded frames
+on every analysis run. Only tagging results are saved for reuse.
 
 **Face definition** is an independent sorting and filtering factor for finding
 detailed faces even when they are small or near the edge. Its row is always present
@@ -407,7 +407,7 @@ focused frame in motion.
   **Top** (1–99, default **all**) and **Threshold** (0.35–1, default 0.35)
   sliders above the tag search. Top combines the top N frames for every tag when none are selected; selected tags
   keep their AND rule with a separate Top N ranking for each, before group caps. Basic leaves Top off.
-  Threshold filters stored FP8 scores without discarding scores below the chosen value,
+  Threshold filters stored UInt8 scores without discarding scores below the chosen value,
   so lowering it restores matches. Mode and slider values persist and are saved in presets. While Top is active,
   thumbnails show the tags whose Top N rankings admitted them in place of the frame number,
   in white text on stable dark colors. Click the tag label to show the frame number;

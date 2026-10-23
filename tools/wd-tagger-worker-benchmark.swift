@@ -1,4 +1,4 @@
-// Native WDT3 protocol benchmark. Timings include IPC, input upload, completed
+// Native WDT4 protocol benchmark. Timings include IPC, input upload, completed
 // inference, output validation/transfer and receipt of every probability row.
 import CryptoKit
 import Darwin
@@ -86,7 +86,7 @@ private final class PeakChildMemory: @unchecked Sendable {
             }
             return data
         }
-        guard try read(4) == Data("WDT3".utf8) else { throw NSError(domain: "Invalid protocol", code: 1) }
+        guard try read(4) == Data("WDT4".utf8) else { throw NSError(domain: "Invalid protocol", code: 1) }
         func predict(batch: Int, count: Int = 8) throws -> (Double, Data) {
             corpus.withUnsafeBytes { source in
                 mapping.copyMemory(from: source.baseAddress!.advanced(by: batch * inputBytes), byteCount: inputBytes)

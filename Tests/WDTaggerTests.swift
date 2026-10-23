@@ -94,7 +94,9 @@ func registerWDTaggerTests() {
         let backend = try WDTaggerBackend(directory: modelDirectory, executableURL: executable)
         let tail = try await backend.tag(batch: [image])
         checkEqual(tail.count, 1, "fixed batch tail padding does not emit duplicates")
-        let got = tail[0].probabilities
+        let got = try await backend.probabilityRows(batch: [image])[0]
+        checkEqual(tail[0].encodedProbabilities, TagProbabilityCodec.encode(got),
+                   "worker CPU quantization matches raw Float32 CPU reference exactly")
         let expectedTop = Set(expected.indices.sorted { expected[$0] > expected[$1] }.prefix(15))
         let actualTop = Set(got.indices.sorted { got[$0] > got[$1] }.prefix(15))
         checkEqual(actualTop.intersection(expectedTop).count, 15, "top15 independent reference overlap")
@@ -106,7 +108,7 @@ func registerWDTaggerTests() {
         let fullBatch = try await backend.tag(batch: images)
         checkEqual(fullBatch.count, 8, "full native batch emits all eight rows")
         for row in 0..<8 {
-            let reference = row.isMultiple(of: 2) ? got : darkResult.probabilities
+            let reference = row.isMultiple(of: 2) ? tail[0].probabilities : darkResult.probabilities
             let error = zip(fullBatch[row].probabilities, reference).map { abs($0 - $1) }.max()!
             check(error < 0.0001, "padded native output row \(row) preserves input identity, error \(error)")
         }
@@ -180,28 +182,28 @@ func registerWDTaggerTests() {
         checkEqual(TagVocabulary.normalized("0_0"), "0_0", "kaomoji keeps underscores")
         checkEqual(vocabulary.autocomplete(query: "", limit: 12), [], "empty query has no suggestions")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "live scores use sparse FP8 LZ4 with bounded quantization and strict cutoff", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "live scores use sparse UInt8 LZ4 with bounded quantization and strict cutoff", knownBug: nil) {
         var probabilities = [Float](repeating: 0, count: TagVocabulary.headCount)
         let threshold = TagProbabilityCodec.storageThreshold
         let scores: [Float] = [0, threshold.nextDown, threshold, threshold.nextUp, 0.3501, 0.375, 0.5, 0.75, 0.9, 1]
-        for (index, score) in scores.enumerated() { probabilities[index] = score }
+        for (index, score) in scores.enumerated() { probabilities[index + 4] = score }
         probabilities[TagVocabulary.headCount - 1] = 1
         guard let encoded = TagProbabilityCodec.encode(probabilities),
               let decoded = TagProbabilityCodec.decode(encoded) else {
             check(false, "compact scores round trip"); return
         }
-        checkEqual(encoded.prefix(4), Data("WDT3".utf8), "new rows use FP8 LZ4")
+        checkEqual(encoded.prefix(4), Data("WDT4".utf8), "new rows use UInt8 LZ4")
         check(encoded.count < 128, "a sparse row occupies under 128 bytes instead of 43 KB")
-        for index in probabilities.indices {
+        for index in 4..<probabilities.count {
             if probabilities[index] < threshold {
-                checkEqual(decoded[index], 0, "below-cutoff scores are discarded")
+                checkEqual(decoded[index], 0, "below-cutoff traits are discarded")
             } else {
-                checkClose(Double(decoded[index]), Double(probabilities[index]), tolerance: 0.03125, "FP8 error stays within half a quantization step")
+                checkClose(Double(decoded[index]), Double(probabilities[index]), tolerance: 1.0 / 255, "UInt8 error stays within one step")
             }
         }
-        checkEqual(decoded[2], threshold, "equality stays exactly at the cutoff")
-        check(decoded[3] > threshold && decoded[4] > threshold, "rounding cannot remove a just-above-cutoff tag")
-        checkEqual(decoded[8], 0.875, "0.9 rounds to its nearest E4M3 value")
+        checkEqual(decoded[6], threshold, "equality stays exactly at the trait cutoff")
+        check(decoded[7] > threshold && decoded[8] > threshold, "just-above-cutoff traits remain admitted")
+        checkEqual(decoded[12], Float(229) / 255, "0.9 uses linear UInt8 confidence")
         let indices = [TagVocabulary.headCount - 1, 8, 0, 8, 3]
         checkEqual(TagProbabilityCodec.values(in: encoded, at: indices), indices.map { decoded[$0] },
                    "selective reads preserve order, duplicates, zeros and the final head")
@@ -234,56 +236,31 @@ func registerWDTaggerTests() {
         check(compactBytes < oldBytes / 100, "representative sparse payloads shrink by more than 99 percent")
         print("      live tag payloads: \(oldBytes) -> \(compactBytes) bytes for 1,000 distinct rows")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "legacy Float32 probabilities remain readable and reject malformed buffers", knownBug: nil) {
-        let probabilities = (0..<10_861).map { Float($0 % 100) / 100 }
-        var encoded = Data("WDT2".utf8)
-        let words = probabilities.map { $0.bitPattern.littleEndian }
-        words.withUnsafeBytes { encoded.append(contentsOf: $0) }
-        checkEqual(encoded.count, 4 + probabilities.count * 4, "legacy storage has one Float32 per head")
-        checkEqual(TagProbabilityCodec.decode(encoded), probabilities, "lossless Float32 roundtrip")
-        checkNil(TagProbabilityCodec.decode(encoded.prefix(encoded.count / 2)), "truncated bytes fail decoding")
-        checkNil(TagProbabilityCodec.decode(encoded + Data([0])), "trailing bytes fail decoding")
-        var invalid = encoded
-        invalid.replaceSubrange(4..<8, with: [0x00, 0x00, 0xc0, 0x7f])
-        checkNil(TagProbabilityCodec.decode(invalid), "nonfinite probabilities fail decoding")
-        let indices = [10_860, 0, 3, 3, 101]
-        checkEqual(TagProbabilityCodec.values(in: encoded, at: indices), indices.map { probabilities[$0] },
-                   "selective reads retain requested order, duplicate heads and last-head boundary")
-        checkNil(TagProbabilityCodec.values(in: encoded, at: [-1]), "negative head rejected")
-        checkNil(TagProbabilityCodec.value(in: encoded, at: probabilities.count), "past-end head rejected")
-        checkNil(TagProbabilityCodec.values(in: encoded.dropLast(), at: [0]), "selective reads reject truncation")
-        checkNil(TagProbabilityCodec.values(in: encoded + Data([0]), at: [0]), "selective reads reject trailing bytes")
-        checkNil(TagProbabilityCodec.value(in: invalid, at: 0), "queried nonfinite value rejected")
-        checkEqual(TagProbabilityCodec.value(in: invalid, at: 101), probabilities[101],
-                   "unqueried corrupt heads do not affect independent score reads")
-        var unaligned = Data([0xff]); unaligned.append(encoded)
-        checkEqual(TagProbabilityCodec.values(in: unaligned.dropFirst(), at: indices), indices.map { probabilities[$0] },
-                   "sliced storage does not require aligned Float32 pointers")
-        for value: Float in [-0.01, 1.01, .infinity] {
-            var badScore = encoded
-            var bits = value.bitPattern.littleEndian
-            withUnsafeBytes(of: &bits) { badScore.replaceSubrange(4..<8, with: $0) }
-            checkNil(TagProbabilityCodec.value(in: badScore, at: 0), "queried out-of-range score rejected")
-        }
+    Registry.shared.add(suite: suite, TestCase(name: "quantized worker rows preserve four low rating scores without requantization", knownBug: nil) {
+        var codes = [UInt8](repeating: 0, count: TagVocabulary.headCount)
+        codes[0] = 25; codes[1] = 51; codes[2] = 51; codes[3] = 38
+        codes[4] = 89; codes[5] = 1; codes[6] = 255
+        let bytes = Data(codes)
+        let rows = try WDTaggerWorker.decodeQuantized(bytes, count: 1)
+        let decoded = TagProbabilityCodec.decode(rows[0].scores)!
+        checkEqual(Array(decoded.prefix(4)), [Float(25) / 255, Float(51) / 255, Float(51) / 255, Float(38) / 255], "rating probabilities do not use the trait cutoff")
+        checkEqual(decoded[4], Float(0.35).nextUp, "worker boundary code retains membership")
+        checkEqual(decoded[5], 0.35, "worker equality code is preserved")
+        var invalid = bytes; invalid[6] = 2
+        _ = checkThrows("invalid worker trait code") { try WDTaggerWorker.decodeQuantized(invalid, count: 1) }
+        _ = checkThrows("truncated worker row") { try WDTaggerWorker.decodeQuantized(bytes.dropLast(), count: 1) }
     })
-    Registry.shared.add(suite: suite, TestCase(name: "legacy compressed runtime probabilities remain readable", knownBug: nil) {
-        let probabilities = (0..<TagVocabulary.headCount).map { Float($0 % 100) / 100 }
-        let words = probabilities.map { $0.bitPattern.littleEndian }
-        var compressed = [UInt8](repeating: 0, count: words.count * 4 + 1024)
-        let count = words.withUnsafeBytes { source in
-            compressed.withUnsafeMutableBytes { destination in
-                compression_encode_buffer(destination.bindMemory(to: UInt8.self).baseAddress!, destination.count,
-                                          source.bindMemory(to: UInt8.self).baseAddress!, source.count, nil, COMPRESSION_ZLIB)
-            }
+    Registry.shared.add(suite: suite, TestCase(name: "UInt8 codes are stable and obsolete formats are rejected", knownBug: nil) {
+        for code in UInt8(89)...UInt8(255) {
+            checkEqual(TagProbabilityCodec.quantize(TagProbabilityCodec.probability(code)), code,
+                       "linear score codes remain stable through Float32 API boundaries")
         }
-        check(count > 0, "legacy fixture compressed successfully")
-        var encoded = Data("WDT1".utf8)
-        encoded.append(contentsOf: compressed.prefix(count))
-        checkEqual(TagProbabilityCodec.decode(encoded), probabilities, "old saved frame metadata still decodes")
-        checkEqual(TagProbabilityCodec.values(in: encoded, at: [0, 3, 10_860]),
-                   [probabilities[0], probabilities[3], probabilities[10_860]],
-                   "selective consumers retain legacy compressed compatibility")
-        checkNil(TagProbabilityCodec.decode(encoded.prefix(encoded.count / 2)), "truncated legacy scores fail decoding")
+        let encoded = TagProbabilityCodec.encode([Float](repeating: 0.8, count: TagVocabulary.headCount))!
+        for magic in ["WDT1", "WDT2", "WDT3"] {
+            var old = encoded
+            old.replaceSubrange(0..<4, with: magic.utf8)
+            checkNil(TagProbabilityCodec.decode(old), "obsolete score formats require clearing the cache")
+        }
     })
     Registry.shared.add(suite: suite, TestCase(name: "tagging pipeline batches eight and preserves source image order and frame metadata", knownBug: nil) {
         let vocabulary = try TagVocabulary.load(from: taggerFixtureDirectory().appendingPathComponent("wd-tagger-labels.csv"))
@@ -309,7 +286,7 @@ func registerWDTaggerTests() {
         for frame in output {
             checkEqual(frame.topTags, result.topTags, "every frame gets traits")
             checkEqual(frame.tagRating, result.rating, "every frame gets rating")
-            checkEqual(TagProbabilityCodec.decode(frame.tagProbabilities!), values, "all heads survive pipeline")
+            checkEqual(TagProbabilityCodec.decode(frame.tagProbabilities!), TagProbabilityCodec.decode(TagProbabilityCodec.encode(values)!), "all heads survive pipeline quantization")
         }
         let failingTagger = RecordingTagger(result: result, fail: true)
         let failingInput = AsyncThrowingStream<SampledFrame, Error> { continuation in

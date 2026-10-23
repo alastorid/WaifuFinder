@@ -2,7 +2,7 @@
 
 WaifuFinder can remember WD Tagger results between analyses. The cache avoids
 running the tagger again for frames whose source video, analysis size, and tag
-vocabulary still match. It stores numeric vocabulary indices and FP8 scores;
+vocabulary still match. It stores numeric vocabulary indices and normalized UInt8 scores;
 tag names are recovered from the installed vocabulary when a result is loaded.
 
 ## Settings and location
@@ -84,36 +84,26 @@ Entries written by earlier builds used an album-wide key under
 `photos-rendition-v3/`. They are simply never matched again and expire with the
 rest of the cache.
 
-### Score payload (`WDF9`)
+### Score payload (`WDU1`)
 
-The current payload begins with the four-byte `WDF9` signature, followed by a
-UInt16 uncompressed byte count and one zlib-compressed sparse vector. Storing the
-decoded size lets the reader allocate an exact buffer. Before compression, the
-vector contains:
+The current payload starts with `WDU1`, followed by a UInt16 uncompressed byte
+count and a zlib-compressed sparse vector. The decompressed layout is:
 
 | Width | Field | Meaning |
 |---:|---|---|
-| 2 bytes | `vocabularyCount` | Must equal 10,861 for the current WD Tagger vocabulary |
+| 2 bytes | `vocabularyCount` | Must equal 10,861 |
 | 2 bytes | `pairCount` | Number of retained scores |
-| 2 bytes | `vocabularyIndex` | Output-head index, strictly ascending within the payload |
-| 1 byte | `scoreFP8` | Positive E4M3 FP8 probability for that index |
+| 2 bytes | `vocabularyIndex` | Output-head index, strictly ascending |
+| 1 byte | `scoreUInt8` | Normalized confidence, truncated from `probability * 255` |
 
-The final two fields repeat `pairCount` times. The score is saved only when it is
-**greater than 0.35**. All other vocabulary positions are omitted and mean zero
-when restored. The threshold is the fixed default used by the cache. E4M3 rounds
-the retained probability to FP8 precision, so restored scores are compact
-approximations rather than the original Float32 values.
+The last two fields repeat for each retained score. All four rating probabilities are saved. Trait probabilities are saved only
+strictly above 0.35. Missing heads reconstruct as zero. Code 89 is restored as
+the smallest Float32 above 0.35, preserving membership at the storage boundary.
+Other confidence errors are less than 1/255 (0.393 percentage points), and scores
+never round upward across a display threshold. Close scores can tie.
 
-A retained score just above 0.35 can round down to 0.34375 in E4M3. The reader
-accepts that boundary value and restores it to the smallest Float32 above 0.35,
-because its presence in the sparse vector proves the original exceeded the
-threshold. This also recovers existing `WDF8` and `WDF9` records without retagging.
-Lower encoded scores are still rejected as malformed.
-
-Each frame payload is compressed independently. A result with no scores above
-the threshold still has a valid payload with a zero pair count.
-Older `WDF8` payloads remain readable; their decompression buffer grows only as
-needed instead of reserving the maximum vector size for every frame.
+A zero-pair vector is valid. Previous FP8 cache payloads are unsupported; clear
+the old cache before using this format. There is no migration path.
 
 ## Read, write, and expiry behavior
 
@@ -127,15 +117,17 @@ needed instead of reserving the maximum vector size for every frame.
 - The disk-cache actor keeps the mapped file and its key/offset index in memory;
   it does not build score arrays for other videos. During restoration, one
   matching payload at a time is expanded for result reconstruction, then released.
-  The frame model retains sparse E4M3 FP8 scores compressed per frame with
-  Apple's LZ4 (`WDT3`). Values below the fixed 0.35 storage cutoff reconstruct as
-  zero; display thresholds cannot recover discarded scores. Scores exactly at
-  0.35 stay equal, while a score originally above it remains strictly above it
-  after quantization. Other values are approximate, so close scores can tie or
-  cross a display-filter boundary. Selective filtering expands only sparse pairs;
-  full Float32 rows are temporary or held in the bounded tag-summary cache.
-  Legacy `WDT1`/`WDT2` metadata remains readable. Disk records keep their existing
-  sparse FP8/zlib format; restoring a record now creates compact live storage.
+  The frame model retains sparse normalized UInt8 scores compressed per frame
+  with Apple's LZ4 (`WDT4`). Its uncompressed row starts with exactly four
+  rating bytes, a UInt16 trait-pair count, and the sparse trait pairs. Values below the fixed 0.35 storage cutoff reconstruct
+  as zero for traits; all four rating scores retain their full normalized range.
+  Display thresholds cannot recover discarded trait scores. A dedicated code
+  preserves exact equality at 0.35, while code 89 preserves strictly greater
+  membership for scores just above it. Other values use `floor(p * 255) / 255`.
+  Selective filtering expands only sparse pairs. Summary caches retain UInt8
+  general-tag rows and populated-column indices, without full Float32 vectors.
+  Previous Float32/FP8 score formats are unsupported. New disk records store the
+  same UInt8 codes with zlib compression, avoiding a second quantization.
 - While tagging is active, completed batches stay in the session's runtime
   frames; they are not written to disk batch by batch. Cache-sync requests caused
   by published tag updates or newly added candidates are deferred while the run
@@ -186,10 +178,8 @@ and the per-group cap are still applied after a cached filter result is retrieve
 
 ### Live-score memory check
 
-The sparse-FP8/LZ4 regression fixture retains 1,000 separately encoded rows with
-33 heads at or above 0.35. The optimized production codec measured 125,000 payload
-bytes in total (125 bytes per row), versus 43,448,000 bytes for WDT2: a 99.71%
-payload reduction. Encoding took about 14 ms and 10,000 selective four-rating-head
-reads about 3 ms on the development machine. These are synthetic payload and
-codec measurements, not a whole-app footprint measurement; frame metadata,
-FeaturePrints, images and bounded summary caches still consume memory.
+The regression fixture retains 1,000 separately encoded sparse UInt8/LZ4 rows
+with 33 heads at or above 0.35 and checks that payload size is less than 1% of
+43,448,000 bytes of dense WDT2 Float32 scores. Its output reports the current
+payload total. This measures score payloads, rather than whole-app memory:
+frame metadata, FeaturePrints, images and bounded summary caches also use memory.

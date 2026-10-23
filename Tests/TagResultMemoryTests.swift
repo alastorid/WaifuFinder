@@ -22,7 +22,7 @@ func registerTagResultMemoryTests() {
         let boundaryScores: [Float] = [Float(0.35).nextUp, 0.3501, 0.351, 0.359, 0.36, 0.375, 0.9, 1]
         let indices = Array(vocabulary.generalIndices.prefix(boundaryScores.count + 2))
         var probabilities = [Float](repeating: 0, count: TagVocabulary.headCount)
-        probabilities[1] = 0.9
+        probabilities[0] = 0.1; probabilities[1] = 0.2; probabilities[2] = 0.20001; probabilities[3] = 0.15
         for (index, score) in zip(indices, boundaryScores) { probabilities[index] = score }
         probabilities[indices[boundaryScores.count]] = 0.35
         probabilities[indices[boundaryScores.count + 1]] = 0.3499
@@ -39,6 +39,8 @@ func registerTagResultMemoryTests() {
         let decoded = restored.frames[0].tagProbabilities.flatMap { TagProbabilityCodec.decode($0) }
         checkNotNil(decoded, "restored runtime probabilities are valid")
         guard let decoded else { return }
+        checkEqual(Array(decoded.prefix(4)), [Float(25) / 255, Float(51) / 255, Float(51) / 255, Float(38) / 255],
+                   "disk cache preserves all four rating probabilities below the trait cutoff")
         for index in indices.prefix(boundaryScores.count) {
             check(decoded[index] > 0.35, "every retained score stays above the sparse threshold")
             check(restored.frames[0].topTags?.contains(vocabulary.labels[index].name) == true,
@@ -49,22 +51,14 @@ func registerTagResultMemoryTests() {
         }
         checkEqual(restored.frames[0].tagRating, TagRating.allCases[1], "the photo's rating is also restored")
 
-        // Older payloads have the same compressed body without the size field.
         let cached = await reopened.cachedResults(for: keys)
-        guard let payload = cached[identity]?[0] else {
-            check(false, "the photo's saved payload exists")
-            return
+        checkEqual(cached[identity]?[0]?.prefix(4), Data("WDU1".utf8), "new disk rows use normalized UInt8")
+        let original = TagProbabilityCodec.decode(tagged.tagProbabilities!)!
+        for index in indices.prefix(boundaryScores.count) {
+            checkEqual(decoded[index], original[index], "disk round trip does not requantize UInt8 scores")
         }
-        var legacyPayload = Data("WDF8".utf8)
-        legacyPayload.append(payload.dropFirst(6))
-        let legacyDisk = TagResultDiskCache(fileURL: directory.appendingPathComponent("legacy.db"))
-        _ = try await legacyDisk.remember(
-            [TagResultMemoryRecord(sampleIndex: 0, compressedSparseScores: legacyPayload)],
-            for: identity, retentionDays: 30)
-        let legacyMemory = await MainActor.run { TagResultMemory(disk: legacyDisk) }
-        let legacy = await legacyMemory.restore([blank], keys: keys, vocabulary: vocabulary, threshold: 0.35)
-        checkEqual(legacy.restoredCount, 1, "existing WDF8 results also recover without retagging")
-        checkEqual(legacy.frames[0].topTags, restored.frames[0].topTags, "both formats recover the same tags")
+
+
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "photo keys ignore album order and membership", knownBug: nil) {

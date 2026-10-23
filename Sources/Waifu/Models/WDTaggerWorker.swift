@@ -82,7 +82,7 @@ final class WDTaggerWorker: @unchecked Sendable {
         // Close parent copies of the child's endpoints so crashes produce EOF.
         try incoming.fileHandleForReading.close()
         try outgoing.fileHandleForWriting.close()
-        guard try readExactly(4) == Data("WDT3".utf8) else { throw failure() }
+        guard try readExactly(4) == Data("WDT4".utf8) else { throw failure() }
     }
 
     private func failure() -> Error {
@@ -113,6 +113,31 @@ final class WDTaggerWorker: @unchecked Sendable {
         } catch {
             cancel()
             throw error
+        }
+    }
+
+    func predictQuantized(count: Int) throws -> [QuantizedTagRow] {
+        do {
+            try start()
+            guard (1...8).contains(count), let request else { throw TaggerError.invalidBatch }
+            try request.write(contentsOf: Data([UInt8(count) | 0x80]))
+            let bytes = try readExactly(count * TagVocabulary.headCount)
+            try Task.checkCancellation()
+            return try Self.decodeQuantized(bytes, count: count)
+        } catch {
+            cancel()
+            throw error
+        }
+    }
+
+    static func decodeQuantized(_ bytes: Data, count: Int) throws -> [QuantizedTagRow] {
+        let stride = TagVocabulary.headCount
+        guard (1...8).contains(count), bytes.count == count * stride else { throw TaggerError.invalidProbabilities }
+        return try (0..<count).map { row in
+            let offset = row * stride
+            guard let scores = TagProbabilityCodec.encode(quantized: Array(bytes.dropFirst(offset).prefix(TagVocabulary.headCount)))
+            else { throw TaggerError.invalidProbabilities }
+            return QuantizedTagRow(scores: scores)
         }
     }
 

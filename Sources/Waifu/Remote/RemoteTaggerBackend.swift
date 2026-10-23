@@ -27,7 +27,7 @@ actor RemoteTaggerBackend: TaggerBackend {
                 "The server has not sent its tag labels yet. Reconnect to resync.")
         }
         let rows = try await client.tag(images: batch, codec: .rgba8)
-        return try rows.map { try vocabulary.result(probabilities: $0, threshold: threshold) }
+        return try rows.map { try $0.result(vocabulary: vocabulary, threshold: threshold) }
     }
 }
 

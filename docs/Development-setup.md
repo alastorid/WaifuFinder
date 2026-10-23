@@ -28,7 +28,7 @@ The app has no Python runtime dependency.
 
 Install the inference models you need through **Settings → Models**. Their release
 revisions and checksums are tracked in `tools/*-release.json`. Settings, selected
-videos, analysis caches and saved results under `~/Library/Application Support/Waifu`
+videos, tagging caches and saved results under `~/Library/Application Support/Waifu`
 are separate user data; a Git clone does not restore them.
 
 The existing [release workflow](../.github/workflows/release.yml) also builds from

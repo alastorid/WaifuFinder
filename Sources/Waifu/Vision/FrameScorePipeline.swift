@@ -58,10 +58,6 @@ final class FrameScorePipeline: Sendable {
     /// Width the thumbnails are encoded at (the analysis width).
     private let analysisWidth: Int
     private let cacheSuffix: String
-    /// Compressed analysis payloads keyed by decoded sample index. A payload is
-    /// decompressed only when its frame reaches a scoring worker.
-    private let cachedResults: [Int: Data]
-
     /// Creates a pipeline with the given scorer and thumbnail store.
     ///
     /// - Parameters:
@@ -75,14 +71,12 @@ final class FrameScorePipeline: Sendable {
         thumbnailStore: ThumbnailWriter,
         analysisWidth: Int,
         workerCount: Int? = nil,
-        cacheSuffix: String = "",
-        cachedResults: [Int: Data] = [:]
+        cacheSuffix: String = ""
     ) {
         self.scorer = scorer
         self.thumbnailStore = thumbnailStore
         self.analysisWidth = analysisWidth
         self.cacheSuffix = cacheSuffix
-        self.cachedResults = cachedResults
         self.workerCount = workerCount ?? min(4, ProcessInfo.processInfo.activeProcessorCount)
     }
 
@@ -201,13 +195,7 @@ final class FrameScorePipeline: Sendable {
 
     /// Scores one frame and retains its thumbnail in memory, returning the `AnalyzedFrame`.
     private func scoreAndStore(frame: SampledFrame) async throws -> AnalyzedFrame {
-        let result: FrameScoreResult
-        if let encoded = cachedResults[frame.sampleIndex],
-           let cached = AnalysisResultCacheCodec.decode(encoded) {
-            result = cached
-        } else {
-            result = try await scorer.score(frame)
-        }
+        let result = try await scorer.score(frame)
 
         // Store the thumbnail and get its key. The store uses the sampleIndex-based
         // key we pass; the suffix includes analysisWidth so changing the width

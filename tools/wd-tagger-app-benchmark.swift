@@ -87,7 +87,7 @@ private actor BatchOutput {
     func append(_ results: [TagResult], batch: [EncodedFrame]) throws {
         guard results.count == batch.count else { throw TaggerError.invalidBatch }
         for (frame, result) in zip(batch, results) {
-            guard let encoded = TagProbabilityCodec.encode(result.probabilities) else {
+            guard let encoded = result.encodedProbabilities ?? TagProbabilityCodec.encode(result.probabilities) else {
                 throw TaggerError.invalidProbabilities
             }
             data.append(encoded); indices.append(frame.index)

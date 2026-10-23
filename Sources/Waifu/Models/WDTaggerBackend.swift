@@ -86,40 +86,52 @@ actor WDTaggerBackend: TaggerBackend {
     }
 
     func tag(batch: [CGImage]) async throws -> [TagResult] {
-        let rows = try await probabilityRows(batch: batch)
-        return try rows.map { try vocabulary.result(probabilities: $0, threshold: generalThreshold) }
+        if batch.isEmpty { return [] }
+        guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
+        return try await withTaskCancellationHandler {
+            try autoreleasepool {
+                try prepare(batch: batch)
+                let rows = try worker.predictQuantized(count: batch.count)
+                try Task.checkCancellation()
+                return try rows.map { try $0.result(vocabulary: vocabulary, threshold: generalThreshold) }
+            }
+        } onCancel: { worker.cancel() }
     }
 
     /// The raw `Float32[10_861]` output rows, before any threshold is applied.
     ///
-    /// The primitive `tag(batch:)` is written in terms of, so the remote path
-    /// runs the identical preprocessing and padding code rather than a
-    /// reimplementation of it.
+    /// Numerical validation uses this path. Production `tag(batch:)` quantizes
+    /// on CPU inside the worker before IPC; both paths share preprocessing and tail padding.
     func probabilityRows(batch: [CGImage]) async throws -> [[Float]] {
         if batch.isEmpty { return [] }
         guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
         return try await withTaskCancellationHandler {
           try autoreleasepool {
             try Task.checkCancellation()
-            for (index, image) in batch.enumerated() {
-                try autoreleasepool {
-                    try Self.renderRGBA(image, context: context, to: worker.pointer.advanced(by: index * Self.imageSize * Self.imageSize * 4))
-                }
-            }
-            // Tail padding duplicates the last real frame. Model output padding is
-            // dropped below; it can never become a frame or alter the input order.
-            let stride = Self.imageSize * Self.imageSize * 4
-            let pointer = worker.pointer.assumingMemoryBound(to: UInt8.self)
-            if batch.count < Self.batchSize {
-                for index in batch.count..<Self.batchSize {
-                    pointer.advanced(by: index * stride).update(from: pointer.advanced(by: (batch.count - 1) * stride), count: stride)
-                }
-            }
+            try prepare(batch: batch)
             let rows = try worker.predict(count: batch.count)
             try Task.checkCancellation()
             return rows
           }
         } onCancel: { worker.cancel() }
+    }
+
+    private func prepare(batch: [CGImage]) throws {
+        try Task.checkCancellation()
+        for (index, image) in batch.enumerated() {
+            try autoreleasepool {
+                try Self.renderRGBA(image, context: context, to: worker.pointer.advanced(by: index * Self.imageSize * Self.imageSize * 4))
+            }
+        }
+        // Tail padding duplicates the last real frame. Model output padding is
+        // dropped below; it can never become a frame or alter the input order.
+        let stride = Self.imageSize * Self.imageSize * 4
+        let pointer = worker.pointer.assumingMemoryBound(to: UInt8.self)
+        if batch.count < Self.batchSize {
+            for index in batch.count..<Self.batchSize {
+                pointer.advanced(by: index * stride).update(from: pointer.advanced(by: (batch.count - 1) * stride), count: stride)
+            }
+        }
     }
 
     /// Core ML may pad each row of its output buffer. Physical strides belong to

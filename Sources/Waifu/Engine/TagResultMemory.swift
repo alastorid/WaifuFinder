@@ -138,7 +138,7 @@ struct TagResultCacheKeys: Hashable, Sendable {
 
 struct TagResultMemoryRecord: Sendable {
     let sampleIndex: Int
-    /// WDF8: zlib-compressed sparse pairs of vocabulary index and FP8 score.
+    /// WDU1: zlib-compressed sparse pairs of vocabulary index and UInt8 score.
     let compressedSparseScores: Data
 }
 
@@ -325,32 +325,26 @@ final class TagResultMemory: ObservableObject {
 }
 
 /// Persist only scores above the fixed default display threshold. Each saved
-/// item is a two-byte vocabulary index followed by its positive E4M3 FP8 value;
+/// item is a two-byte vocabulary index followed by its normalized UInt8 value;
 /// all omitted indices reconstruct as zero. Tag names are never stored.
 private enum TagResultCacheProbabilityCodec {
-    private static let legacyMagic = Data([0x57, 0x44, 0x46, 0x38]) // WDF8
-    private static let magic = Data([0x57, 0x44, 0x46, 0x39]) // WDF9
+    private static let magic = Data("WDU1".utf8)
     private static let threshold = WaifuSettings.default.taggerThreshold
     private static let headerByteCount = 4
     private static let pairByteCount = 3
     private static let maximumUncompressedByteCount = headerByteCount + 4 + TagVocabulary.headCount * pairByteCount
 
     static func encode(_ runtimeData: Data) -> Data? {
-        guard let probabilities = TagProbabilityCodec.decode(runtimeData),
-              probabilities.count == TagVocabulary.headCount else { return nil }
-
-        let sparsePairs = probabilities.enumerated().compactMap { index, ratio -> (Int, UInt8)? in
-            guard ratio > threshold, let fp8 = encodeE4M3(ratio) else { return nil }
-            return (index, fp8)
-        }
+        guard let pairs = TagProbabilityCodec.sparseBytes(in: runtimeData) else { return nil }
+        let sparsePairs = pairs.filter { $0.index < 4 || TagProbabilityCodec.probability($0.value) > threshold }
         guard sparsePairs.count <= UInt16.max else { return nil }
 
         var raw = Data()
         raw.appendLittleEndian(UInt16(TagVocabulary.headCount))
         raw.appendLittleEndian(UInt16(sparsePairs.count))
-        for (index, fp8) in sparsePairs {
+        for (index, score) in sparsePairs {
             raw.appendLittleEndian(UInt16(index))
-            raw.append(fp8)
+            raw.append(score)
         }
 
         var compressed = [UInt8](repeating: 0, count: raw.count + 1_024)
@@ -369,24 +363,20 @@ private enum TagResultCacheProbabilityCodec {
     }
 
     static func decode(_ encoded: Data) -> [Float]? {
-        let compressed: Data.SubSequence
-        let expectedRawCount: Int?
-        if encoded.count > magic.count, encoded.prefix(magic.count) == magic {
-            var offset = magic.count
-            guard let rawLength = encoded.readUInt16(at: &offset),
-                  let exactLength = Int(exactly: rawLength),
-                  (headerByteCount...maximumUncompressedByteCount).contains(exactLength) else { return nil }
-            expectedRawCount = exactLength
-            compressed = encoded.dropFirst(offset)
-        } else if encoded.count > legacyMagic.count, encoded.prefix(legacyMagic.count) == legacyMagic {
-            expectedRawCount = nil
-            compressed = encoded.dropFirst(legacyMagic.count)
-        } else {
-            return nil
+        guard encoded.count > magic.count, encoded.prefix(magic.count) == magic else { return nil }
+        var headerOffset = magic.count
+        guard let rawLength = encoded.readUInt16(at: &headerOffset),
+              (headerByteCount...maximumUncompressedByteCount).contains(Int(rawLength)) else { return nil }
+        let compressed = encoded.dropFirst(headerOffset)
+        var raw = Data(count: Int(rawLength) + 1)
+        let decodedSize = compressed.withUnsafeBytes { source in
+            raw.withUnsafeMutableBytes { destination in
+                compression_decode_buffer(destination.bindMemory(to: UInt8.self).baseAddress!, destination.count,
+                                          source.bindMemory(to: UInt8.self).baseAddress!, source.count, nil, COMPRESSION_ZLIB)
+            }
         }
-
-        guard let raw = decompress(compressed, expectedRawCount: expectedRawCount),
-              raw.count >= headerByteCount else { return nil }
+        guard decodedSize == Int(rawLength) else { return nil }
+        raw.removeLast()
 
         var offset = 0
         guard let vocabularyCount = raw.readUInt16(at: &offset), Int(vocabularyCount) == TagVocabulary.headCount,
@@ -399,70 +389,13 @@ private enum TagResultCacheProbabilityCodec {
             guard let indexValue = raw.readUInt16(at: &offset) else { return nil }
             let index = Int(indexValue)
             guard index > previousIndex, index < probabilities.count, offset < raw.count else { return nil }
-            let fp8 = raw[offset]
+            let code = raw[offset]
             offset += 1
-            guard let ratio = decodeE4M3(fp8),
-                  ratio > threshold || fp8 == encodeE4M3(threshold.nextUp) else { return nil }
-            // Inclusion in the sparse vector proves the original score exceeded
-            // the threshold. E4M3 can round it below that boundary (0.3501 becomes
-            // 0.34375). Preserve that fact when restoring, including old WDF8/9
-            // records, instead of rejecting the entire photo's saved result.
-            probabilities[index] = max(ratio, threshold.nextUp)
+            guard index < 4 || code >= 89 else { return nil }
+            probabilities[index] = TagProbabilityCodec.probability(code, at: index)
             previousIndex = index
         }
         return probabilities
-    }
-
-    private static func decompress(_ compressed: Data.SubSequence,
-                                   expectedRawCount: Int?) -> Data? {
-        var capacity = expectedRawCount ?? min(maximumUncompressedByteCount, max(16, compressed.count * 2))
-        while capacity <= maximumUncompressedByteCount {
-            var raw = Data(count: capacity)
-            let rawCount = compressed.withUnsafeBytes { source in
-                raw.withUnsafeMutableBytes { destination in
-                    compression_decode_buffer(destination.bindMemory(to: UInt8.self).baseAddress!, destination.count,
-                                              source.bindMemory(to: UInt8.self).baseAddress!, source.count,
-                                              nil, COMPRESSION_ZLIB)
-                }
-            }
-            if rawCount > 0 {
-                if let expectedRawCount, rawCount != expectedRawCount { return nil }
-                if expectedRawCount != nil || rawCount < capacity || capacity == maximumUncompressedByteCount {
-                    raw.removeSubrange(rawCount..<raw.count)
-                    return raw
-                }
-            } else if expectedRawCount != nil {
-                return nil
-            }
-            guard capacity < maximumUncompressedByteCount else { return nil }
-            capacity = min(maximumUncompressedByteCount, capacity * 2)
-        }
-        return nil
-    }
-
-    /// Positive, normalized E4M3. The stored range is greater than 0.35 through 1.
-    private static func encodeE4M3(_ value: Float) -> UInt8? {
-        guard value.isFinite, value > threshold, value <= 1 else { return nil }
-        var exponent = Int(floor(log2(value)))
-        let significand = value / pow(2, Float(exponent))
-        var mantissa = Int(((significand - 1) * 8).rounded())
-        if mantissa == 8 {
-            exponent += 1
-            mantissa = 0
-        }
-        let exponentField = exponent + 7
-        guard (1...14).contains(exponentField), (0..<8).contains(mantissa) else { return nil }
-        return UInt8((exponentField << 3) | mantissa)
-    }
-
-    private static func decodeE4M3(_ value: UInt8) -> Float? {
-        let exponentField = Int((value >> 3) & 0x0f)
-        let mantissa = Int(value & 0x07)
-        guard value & 0x80 == 0, (1...14).contains(exponentField) else { return nil }
-        let significand = 1 + Float(mantissa) / 8
-        let decoded = significand * pow(2, Float(exponentField - 7))
-        guard decoded.isFinite, decoded <= 1 else { return nil }
-        return decoded
     }
 }
 

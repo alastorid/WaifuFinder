@@ -167,3 +167,31 @@ identities; `cached` reverses the cached comparison order. The
 using the same executable. All inference and image work is native.
 
 [Full raw samples, hashes, telemetry and validation](wd-tagger-native-pipeline.json).
+
+## UInt8 output transport
+
+The production worker uses WDT4 readiness. A request byte `0x80 | count` selects
+CPU quantization inside the worker. Each response contains `count * 10,861`
+UInt8 values. The first four values in each row are the four rating probabilities, without a winning-class
+byte or a storage cutoff. Remaining heads use the fixed trait storage cutoff.
+The app packs these bytes into sparse LZ4 rows directly, and remote protocol v2
+sends those same rows. The session keeps the encoded bytes instead of quantizing
+again. Plain count requests retain Float32 output for numerical model validation.
+
+`waifu-wdtagger --check-quantization` checks CPU output codes on an eight-row
+synthetic batch, including four low rating scores and values immediately around
+the trait cutoff. It needs no model weights and opens no windows. It also verifies
+tails and invalid inputs and reports Float32 readback plus validated CPU
+quantization timing.
+
+On the development Apple M3, the fair synthetic comparison measured 0.216 ms
+for Float32 readback plus CPU quantization and 0.347 ms for GPU quantization plus
+UInt8 readback (31 runs, median, 86,888 scores). The slower GPU quantization pass
+was removed. The production CPU path, including score validation, measured
+0.225 ms in its self-check. Production reads Float32 output once and quantizes only real rows
+on CPU inside the worker. IPC still transfers one byte per score; the app and
+remote server reuse the UInt8/LZ4 payload without quantizing it again.
+
+An eight-frame sparse remote-response fixture measured 347,593 Float32 payload
+bytes versus 1,049 bytes of UInt8/LZ4. Reply-payload measurements exclude uploaded
+images and transport headers.

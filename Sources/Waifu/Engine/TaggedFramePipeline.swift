@@ -36,7 +36,7 @@ struct TaggedFramePipeline: Sendable {
                         }
                         for (var frame, result) in zip(scored, results) {
                             try Task.checkCancellation()
-                            guard let encoded = TagProbabilityCodec.encode(result.probabilities) else {
+                            guard let encoded = result.encodedProbabilities ?? TagProbabilityCodec.encode(result.probabilities) else {
                                 throw ModelInstaller.fail("The tagger returned invalid probabilities.")
                             }
                             frame.tagProbabilities = encoded
