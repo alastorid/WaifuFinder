@@ -79,6 +79,7 @@ samples for transport-stream and HLS tests. No external media executable is need
 | `FrameArrangementTests.swift` | the order, rating distributions and filters, value limits and spans, the face filter, the per-group cap, the grid rows |
 | `VideoDropTests.swift` | which dropped files `VideoDrop` accepts — the drag-and-drop rule |
 | `VideoProbeTests.swift` | `VideoProbe.probe`: metadata, and every rejection path |
+| `PhotoMetadataTests.swift` | ImageIO JPEG/HEIC properties, EXIF value formatting and Sony camera fields, IPTC/XMP keywords, stripped metadata, PhotoKit source identity, and resource-request cancellation |
 | `FrameSamplerTests.swift` | the pull-based full/quick sampler: first-frame inclusion, decoded ordinals, ascending timing and mode estimates |
 | `ThumbnailCacheTests.swift` | the thumbnail actor: round-trip, key sanitisation, atomic and concurrent writes, clearing |
 | `FrameZoomGeometryTests.swift` | the preview's zoom surface: the fit touches and centres, the canvas that makes centring possible, scroll origins and focus points across frames and resizes, pinch anchoring, zoom clamping and degenerate sizes |

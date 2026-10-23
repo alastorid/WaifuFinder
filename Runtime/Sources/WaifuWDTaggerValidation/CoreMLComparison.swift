@@ -8,7 +8,8 @@ import WDTaggerMLX
 func compareCoreML(
   weights: URL, modelURL: URL, inputsURL: URL, rounds: Int,
   tile: WDMetal.GEMMTile, compactBias: Bool, probabilities: String?, includeOriginal: Bool = false,
-  fusedQKV: Bool = false, currentReference: Bool = false
+  fusedQKV: Bool = false, currentReference: Bool = false,
+  gemmOverrides: [WDNativeTagger.GEMMOperation: [WDMetal.GEMMTile]] = [:], attentionQueryRows: Int = 32
 ) throws -> [String: Any] {
   let batch = 8
   let frames = 64
@@ -21,9 +22,11 @@ func compareCoreML(
   let base = currentReference ? try WDNativeTagger(
     weights: weights, gemmTile: .baseline, simdNorm: false,
     compactBias: false, fusedQKV: true) : nil
-  let native = try base?.variant(gemmTile: tile, fusedQKV: fusedQKV, compactingBias: compactBias)
-    ?? WDNativeTagger(weights: weights, gemmTile: tile, compactBias: compactBias, fusedQKV: fusedQKV)
-  let original = currentReference ? base : includeOriginal ? native.variant(gemmTile: .baseline, fusedQKV: false) : nil
+  let native = try base?.variant(gemmTile: tile, fusedQKV: fusedQKV, compactingBias: compactBias,
+      gemmOverrides: gemmOverrides, attentionQueryRows: attentionQueryRows)
+    ?? WDNativeTagger(weights: weights, gemmTile: tile, compactBias: compactBias, fusedQKV: fusedQKV,
+      gemmOverrides: gemmOverrides, attentionQueryRows: attentionQueryRows)
+  let original = currentReference ? base : includeOriginal ? native.variant(gemmTile: .baseline, fusedQKV: false, gemmOverrides: [:], attentionQueryRows: 32) : nil
   let configuration = MLModelConfiguration()
   configuration.computeUnits = .cpuAndGPU
   configuration.allowLowPrecisionAccumulationOnGPU = false
@@ -172,6 +175,10 @@ func compareCoreML(
   var report: [String: Any] = [
     "native": true, "batch": batch, "frames": frames, "rounds": rounds,
     "implementation": WDNativeTagger.implementationVersion,
+    "attentionQueryRows": attentionQueryRows,
+    "qkvBackend": !fusedQKV || (0..<4).contains { native.selectedTile(.qkv, stage: $0, batch: batch) == .library }
+      ? "includes-unfused" : "native-fused",
+    "stageTiles": Dictionary(uniqueKeysWithValues: gemmOverrides.map { ($0.key.rawValue, $0.value.map(\.rawValue)) }),
     "gemmTile": tile.rawValue, "compactAttentionBias": compactBias,
     "fusedQKV": fusedQKV,
     "reference": currentReference ? "current-rgba-fused-v3" : "unfused-float32-v1",

@@ -81,6 +81,7 @@ echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $T
     -framework Metal \
     -framework Accelerate \
     -framework Photos \
+    -framework ImageIO \
     -framework CoreImage \
     -framework UniformTypeIdentifiers
 

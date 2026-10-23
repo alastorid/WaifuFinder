@@ -1,0 +1,312 @@
+import AppKit
+import CoreImage
+import ImageIO
+import Vision
+
+private func orbFrame(_ index: Int, feature: Data? = nil) -> AnalyzedFrame {
+    AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index), faceScore: nil,
+                  faceCount: 0, faceAreaFraction: nil, featurePrint: feature)
+}
+
+private func orbImage(_ variant: Int, width: Int = 128, height: Int = 96) throws -> CGImage {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    context.scaleBy(x: CGFloat(width) / 128, y: CGFloat(height) / 96)
+    context.setFillColor(CGColor(red: variant == 0 ? 0.15 : 0.8, green: 0.3, blue: 0.6, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 128, height: 96))
+    context.setFillColor(CGColor(red: 0.9, green: 0.7, blue: 0.1, alpha: 1))
+    if variant == 0 { context.fillEllipse(in: CGRect(x: 10, y: 20, width: 70, height: 60)) }
+    else { for x in stride(from: 0, to: 128, by: 16) { context.fill(CGRect(x: x, y: 0, width: 5, height: 96)) } }
+    return context.makeImage()!
+}
+
+private func orbPixel(_ image: CGImage, x: Int = 0, y: Int = 0) -> [UInt8] {
+    var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+    bytes.withUnsafeMutableBytes { buffer in
+        let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
+                                bytesPerRow: image.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    }
+    let offset = (y * image.width + x) * 4
+    return Array(bytes[offset..<offset + 4])
+}
+
+func registerCrystalOrbTests() {
+    let suite = "Crystal Orb"
+    Registry.shared.add(suite: suite, TestCase(name: "ranking handles ties invalid distances and empty sets deterministically", knownBug: nil) {
+        let matches = [CrystalOrbMatch(frame: orbFrame(8), distance: 1), CrystalOrbMatch(frame: orbFrame(2), distance: 1),
+                       CrystalOrbMatch(frame: orbFrame(3), distance: 0), CrystalOrbMatch(frame: orbFrame(4), distance: .nan)]
+        checkEqual(CrystalOrbMatch.ranked(matches).map(\.id.sampleIndex), [3, 2, 8], "ties use source identity")
+        check(CrystalOrbMatch.ranked([]).isEmpty, "empty results safe")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "alignment preserves aspect and upscales smaller sources without cropping", knownBug: nil) {
+        let a = CrystalOrbAlignment(target: CGSize(width: 4032, height: 3024), candidate: CGSize(width: 1920, height: 1080))
+        checkEqual(a.size, CGSize(width: 4032, height: 3024), "native target retained")
+        checkEqual(a.target, CGRect(x: 0, y: 0, width: 4032, height: 3024), "target is not cropped")
+        checkClose(Double(a.candidate.width / a.candidate.height), 16.0 / 9, tolerance: 0.0001, "candidate not stretched")
+        check(a.candidate.width > 1920 && a.candidate.minY > 0, "smaller candidate upscaled and letterboxed")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "identical differences and masks are zero; changed pixels appear in place", knownBug: nil) {
+        let original = try orbImage(0)
+        let same = try CrystalOrbDifferenceRenderer.render(target: original, candidate: original)
+        checkEqual(orbPixel(same.difference, x: 40, y: 40), [0, 0, 0, 255], "identical normalized pixels are black")
+        checkEqual(orbPixel(same.redMask, x: 40, y: 40)[3], 0, "identical pixels have transparent red mask")
+        let black = try ImageFixture.cgImage(width: 32, height: 32, gray: 0)
+        let white = try ImageFixture.cgImage(width: 32, height: 32, gray: 1)
+        let changed = try CrystalOrbDifferenceRenderer.render(target: black, candidate: white)
+        checkEqual(orbPixel(changed.difference), [255, 255, 255, 255], "full RGB absolute difference")
+        checkEqual(orbPixel(changed.redMask), [255, 0, 0, 255], "maximum difference creates opaque red")
+        let context = CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(black, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+        context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 4, y: 4, width: 8, height: 8))
+        let localized = try CrystalOrbDifferenceRenderer.render(target: black, candidate: context.makeImage()!)
+        checkEqual(orbPixel(localized.difference, x: 8, y: 24)[0], 255, "changed region detected")
+        checkEqual(orbPixel(localized.difference, x: 20, y: 20)[0], 0, "unchanged region remains zero")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "different aspects mark unmatched regions and resized identical content matches", knownBug: nil) {
+        let large = try ImageFixture.cgImage(width: 128, height: 96, gray: 0.5)
+        let small = try ImageFixture.cgImage(width: 32, height: 24, gray: 0.5)
+        let resized = try CrystalOrbDifferenceRenderer.render(target: large, candidate: small)
+        check(orbPixel(resized.difference, x: 64, y: 48).prefix(3).allSatisfy { $0 <= 1 }, "upscaled same content matches")
+        check(orbPixel(resized.difference, x: 0, y: 0).prefix(3).allSatisfy { $0 <= 1 }, "clamped resampling preserves matching edge pixels")
+        let wide = try ImageFixture.cgImage(width: 128, height: 32, gray: 0.5)
+        let letterbox = try CrystalOrbDifferenceRenderer.render(target: large, candidate: wide)
+        checkEqual(orbPixel(letterbox.difference, x: 64, y: 2), [255, 0, 255, 255], "unmatched is magenta")
+        checkEqual(orbPixel(letterbox.redMask, x: 64, y: 2)[3], 255, "unmatched mask explicit")
+        checkEqual(orbPixel(letterbox.redMask, x: 64, y: 48)[3], 0, "overlap same content transparent")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "file orientation metadata and clipboard ownership stay independent of frames", knownBug: nil) {
+        let image = try orbImage(0, width: 80, height: 40)
+        let data = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(data, "public.tiff" as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, image, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        check(CGImageDestinationFinalize(destination), "fixture encoded")
+        let query = try CrystalOrbImageSource.read(data: data as Data)
+        checkEqual(query.image.width, 40, "EXIF rotation applied")
+        checkEqual(query.image.height, 80, "oriented native pixels")
+        check(query.fileURL == nil && query.metadata.fileSizeBytes == nil, "clipboard has no fabricated source or file size")
+        checkEqual(query.metadata.orientation, "Right (90° clockwise)", "actual embedded metadata retained")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "real Vision ranks identical and reencoded resized images above unrelated content and caches 2048 entries", knownBug: nil) {
+        let query = try orbImage(0)
+        let same = try await GenerateImageFeaturePrintRequest(.revision2).perform(on: query)
+        let other = try await GenerateImageFeaturePrintRequest(.revision2).perform(on: orbImage(1))
+        let resized = try orbImage(0, width: 256, height: 192)
+        let encoded = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(encoded, "public.jpeg" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, resized, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        check(CGImageDestinationFinalize(dest), "JPEG encoded")
+        let reencoded = try CrystalOrbImageSource.read(data: encoded as Data).image
+        let resizedFeature = try await GenerateImageFeaturePrintRequest(.revision2).perform(on: reencoded)
+        let frames = [orbFrame(0, feature: FeaturePrintCodec.encode(same)), orbFrame(1, feature: FeaturePrintCodec.encode(resizedFeature))]
+            + (2..<2048).map { orbFrame($0, feature: FeaturePrintCodec.encode(other)) }
+        let engine = CrystalOrbSearchService(), generation = UUID(), queryID = UUID()
+        let start = Date()
+        let result = try await engine.search(query: query, queryID: queryID, frames: frames, sourceURL: URL(fileURLWithPath: "/unused"), generation: generation) { _, _ in }
+        let cold = Date().timeIntervalSince(start)
+        checkEqual(result.first?.id.sampleIndex, 0, "exact match first, independent of art score")
+        checkEqual(result[1].id.sampleIndex, 1, "resized JPEG outranks unrelated images")
+        let warmStart = Date()
+        let repeated = try await engine.search(query: query, queryID: queryID, frames: frames, sourceURL: URL(fileURLWithPath: "/unused"), generation: generation) { _, _ in }
+        checkEqual(result, repeated, "deterministic repeat")
+        checkEqual(await engine.cachedCount, 2048, "session features retained")
+        checkEqual(await engine.computations, 0, "existing source features avoid decoding originals")
+        checkEqual(await engine.queryComputations, 1, "one feature computation per query")
+        print(String(format: "    Orb 2048 candidates: cold %.3fs, warm %.3fs", cold, Date().timeIntervalSince(warmStart)))
+        let empty = try await engine.search(query: query, queryID: UUID(), frames: [], sourceURL: URL(fileURLWithPath: "/other"), generation: UUID()) { _, _ in }
+        check(empty.isEmpty, "new source has no old matches")
+        checkEqual(await engine.cachedCount, 0, "source generation clears old index")
+        let cancelled = Task { try await engine.search(query: query, queryID: UUID(), frames: frames, sourceURL: URL(fileURLWithPath: "/unused"), generation: generation) { _, _ in } }
+        cancelled.cancel()
+        do { _ = try await cancelled.value; check(false, "cancelled searches must not return stale matches") } catch is CancellationError { }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "hidden candidate pin preserves filters and restores exact selected identity", knownBug: nil) {
+        let directory = try Temporary.directory("orb-selection")
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.updateAnalyzedFrames((0..<40).map { orbFrame($0) })
+            session.frameLimits.art.low = 30
+            let filters = session.frameLimits
+            let candidate = FrameID(sampleIndex: 4)
+            check(!session.displayedFrames.contains { $0.id == candidate }, "candidate is hidden")
+            session.crystalOrbIsOpen = true
+            session.selectCrystalOrbCandidate(candidate)
+            checkEqual(session.selectedFrameIDs, [candidate], "exact selected ID synchronized while open")
+            session.crystalOrbIsOpen = false
+            session.finishCrystalOrbNavigation()
+            check(session.displayedFrames.contains { $0.id == candidate }, "hidden candidate pinned for staged layout")
+            checkEqual(session.gridNavigationFrameID, candidate, "existing scroll pipeline targets identity")
+            checkEqual(session.frameLimits, filters, "filter preferences unchanged")
+            session.focusFromPointer(FrameID(sampleIndex: 35))
+            check(!session.displayedFrames.contains { $0.id == candidate }, "pin removed after normal browsing resumes")
+            let model = WaifuCrystalOrbModel()
+            model.open(session: session)
+            model.redOverlay = true; model.opacity = 0.3; model.mode = .difference
+            model.step(1)
+            model.close()
+            check(!model.isOpen && !session.crystalOrbIsOpen && model.pair == nil, "close releases buffers and keyboard ownership")
+            check(model.redOverlay && model.opacity == 0.3, "overlay preference survives mode and lifecycle")
+        }.value
+    })
+}
+
+private func orbPNG(_ image: CGImage) -> Data {
+    let bytes = NSMutableData()
+    let destination = CGImageDestinationCreateWithData(bytes, "public.png" as CFString, 1, nil)!
+    CGImageDestinationAddImage(destination, image, nil)
+    _ = CGImageDestinationFinalize(destination)
+    return bytes as Data
+}
+
+@MainActor
+private func orbWait(_ predicate: () -> Bool) async throws {
+    let deadline = Date().addingTimeInterval(15)
+    while !predicate() {
+        if Date() > deadline { throw NSError(domain: "CrystalOrbTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Timed out awaiting background work"]) }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+func registerCrystalOrbLifecycleTests() {
+    let suite = "Crystal Orb lifecycle"
+    Registry.shared.add(suite: suite, TestCase(name: "replacing imports and closing cannot publish late query pixels", knownBug: nil) {
+        let directory = try Temporary.directory("orb-lifecycle")
+        let first = orbPNG(try orbImage(0, width: 1024, height: 768))
+        let second = orbPNG(try orbImage(1, width: 96, height: 64))
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+            model.importImage(data: first, session: session)
+            model.importImage(data: second, session: session)
+            try await orbWait { model.query != nil }
+            checkEqual(model.query?.image.width, 96, "replacement query wins")
+            check(model.matches.isEmpty && !model.searching, "no source has explicit empty search state")
+            let retained = model.query?.id
+            model.importImage(data: Data("not an image".utf8), session: session)
+            checkEqual(model.query?.id, retained, "query content stays mounted during replacement decoding")
+            try await orbWait { !model.importing }
+            checkEqual(model.query?.id, retained, "failed replacement preserves the previous usable query")
+            model.importImage(data: first, session: session)
+            checkEqual(model.query?.id, retained, "new decoding does not blank the canvas")
+            model.close()
+            // Let already-enqueued actor work run without interacting with a window.
+            for _ in 0..<100 { await Task.yield() }
+            check(model.query == nil && model.pair == nil && !model.isOpen, "late import cannot reopen or repopulate closed workspace")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "real video query search selection comparison and source replacement share exact identities", knownBug: nil) {
+        let directory = try Temporary.directory("orb-video-integration")
+        let url = try VideoFixture.makeMP4(in: directory, durationSeconds: 2.1, width: 320, height: 240, frameRate: 6)
+        let image = try await PhotosMedia.shared.image(url, seconds: 0)
+        let data = orbPNG(image)
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.settings.analysisMode = .quick
+            let videoProvider = NSItemProvider(contentsOf: url)!
+            let model = WaifuCrystalOrbModel()
+            check(CrystalOrbImport.accept([videoProvider], model: model, session: session), "video drop accepted")
+            try await orbWait { session.video != nil && !session.progress.isRunning }
+            check(!model.isOpen, "video drop remains in ordinary import workflow")
+            check(session.errorMessage == nil, "native fixture analyzed")
+            let imageProvider = NSItemProvider(item: data as NSData, typeIdentifier: "public.png")
+            check(CrystalOrbImport.accept([imageProvider], model: model, session: session), "external image representation accepted")
+            try await orbWait { model.query != nil && !model.searching && !model.matches.isEmpty }
+            try await orbWait { !model.loading && model.pair != nil }
+            let id = model.selectedID
+            checkEqual(session.selectedFrameIDs, Set(id.map { [$0] } ?? []), "search selected exact underlying frame")
+            checkEqual(model.pair?.frame.id, id, "loaded original belongs to selected identity")
+            checkEqual(model.pair?.candidate.width, 320, "native original loaded")
+            let mask = model.pair?.difference?.redMask
+            if let id, let other = model.matches.last?.id, other != id {
+                let firstDifference = model.pair?.difference?.id
+                model.select(other)
+                checkEqual(model.pair?.difference?.id, firstDifference, "complete old pair stays visible while the replacement loads")
+                try await orbWait { !model.loading && model.pair?.frame.id == other }
+                checkEqual(session.selectedFrameIDs, [other], "different candidate selects exact grid identity")
+                model.select(id)
+                check(!model.loading, "revisiting a cached candidate is immediate")
+                checkEqual(model.pair?.difference?.id, firstDifference, "revisit reuses original and difference without a second decode")
+            }
+            if let id { model.select(id) }
+            model.step(-1)
+            check(!model.loading && model.pair?.difference?.redMask === mask, "same candidate and strip boundary reuse originals and difference")
+            model.opacity = 0; model.redOverlay = true; model.mode = .difference
+            model.opacity = 1; model.mode = .swipe; model.swipe = 0.2
+            check(model.pair?.difference?.redMask === mask, "opacity mode and divider reuse the computed mask")
+            model.mode = .toggle; model.showCandidate.toggle(); model.pan = CGSize(width: 12, height: -3); model.zoom = 2
+            model.showCandidate.toggle()
+            checkEqual(model.zoom, 2, "toggle preserves linked zoom")
+            checkEqual(model.pan, CGSize(width: 12, height: -3), "toggle preserves pan")
+            model.close()
+            checkEqual(session.gridNavigationFrameID, id, "close requests exact frame through staged navigation")
+            model.importImage(data: data, session: session)
+            try await orbWait { model.query != nil }
+            session.loadVideo(at: url) // source revision changes even for the same path
+            model.sourceChanged(session: session)
+            check(model.matches.isEmpty && model.pair == nil && model.selectedID == nil, "source replacement clears stale matches and pixels synchronously")
+            model.close(); session.cancel()
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "large native comparisons use bounded previews and viewport tiles without a size rejection", knownBug: nil) {
+        let large = try ImageFixture.cgImage(width: 8192, height: 6144, gray: 0)
+        let small = try ImageFixture.cgImage(width: 32, height: 24, gray: 1)
+        let start = Date()
+        let result = try CrystalOrbDifferenceRenderer.render(target: large, candidate: small)
+        checkEqual(result.nativeDifference.extent.size, CGSize(width: 8192, height: 6144), "over-40 MP comparison retains native coordinates")
+        check(result.difference.width <= 1600 && result.redMask.width <= 1600, "preview buffers are bounded independently of original size")
+        let tile = try await CrystalOrbViewportRenderer.shared.render(image: result.nativeDifference,
+            canvas: result.alignment.size, viewport: CGSize(width: 128, height: 96), scale: 1, pan: .zero, backing: 2)
+        checkEqual(tile.width, 256, "actual-pixel inspection renders only viewport width")
+        checkEqual(tile.height, 192, "viewport raster accounts for backing resolution")
+        checkEqual(orbPixel(tile, x: 64, y: 64), [255, 255, 255, 255], "native tile contains real full-resolution differences")
+        print(String(format: "    Orb 50 MP comparison preview + native tile: %.3fs; preview %d×%d, tile %d×%d", Date().timeIntervalSince(start), result.difference.width, result.difference.height, tile.width, tile.height))
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "subtle pixel changes produce a visible red overlay and unchanged pixels stay clear", knownBug: nil) {
+        let target = try ImageFixture.cgImage(width: 32, height: 32, gray: 0.5)
+        let candidate = try ImageFixture.cgImage(width: 32, height: 32, gray: 0.55)
+        let result = try CrystalOrbDifferenceRenderer.render(target: target, candidate: candidate)
+        let red = orbPixel(result.redMask, x: 16, y: 16)
+        check(red[0] > 0 && red[1] == 0 && red[2] == 0, "mask is visibly red")
+        check(red[3] >= 40, "display curve makes small differences legible")
+        let tile = try await CrystalOrbViewportRenderer.shared.render(image: result.nativeRedMask,
+            canvas: result.alignment.size, viewport: CGSize(width: 32, height: 32), scale: 1, pan: .zero, backing: 1)
+        checkEqual(orbPixel(tile, x: 16, y: 16), red, "native overlay and preview have identical intensity and alignment")
+        let identical = try CrystalOrbDifferenceRenderer.render(target: target, candidate: target)
+        checkEqual(orbPixel(identical.redMask)[3], 0, "display curve never colors unchanged pixels")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "color profiles normalize and mask compositing respects zero and full opacity", knownBug: nil) {
+        func colored(_ space: CGColorSpace) -> CGImage {
+            let context = CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
+            context.setFillColor(CGColor(colorSpace: srgb, components: [0.35, 0.6, 0.25, 1])!)
+            context.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+            return context.makeImage()!
+        }
+        let srgb = colored(CGColorSpace(name: CGColorSpace.sRGB)!)
+        let p3 = colored(CGColorSpace(name: CGColorSpace.displayP3)!)
+        let normalized = try CrystalOrbDifferenceRenderer.render(target: srgb, candidate: p3)
+        check(orbPixel(normalized.difference, x: 8, y: 8).prefix(3).allSatisfy { $0 < 4 }, "same physical colors across profiles have near-zero difference")
+        let black = try ImageFixture.cgImage(width: 16, height: 16, gray: 0)
+        let white = try ImageFixture.cgImage(width: 16, height: 16, gray: 1)
+        let rendered = try CrystalOrbDifferenceRenderer.render(target: black, candidate: white)
+        func composite(_ opacity: CGFloat) -> CGImage {
+            let context = CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(black, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+            context.setAlpha(opacity); context.draw(rendered.redMask, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+            return context.makeImage()!
+        }
+        checkEqual(orbPixel(composite(0)), [0, 0, 0, 255], "zero opacity leaves original unchanged")
+        checkEqual(orbPixel(composite(1)), [255, 0, 0, 255], "full opacity applies full mask")
+        let transparentContext = CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        transparentContext.clear(CGRect(x: 0, y: 0, width: 16, height: 16))
+        let transparent = transparentContext.makeImage()!
+        let sameTransparent = try CrystalOrbDifferenceRenderer.render(target: transparent, candidate: transparent)
+        checkEqual(orbPixel(sameTransparent.difference), [0, 0, 0, 255], "identical transparent pixels are valid black matches")
+        checkEqual(orbPixel(sameTransparent.redMask)[3], 0, "transparent matches have no false overlay")
+    })
+}

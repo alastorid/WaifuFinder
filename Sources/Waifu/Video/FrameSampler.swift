@@ -86,14 +86,27 @@ final class AVFoundationFrameSampler: FrameSampling {
         try await VideoProbe.probe(url)
     }
 
+    func sample(_ url: URL,
+                analysisWidth: Int,
+                mode: AnalysisMode,
+                onProgress: @escaping @Sendable (Int) -> Void) -> AsyncThrowingStream<SampledFrame, Error> {
+        sample(url, analysisWidth: analysisWidth, mode: mode, timeRange: nil,
+               excludingSampleIndices: [], onProgress: onProgress)
+    }
+
     func sample(
         _ url: URL,
         analysisWidth: Int,
         mode: AnalysisMode,
+        timeRange: ClosedRange<Double>?,
+        excludingSampleIndices: Set<Int>,
         onProgress: @escaping @Sendable (Int) -> Void
     ) -> AsyncThrowingStream<SampledFrame, Error> {
         if let collection = VideoCollection.get(url) {
-            let producer = VideoCollectionSampler(collection: collection, width: analysisWidth, mode: mode, onProgress: onProgress)
+            let producer = VideoCollectionSampler(collection: collection, width: analysisWidth, mode: mode,
+                                                  timeRange: timeRange,
+                                                  excludingSampleIndices: excludingSampleIndices,
+                                                  onProgress: onProgress)
             return AsyncThrowingStream(unfolding: { try await producer.next() })
         }
         if let album = PhotosMedia.shared.album(url) {
@@ -104,6 +117,8 @@ final class AVFoundationFrameSampler: FrameSampling {
             url: url,
             analysisWidth: analysisWidth,
             mode: mode,
+            timeRange: timeRange,
+            excludingSampleIndices: excludingSampleIndices,
             onProgress: onProgress
         )
         // `AsyncThrowingStream` has no `unfolding:onCancel:` (only the non-throwing
@@ -239,6 +254,8 @@ private actor FrameSamplingProducer {
     private let url: URL
     private let analysisWidth: Int
     private let mode: AnalysisMode
+    private let timeRange: ClosedRange<Double>?
+    private let excludingSampleIndices: Set<Int>
     private let onProgress: @Sendable (Int) -> Void
 
     private let rasterizer = FrameRasterizer()
@@ -257,10 +274,14 @@ private actor FrameSamplingProducer {
     /// at it. See `SyncSampleIndex`.
     private var syncSamples = SyncSampleIndex(times: [], toleranceSeconds: 0)
 
-    init(url: URL, analysisWidth: Int, mode: AnalysisMode, onProgress: @escaping @Sendable (Int) -> Void) {
+    init(url: URL, analysisWidth: Int, mode: AnalysisMode, timeRange: ClosedRange<Double>?,
+         excludingSampleIndices: Set<Int>,
+         onProgress: @escaping @Sendable (Int) -> Void) {
         self.url = url
         self.analysisWidth = analysisWidth
         self.mode = mode
+        self.timeRange = timeRange
+        self.excludingSampleIndices = excludingSampleIndices
         self.onProgress = onProgress
     }
 
@@ -383,6 +404,8 @@ private actor FrameSamplingProducer {
             let decodedIndex = decodedCount
             decodedCount += 1
 
+            if excludingSampleIndices.contains(decodedIndex) { continue }
+
             // The mode's grid over decoded ordinals: the full pass
             // steps by one, the quick pass by `frameStep`, and the
             // first frame is always on the grid. The reader cannot
@@ -395,6 +418,7 @@ private actor FrameSamplingProducer {
             guard presentation.isValid, presentation != .invalid else { continue }
             let seconds = presentation.seconds
             guard seconds >= 0, seconds.isFinite else { continue }
+            if let timeRange, !timeRange.contains(seconds) { continue }
 
             // Keyframe mode keeps only the frames the encoder made
             // self-sufficient, matched by timestamp against the index

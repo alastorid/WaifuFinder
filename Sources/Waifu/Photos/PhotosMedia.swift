@@ -216,6 +216,52 @@ final class PhotosMedia: @unchecked Sendable {
         }
     }
 
+    /// Deletes the exact selected assets, but only if they still belong to the
+    /// album the user selected them from. PhotoKit moves deleted items to
+    /// Recently Deleted, where Photos manages recovery and final removal.
+    func deleteAssets(identifiers: [String], collectionIdentifier: String) async throws {
+        var uniqueIdentifiers: [String] = []
+        var seen = Set<String>()
+        for identifier in identifiers where seen.insert(identifier).inserted {
+            uniqueIdentifiers.append(identifier)
+        }
+        guard !uniqueIdentifiers.isEmpty else {
+            throw Self.failure("No Photos items are selected for deletion.")
+        }
+
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            throw Self.failure("Allow WaifuFinder to make changes to Photos in System Settings → Privacy & Security → Photos.")
+        }
+        guard let collection = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [collectionIdentifier], options: nil).firstObject else {
+            throw Self.failure("This album is no longer available in Photos.")
+        }
+
+        let currentMembers = PHAsset.fetchAssets(in: collection, options: nil)
+        var memberIdentifiers = Set<String>()
+        currentMembers.enumerateObjects { asset, _, _ in
+            memberIdentifiers.insert(asset.localIdentifier)
+        }
+        guard uniqueIdentifiers.allSatisfy(memberIdentifiers.contains) else {
+            throw Self.failure("The album changed after the selection was made. Review the refreshed album and try again.")
+        }
+
+        let result = PHAsset.fetchAssets(withLocalIdentifiers: uniqueIdentifiers, options: nil)
+        guard result.count == uniqueIdentifiers.count else {
+            throw Self.failure("One or more selected Photos items are no longer available.")
+        }
+        var assets: [PHAsset] = []
+        result.enumerateObjects { asset, _, _ in assets.append(asset) }
+        guard assets.count == uniqueIdentifiers.count else {
+            throw Self.failure("One or more selected Photos items are no longer available.")
+        }
+
+        try await PHPhotoLibrary.shared().performChanges {
+            PHAssetChangeRequest.deleteAssets(assets as NSArray)
+        }
+    }
+
     /// Commit the displayed order to the real album using PhotoKit's tracked
     /// snapshot, including media outside this app's still-photo view.
     func syncOrder(collectionIdentifier: String, assetIdentifiers: [String]) async throws {

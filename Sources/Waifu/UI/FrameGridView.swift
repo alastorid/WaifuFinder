@@ -62,7 +62,7 @@ struct FrameGridView: View {
                 .onKeyPress(keys: ["a"]) { press in
                     guard press.modifiers.contains(.command),
                           !press.modifiers.contains(.option), !press.modifiers.contains(.control),
-                          session.previewFrame == nil, session.uncover == nil else { return .ignored }
+                          session.previewFrame == nil, session.uncover == nil, !session.crystalOrbIsOpen else { return .ignored }
                     session.selectAllDisplayedFrames()
                     return .handled
                 }
@@ -123,6 +123,9 @@ struct FrameGridView: View {
                 }
                 // @Published emits before its setter commits. Scrolling here can
                 // force a render; defer it so that render sees the closed preview.
+                .onReceive(session.$crystalOrbIsOpen.dropFirst().receive(on: DispatchQueue.main)) { active in
+                    if !active, !session.crystalOrbIsOpen { restoreKeyboardFocus(reason: "Crystal Orb closed") }
+                }
                 .onReceive(session.previewFrameUpdates.dropFirst()) { frame in
                     guard frame == nil, session.previewFrame == nil else { return }
                     restoreKeyboardFocus(reason: "preview closed")
@@ -316,7 +319,7 @@ struct FrameGridView: View {
 
     /// Grid navigation is active only while neither overlay is up.
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
-        guard session.previewFrame == nil, session.uncover == nil else { return .ignored }
+        guard session.previewFrame == nil, session.uncover == nil, !session.crystalOrbIsOpen else { return .ignored }
         let result: KeyPress.Result
         let commandOnly = press.modifiers.contains(.command)
             && !press.modifiers.contains(.shift)
@@ -356,7 +359,7 @@ struct FrameGridView: View {
     }
 
     private func isNavigationTarget(_ id: FrameID) -> Bool {
-        session.previewFrame == nil && session.uncover == nil
+        session.previewFrame == nil && session.uncover == nil && !session.crystalOrbIsOpen
             && id == session.focusedFrameID && id == session.gridNavigationFrameID
     }
 
@@ -385,17 +388,21 @@ struct FrameGridView: View {
             PhotosMedia.shared.photoItemURL(for: $0.url, seconds: frame.timeSeconds)
         }
 
-        Button("Preview") { session.showPreview(frame) }
-        if let photoURL {
-            Button("View in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
-        } else {
-            Button(isSelected ? "Deselect" : "Select") { session.select(frame.id) }
-        }
-
         if let groupID = frame.groupID,
            let group = session.groups.first(where: { $0.id == groupID }) {
-            Divider()
             Button("Select All in Group") { session.selectAll(in: group) }
+        }
+
+        if session.offersFocusedRangeAnalysis {
+            Button("Analyze ±3 Seconds Range") { session.analyzeFocusedRange(around: frame) }
+                .disabled(!session.canAnalyzeFocusedRange)
+                .help("Analyze every frame from 3 seconds before to 3 seconds after this frame.")
+        }
+
+        if let photoURL {
+            Button("View in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
+        } else if !isSelected {
+            Button("Select") { session.select(frame.id) }
         }
 
         if photoURL != nil {

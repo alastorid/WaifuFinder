@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The main window content.
 ///
@@ -13,6 +14,7 @@ import SwiftUI
 /// grid, and the second is what the order panel is for.
 struct RootView: View {
     @StateObject private var session = WaifuSession()
+    @StateObject private var orb = WaifuCrystalOrbModel()
     // Only the player panel observes its clock; playback must not refresh the grid.
     @State private var preview = PreviewController()
     // One per window, shared by the Sort and Filter fraction and the cloud in the
@@ -32,15 +34,15 @@ struct RootView: View {
     var body: some View {
         ZStack {
             if showWelcomeScreen {
-                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace)
+                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace, imageDrop: { CrystalOrbImport.accept($0, model: orb, session: session) })
             } else if showPhotosWorkspace {
                 PhotosWorkspaceView(session: session, link: link, onBackToWelcome: returnToWelcome,
-                                    trailingControls: { workspaceControls }) {
+                                    orbControl: { orbButton }, trailingControls: { workspaceControls }) {
                     mainContent
                 }
-                .opacity(session.previewFrame == nil ? 1 : 0)
-                .allowsHitTesting(session.previewFrame == nil && session.uncover == nil)
-                .accessibilityHidden(session.previewFrame != nil || session.uncover != nil)
+                .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
+                .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
+                .accessibilityHidden(session.previewFrame != nil || session.uncover != nil || orb.isOpen)
             } else if session.progress.isRunning {
                 AnalysisProgressView(progress: session.progress, video: session.video, cancel: session.cancel)
             } else if session.video != nil {
@@ -51,12 +53,12 @@ struct RootView: View {
                 // Keep keyboard focus intact as well. Pointer and accessibility
                 // interaction are gated below; monitors own preview keyboard input.
                 mainContent
-                    .opacity(session.previewFrame == nil ? 1 : 0)
-                    .allowsHitTesting(session.previewFrame == nil && session.uncover == nil)
-                    .accessibilityHidden(session.previewFrame != nil || session.uncover != nil)
+                    .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
+                    .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
+                    .accessibilityHidden(session.previewFrame != nil || session.uncover != nil || orb.isOpen)
             } else {
                 // Full-window drop zone when no video is loaded
-                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace)
+                DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace, imageDrop: { CrystalOrbImport.accept($0, model: orb, session: session) })
             }
             // Keep dismissal immediate; the grid restores scrolling and focus only
             // after the session mutation has committed.
@@ -71,6 +73,9 @@ struct RootView: View {
             if let uncover = session.uncover {
                 UncoverView(session: uncover, close: { session.closeUncover() })
             }
+            if orb.isOpen {
+                WaifuCrystalOrbView(model: orb, session: session).transition(.identity)
+            }
             // The east egg's light. Mounted for the life of the window rather than
             // while a beam exists: it costs one empty view until something is drawn,
             // and it keeps a light that moves sixty times a second out of the
@@ -78,6 +83,12 @@ struct RootView: View {
             ChiaroscuroWindowLayer(link: link)
                 .frame(width: 0, height: 0)
         }
+        .onDrop(of: [.fileURL, .url, .image], isTargeted: nil) { providers in
+            CrystalOrbImport.accept(providers, model: orb, session: session)
+        }
+        .onDisappear { if orb.isOpen { orb.close() } }
+        .onChange(of: session.thumbnailGeneration) { _, _ in orb.sourceChanged(session: session) }
+        .onChange(of: orb.isOpen) { _, active in if active { preview.pause() } }
         .onOpenURL { url in
             if let source = FirefoxIntegration.incomingURL(url) {
                 showWelcomeScreen = false
@@ -86,7 +97,10 @@ struct RootView: View {
             }
             else { session.errorMessage = "Unsupported media URL. Use an HTTP or HTTPS link." }
         }
-        .background { PreviewToggleKeyboard(session: session).frame(width: 0, height: 0) }
+        .background {
+            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb)
+                .frame(width: 0, height: 0)
+        }
         .background {
             ExportPanel(session: session, isPresented: $session.showExportSheet)
                 .frame(width: 0, height: 0)
@@ -100,6 +114,7 @@ struct RootView: View {
         .onChange(of: session.uncover != nil) { _, active in if active { preview.pause() } }
         .onChange(of: session.previewFrame != nil) { _, active in if active { preview.pause() } }
         .onChange(of: session.progress.isRunning) { _, running in
+            if !running, orb.isOpen, orb.query != nil { orb.search() }
             if running {
                 showWelcomeScreen = false
                 preview.pause()
@@ -125,6 +140,7 @@ struct RootView: View {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
                         PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                        orbButton
                         if session.uncover == nil {
                             if photosAlbum != nil {
                                 Button { showPhotosWorkspace = true } label: {
@@ -164,12 +180,19 @@ struct RootView: View {
         }
     }
 
+    private var orbButton: some View {
+        CrystalOrbToolbarButton(model: orb) {
+            if orb.isOpen { orb.close() } else { orb.open(session: session) }
+        }
+    }
+
     private func openPhotosWorkspace() {
         showWelcomeScreen = false
         showPhotosWorkspace = true
     }
 
     private func returnToWelcome() {
+        if orb.isOpen { orb.close() }
         preview.pause()
         if session.progress.isRunning { session.cancel() }
         session.closeUncover()

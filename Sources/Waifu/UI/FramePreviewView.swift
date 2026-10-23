@@ -46,6 +46,9 @@ struct FramePreviewView: View {
     @State private var arrows = PreviewArrowNavigation()
     @State private var arrowRepeater = PreviewArrowRepeater()
     @State private var loadID = UUID()
+    @State private var photoMetadata: PhotoMetadata?
+    @State private var metadataLoading = false
+    @State private var metadataError: String?
 
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
@@ -69,11 +72,34 @@ struct FramePreviewView: View {
             VStack(spacing: 0) {
                 header
                 Divider()
-                content
+                HStack(spacing: 0) {
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
+
+                    if photoInfoURL != nil {
+                        Divider()
+                            .frame(maxHeight: .infinity)
+                        PhotoMetadataInspectorView(metadata: photoMetadata,
+                                                   isLoading: metadataLoading,
+                                                   errorMessage: metadataError)
+                            .frame(maxHeight: .infinity)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(24)
         }
         .task(id: frame.id) { await load(frame) }
+        .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
+        .onChange(of: frame.id) { _, _ in
+            // Clear synchronously with navigation so a rapid selection change
+            // can never leave the preceding photo's details in the inspector.
+            photoMetadata = nil
+            metadataError = nil
+            metadataLoading = false
+        }
         // While this overlay is up it *owns* the navigation keys, rather than hoping they
         // reach whoever holds the keyboard. Using a zoom button moves focus into this
         // window, and a focused SwiftUI `Button` does not pass the arrow keys up to an
@@ -373,6 +399,45 @@ struct FramePreviewView: View {
             guard !Task.isCancelled, loadID == request,
                   session.previewFrame?.id == target.id, session.video?.url == source else { return }
             note = error.localizedDescription
+        }
+    }
+
+    private var photoInfoURL: URL? {
+        guard let source = session.video?.url else { return nil }
+        return PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds)
+    }
+
+    private var metadataTaskID: String {
+        "\(frame.id.raw):\(session.video?.url.absoluteString ?? ""):\(photoInfoURL?.absoluteString ?? "")"
+    }
+
+    /// Metadata fills the visible sidebar independently of original-image decoding.
+    private func loadPhotoMetadata(for target: AnalyzedFrame) async {
+        guard let source = session.video?.url,
+              let photoURL = PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) else { return }
+        metadataLoading = true
+        metadataError = nil
+        defer {
+            if !Task.isCancelled, session.previewFrame?.id == target.id {
+                metadataLoading = false
+            }
+        }
+        do {
+            if let initial = await PhotoMetadataService.shared.basic(for: photoURL) {
+                guard !Task.isCancelled, session.previewFrame?.id == target.id,
+                      session.video?.url == source else { return }
+                photoMetadata = initial
+            }
+            let result = try await PhotoMetadataService.shared.load(for: photoURL)
+            guard !Task.isCancelled, session.previewFrame?.id == target.id,
+                  session.video?.url == source,
+                  PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) == photoURL else { return }
+            photoMetadata = result
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, session.previewFrame?.id == target.id else { return }
+            metadataError = error.localizedDescription
         }
     }
 

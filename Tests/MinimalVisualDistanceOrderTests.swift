@@ -153,12 +153,14 @@ func registerMinimalVisualDistanceOrderTests() {
             check(rebuildTime < .seconds(1), "rating keys must not decode 1,800 full probability vectors")
             check(toggleTime < .milliseconds(100), "enabling visual order stays responsive")
             checkEqual(session.gridRevision, revision, "starting work keeps an unchanged grid mounted")
-            check(session.isSortingVisualDistance, "the route is scheduled after the checkbox handler returns")
+            check(session.isComputingVisualDistance, "the route is scheduled after the checkbox handler returns")
+            check(!session.isSortingVisualDistance, "quick routes do not flash a busy indicator")
+            checkEqual(session.displayedFrames.map(\.id), frames.map(\.id), "pending route keeps the published grid stable")
             for _ in 0..<250 {
-                if !session.isSortingVisualDistance { break }
+                if !session.isComputingVisualDistance { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
-            check(!session.isSortingVisualDistance, "background route completes")
+            check(!session.isComputingVisualDistance, "background route completes")
             checkEqual(session.displayedFrames.map(\.id), frames.map(\.id), "missing features retain every photo in score order")
             checkEqual(session.gridRevision, revision, "an unchanged route does not rebuild the grid on completion")
             checkEqual(session.tagCommonTags, commonTags, "visual routing reuses common tags")
@@ -194,10 +196,10 @@ func registerMinimalVisualDistanceOrderTests() {
             session.updateAnalyzedFrames(frames)
             session.frameLimits.time.low = 5
             for _ in 0..<250 {
-                if !session.isSortingVisualDistance { break }
+                if !session.isComputingVisualDistance { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
-            check(!session.isSortingVisualDistance, "background route completes")
+            check(!session.isComputingVisualDistance, "background route completes")
             let forward = session.displayOrderFrames.map(\.id)
             checkEqual(Set(forward), Set(frames.suffix(7).map(\.id)), "obsolete unfiltered work cannot restore hidden photos")
             let expected = try MinimalVisualDistanceOrder.sorted(Array(frames.suffix(7)))
@@ -205,11 +207,11 @@ func registerMinimalVisualDistanceOrderTests() {
             checkEqual(session.displayedFrames.map(\.id), forward, "rendering and navigation share the same visual order")
             session.frameOrder.toggleDirection(of: .minimalVisualDistance)
             checkEqual(session.displayOrderFrames.map(\.id), Array(forward.reversed()), "reverse is immediate")
-            check(!session.isSortingVisualDistance, "reverse reuses its cached route")
+            check(!session.isComputingVisualDistance, "reverse reuses its cached route")
             session.frameLimits.time.low = 9
-            check(session.isSortingVisualDistance, "a new shown set schedules another route")
+            check(session.isComputingVisualDistance, "a new shown set schedules another route")
             session.frameLimits.time.low = 5
-            check(!session.isSortingVisualDistance, "undoing a pending filter change restores the cached route")
+            check(!session.isComputingVisualDistance, "undoing a pending filter change restores the cached route")
             checkEqual(session.displayOrderFrames.map(\.id), Array(forward.reversed()), "cache restoration keeps the chosen direction")
             session.frameLimits.time.low = 9
             // Visual distance is the only signal on by default, and the last
@@ -218,7 +220,7 @@ func registerMinimalVisualDistanceOrderTests() {
             session.frameOrder.setEnabled(true, for: .time)
             session.frameOrder.setEnabled(false, for: .minimalVisualDistance)
             check(!session.frameOrder.minimalVisualDistance.enabled, "the visual route can be switched off once another signal is on")
-            check(!session.isSortingVisualDistance, "turning the control off cancels the pending route")
+            check(!session.isComputingVisualDistance, "turning the control off cancels the pending route")
             check(!session.usesGroupRows, "turning off the global sort does not enable grouping")
             session.groupingEnabled = true
             check(session.usesGroupRows, "group rows resume when grouping is explicitly enabled")

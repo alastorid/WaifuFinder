@@ -18,6 +18,16 @@ actor PhotosAnalysisCheckpoint {
         completed.values.sorted { ($0.timeSeconds, $0.id.raw) < ($1.timeSeconds, $1.id.raw) }
     }
 
+    /// The merger emits an ordered prefix. Keep its newly grouped results and
+    /// append the retained photos it has not reached yet, so retry publications
+    /// can advance the grid/count without making the existing tail disappear.
+    nonisolated static func includingRetainedTail(_ retained: [AnalyzedFrame],
+                                                after prefix: [AnalyzedFrame]) -> [AnalyzedFrame] {
+        guard let last = prefix.last else { return retained }
+        let boundary = (last.timeSeconds, last.id.raw)
+        return prefix + retained.drop { ($0.timeSeconds, $0.id.raw) <= boundary }
+    }
+
     /// Replaying retained scores through grouping preserves chronological
     /// neighbourhoods when a newly downloaded photo fills an earlier gap.
     nonisolated static func merging(_ retained: [AnalyzedFrame],

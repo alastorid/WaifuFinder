@@ -469,23 +469,23 @@ func registerTagSummaryTests() {
             session.frameLimits.time.low = 126
             let revision = session.gridRevision
             for _ in 0..<500 {
-                if !session.isSummarizingTags { break }
+                if !session.isComputingTagSummary { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
-            check(!session.isSummarizingTags, "current summary completes")
+            check(!session.isComputingTagSummary, "current summary completes")
             checkEqual(session.tagCommonTags, ["tag 1"], "obsolete jobs cannot restore a filtered-out tag")
             checkEqual(session.gridRevision, revision, "a summary publication does not rebuild the photo grid")
             session.settings.taggerThreshold = 1
             session.settings.taggerThreshold = 0.35
-            check(!session.isSummarizingTags, "undoing a pending threshold reuses the completed result")
+            check(!session.isComputingTagSummary, "undoing a pending threshold reuses the completed result")
             try await Task.sleep(for: .milliseconds(100))
             checkEqual(session.tagCommonTags, ["tag 1"], "a canceled threshold cannot overwrite the restored summary")
             session.frameOrder.toggleDirection(of: .time)
-            check(!session.isSummarizingTags, "another display order reuses the completed summary")
+            check(!session.isComputingTagSummary, "another display order reuses the completed summary")
             checkEqual(session.tagCommonTags, ["tag 1"], "ordering does not invalidate tag vectors or summaries")
             session.settings.taggerThreshold = 1
             for _ in 0..<500 {
-                if !session.isSummarizingTags { break }
+                if !session.isComputingTagSummary { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
             checkEqual(session.tagCommonTags, [], "threshold changes update cached vectors' summary")
@@ -493,7 +493,7 @@ func registerTagSummaryTests() {
             session.updateAnalyzedFrames(frames)
             session.updateAnalyzedFrames([])
             try await Task.sleep(for: .milliseconds(50))
-            check(!session.isSummarizingTags, "clearing the album cancels pending work")
+            check(!session.isComputingTagSummary, "clearing the album cancels pending work")
             checkEqual(session.tagCommonTags, [], "obsolete work cannot restore cleared tags")
         }.value
     })

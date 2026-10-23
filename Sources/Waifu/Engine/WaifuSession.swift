@@ -226,6 +226,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var tagSummaryRevision: UInt64 = 0
     private var tagSummaryGeneration = UUID()
     private var tagSummaryTask: Task<TagSummary.Labels?, Never>?
+    private var tagSummaryLoadingTask: Task<Void, Never>?
     private var pendingTagSummaryInput: TagSummaryInput?
     private var completedTagSummaryInput: TagSummaryInput?
     private var completedTagSummaryLabels: TagSummary.Labels?
@@ -252,6 +253,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// every tagging vector or rebuild the tag summaries on the UI actor.
     private var visualOrderBaseFrames: [AnalyzedFrame]?
     @Published private(set) var isSortingVisualDistance = false
+    var isComputingVisualDistance: Bool { pendingVisualOrderInput != nil }
     private var rowPosition: [FrameID: (row: Int, position: Int)] = [:]
     private var rowHeightRatios: [String: Double] = [:]
     /// Changes only when the grid's arrangement or layout inputs change. Selection,
@@ -279,6 +281,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var selectionAnchor: FrameID?
     @Published private(set) var isSyncingPhotosOrder = false
     @Published private(set) var isWritingPhotosTags = false
+    @Published private(set) var isDeletingPhotos = false
     let photosKeywordJob = PhotosKeywordJobStatus()
     private var photosKeywordTask: Task<Void, Never>?
     @Published private(set) var photosOrderSyncMessage: String?
@@ -297,6 +300,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     func focusFromPointer(_ id: FrameID) {
+        if !crystalOrbIsOpen, crystalOrbRevealID != nil, crystalOrbRevealID != id {
+            let previous = crystalOrbRevealID
+            crystalOrbRevealID = nil
+            if let previous, visualOrderBaseFrames?.contains(where: { $0.id == previous }) != true {
+                displayedFrames.removeAll { $0.id == previous }
+                rebuildDisplayedLayout()
+            }
+            recomputeDisplayedFrames()
+        }
         gridNavigationFrameID = nil
         focusedFrameID = id
     }
@@ -305,6 +317,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         gridNavigationFrameID = id
         gridScrollSubject.send(id)
     }
+    @Published var crystalOrbIsOpen = false
+    private var crystalOrbRevealID: FrameID?
+
+    /// Selection changes are cheap while browsing; only a hidden candidate needs
+    /// a transient layout pin. The pin never edits filter/group preferences.
+    func selectCrystalOrbCandidate(_ id: FrameID) {
+        guard frame(id: id) != nil else { return }
+        focusFromPointer(id)
+        selectFrame(id)
+    }
+
+    func finishCrystalOrbNavigation() {
+        guard let id = focusedFrameID, let candidate = frame(id: id) else { return }
+        if !displayedFrames.contains(where: { $0.id == id }) {
+            crystalOrbRevealID = id
+            displayedFrames.append(candidate)
+            rebuildDisplayedLayout()
+        }
+        requestGridScroll(to: id)
+    }
+
     @Published var showExportSheet: Bool = false
     @Published private(set) var uncover: UncoverSession?
 
@@ -543,6 +576,37 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         syncPhotosOrder(forPhotoIdentifiers: identifiers)
     }
 
+    /// Deletes the selected Photos items through PhotoKit. Several sampled frames
+    /// from one Photos video resolve to the same asset and are deleted only once.
+    func deleteSelectedPhotos() {
+        guard !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
+              !progress.isRunning, uncover == nil, !showExportSheet,
+              let albumURL = photosAlbumURL,
+              let collectionIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
+
+        var seen = Set<String>()
+        let identifiers = displayOrderFrames.compactMap { frame -> String? in
+            guard selectedFrameIDs.contains(frame.id),
+                  let identifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
+                  seen.insert(identifier).inserted else { return nil }
+            return identifier
+        }
+        guard !identifiers.isEmpty else { return }
+
+        isDeletingPhotos = true
+        Task {
+            defer { isDeletingPhotos = false }
+            do {
+                try await PhotosMedia.shared.deleteAssets(identifiers: identifiers,
+                                                         collectionIdentifier: collectionIdentifier)
+            } catch {
+                if photosAlbumURL == albumURL {
+                    errorMessage = "Couldn’t delete selected items from Photos: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     func writePhotosTags(for frame: AnalyzedFrame) {
         guard !isWritingPhotosTags, let sourceURL = video?.url else { return }
         guard let vocabulary = tagVocabulary else {
@@ -647,10 +711,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     /// Traits present on the frames currently shown in the grid, sorted for the
     /// wrapping tag filter. The selected tags are kept separately by `TagFilter`.
-    @Published private(set) var tagFacetTags: [String] = []
+    private struct TagSummaryPresentation: Equatable {
+        var available: [String] = []
+        var common: [String] = []
+    }
+    // Publish both lists together; SwiftUI still reconciles chips by tag identity.
+    @Published private var tagSummaryPresentation = TagSummaryPresentation()
+    var tagFacetTags: [String] { tagSummaryPresentation.available }
     /// Tags present on every frame currently shown in the grid.
-    @Published private(set) var tagCommonTags: [String] = []
+    var tagCommonTags: [String] { tagSummaryPresentation.common }
     @Published private(set) var isSummarizingTags = false
+    var isComputingTagSummary: Bool { pendingTagSummaryInput != nil }
 
     /// The same frames split into grid lines — one per group, plus a final line for
     /// the frames in no group. Used when `groupRows` is on.
@@ -938,6 +1009,51 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         analysisTask = Task.detached { [weak self] in
             await self?.runAnalysisPipeline(for: nil, existing: existing, settings: config, token: token,
                                            photosCheckpoint: checkpoint)
+        }
+    }
+
+    /// Whether a video can offer a focused pass in addition to its Quick or
+    /// Keyframe analysis. Photos albums and Full analysis already cover every frame.
+    var offersFocusedRangeAnalysis: Bool {
+        settings.analysisMode != .full && photosAlbumURL == nil && video != nil
+    }
+
+    /// Focused analysis is available after the initial analysis has finished and
+    /// while no other operation is changing its frame set.
+    var canAnalyzeFocusedRange: Bool {
+        offersFocusedRangeAnalysis && !frames.isEmpty
+            && [.complete, .failed, .cancelled].contains(progress.phase)
+            && !isRegrouping && !taggingProgress.isRunning && !restoringTagMemory
+    }
+
+    /// Scores only the not-yet-analyzed frames within three seconds on either
+    /// side of the chosen thumbnail, then adds them to the existing result set.
+    func analyzeFocusedRange(around frame: AnalyzedFrame) {
+        guard canAnalyzeFocusedRange, let video,
+              frame.timeSeconds.isFinite, video.durationSeconds.isFinite else { return }
+        let lower = max(0, frame.timeSeconds - 3)
+        let upper = min(video.durationSeconds, frame.timeSeconds + 3)
+        guard lower <= upper else { return }
+
+        analysisTask?.cancel()
+        analysisGeneration = UUID()
+        let token = analysisGeneration
+        let config = settings.validated()
+        let existingFrames = frames
+        let existingGroups = groups
+        let expected = max(1, Int(ceil((upper - lower) * max(1, video.frameRate))))
+        let presentInRange = existingFrames.reduce(into: 0) { count, existing in
+            if (lower...upper).contains(existing.timeSeconds) { count += 1 }
+        }
+        progress = AnalysisProgress(phase: .sampling, processed: 0,
+                                    total: max(1, expected - presentInRange), elapsed: 0,
+                                    message: "Finding missing frames in the ±3-second range…")
+        errorMessage = nil
+        let timeRange = lower...upper
+        analysisTask = Task.detached { [weak self] in
+            await self?.runFocusedRangePipeline(video: video, settings: config, timeRange: timeRange,
+                                                existingFrames: existingFrames, existingGroups: existingGroups,
+                                                token: token)
         }
     }
 
@@ -1628,6 +1744,110 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     // MARK: Pipeline
 
+    /// Score missing frames in a bounded timeline range while retaining the
+    /// existing analysis. The sampler excludes already analyzed decoded indices
+    /// before it rasterizes or sends a frame to Vision.
+    private nonisolated func runFocusedRangePipeline(video: VideoInfo, settings: WaifuSettings,
+                                                    timeRange: ClosedRange<Double>,
+                                                    existingFrames: [AnalyzedFrame],
+                                                    existingGroups: [FrameGroup], token: UUID) async {
+        let started = Date()
+        let rangeSeconds = max(0, timeRange.upperBound - timeRange.lowerBound)
+        let expected = max(1, Int(ceil(rangeSeconds * max(1, video.frameRate)))
+                           - existingFrames.filter { timeRange.contains($0.timeSeconds) }.count)
+        var progress = AnalysisProgress(phase: .scoring, total: expected,
+                                       message: "Analyzing missing frames in the ±3-second range…")
+        var scoringTask: Task<Void, Never>?
+        do {
+            await acceptProgress(progress, token: token)
+            try Task.checkCancellation()
+            let excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
+            let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
+                mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices, onProgress: { _ in })
+            let writer = ThumbnailWriterBridge(cache: thumbnailCache,
+                videoStem: video.url.deletingPathExtension().lastPathComponent)
+            let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(
+                    minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
+                thumbnailStore: writer, analysisWidth: settings.analysisWidth,
+                workerCount: FrameProcessingConcurrency(width: video.width, height: video.height,
+                                                        analysisWidth: settings.analysisWidth).scoringWorkers,
+                cacheSuffix: "-\(token.uuidString)")
+            let scoring = pipeline.start(frames: sampled,
+                minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in })
+            scoringTask = scoring.task
+            var additions: [AnalyzedFrame] = []
+            var lastPulse = started
+            for try await frame in scoring.frames {
+                try Task.checkCancellation()
+                additions.append(frame)
+                progress.processed += 1
+                progress.facesProcessed += frame.faceCount
+                if frame.hasSignificantFace { progress.framesWithFaces += 1 }
+                let now = Date()
+                if now.timeIntervalSince(lastPulse) >= 0.25 {
+                    progress.elapsed = now.timeIntervalSince(started)
+                    await acceptProgress(progress, token: token)
+                    lastPulse = now
+                }
+            }
+            try Task.checkCancellation()
+
+            guard !additions.isEmpty else {
+                progress.phase = .complete
+                progress.total = 0
+                progress.elapsed = Date().timeIntervalSince(started)
+                progress.groupedFrames = existingFrames.count
+                progress.groupsIdentified = existingGroups.count
+                progress.message = "Complete · no missing frames in this range"
+                await completeFocusedRangeAnalysis(frames: existingFrames, groups: existingGroups,
+                                                   progress: progress, token: token)
+                return
+            }
+
+            progress.phase = .grouping
+            progress.processed = additions.count
+            progress.total = additions.count
+            progress.elapsed = Date().timeIntervalSince(started)
+            progress.message = "Adding frames and updating groups…"
+            await acceptProgress(progress, token: token)
+
+            var combinedByID: [FrameID: AnalyzedFrame] = [:]
+            combinedByID.reserveCapacity(existingFrames.count + additions.count)
+            for frame in existingFrames { combinedByID[frame.id] = frame }
+            for frame in additions where combinedByID[frame.id] == nil {
+                combinedByID[frame.id] = frame
+            }
+            let combined = combinedByID.values.sorted {
+                $0.timeSeconds == $1.timeSeconds
+                    ? $0.id.sampleIndex < $1.id.sampleIndex
+                    : $0.timeSeconds < $1.timeSeconds
+            }
+            let grouper = IncrementalFrameGrouper(settings: settings.grouping)
+            for frame in combined {
+                try Task.checkCancellation()
+                try grouper.append(frame)
+            }
+            let groups = try grouper.finish()
+            let groupedFrames = Self.assignGroups(groups, to: combined)
+            try Task.checkCancellation()
+            progress.phase = .complete
+            progress.total = progress.processed
+            progress.elapsed = Date().timeIntervalSince(started)
+            progress.groupedFrames = combined.count
+            progress.groupsIdentified = groups.count
+            progress.message = "Complete · added \(combined.count - existingFrames.count) frames"
+            await completeFocusedRangeAnalysis(frames: groupedFrames, groups: groups,
+                                               progress: progress, token: token)
+        } catch {
+            scoringTask?.cancel()
+            await scoringTask?.value
+            progress.phase = error is CancellationError ? .cancelled : .failed
+            progress.elapsed = Date().timeIntervalSince(started)
+            progress.message = error is CancellationError ? "Cancelled" : "Failed: \(error.localizedDescription)"
+            await failAnalysis(progress: progress, error: error, token: token)
+        }
+    }
+
     /// Decode, score, accumulate and group away from the UI actor. Only small
     /// progress values cross actors during the pass; the grid receives one result.
     private nonisolated func runAnalysisPipeline(for url: URL?, existing: VideoInfo?,
@@ -1720,12 +1940,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 let now = Date()
                 // Start with a useful batch rather than mounting a singleton
                 // grid that is immediately replaced by the rest of the album.
-                // Small albums publish in full through completeAnalysis below.
-                // A retry keeps the complete existing grid visible while gaps
-                // are filled; publishing a prefix would hide its retained tail.
-                if album != nil && retained.isEmpty && analyzed.count >= 64 && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
+                // Small initial loads publish in full through completeAnalysis below.
+                // A retry publishes its growing prefix with the retained tail
+                // still attached, so the visible count advances as gaps fill.
+                if album != nil && (!retained.isEmpty || analyzed.count >= 64) && now.timeIntervalSince(lastPhotosUpdate) >= 0.75 {
                     let liveGroups = try grouping.snapshot()
-                    let liveFrames = Self.assignGroups(liveGroups, to: analyzed)
+                    let liveFrames = PhotosAnalysisCheckpoint.includingRetainedTail(retained,
+                        after: Self.assignGroups(liveGroups, to: analyzed))
                     await acceptLivePhotos(frames: liveFrames, groups: liveGroups, token: token)
                     lastPhotosUpdate = now
                 }
@@ -1837,6 +2058,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard analysisGeneration == token, !self.progress.isTerminal else { return }
         self.progress = progress
     }
+    private func completeFocusedRangeAnalysis(frames incoming: [AnalyzedFrame], groups: [FrameGroup],
+                                              progress: AnalysisProgress, token: UUID) async {
+        guard analysisGeneration == token else { return }
+        if incoming.count != frames.count {
+            self.groups = groups
+            updateAnalyzedFrames(incoming)
+        }
+        self.progress = progress
+        analysisTask = nil
+        isRegrouping = false
+
+        let cacheKeys = TagResultCacheKeys.make(videoURL: video?.url, frames: frames,
+                                                vocabulary: tagVocabulary,
+                                                analysisWidth: settings.analysisWidth,
+                                                analysisMode: settings.analysisMode)
+        taggingCacheKeys = cacheKeys
+        taggingVocabularyFingerprint = tagVocabulary?.cacheFingerprint
+        if !cacheKeys.isEmpty {
+            await TagResultMemory.shared.remember(frames: frames, keys: cacheKeys)
+        }
+    }
     private func completeAnalysis(frames: [AnalyzedFrame], groups: [FrameGroup],
                                   progress: AnalysisProgress, token: UUID) async {
         guard analysisGeneration == token else { return }
@@ -1887,6 +2129,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func clearResults() {
         photosAnalysisCheckpoint = nil
         defersVisualOrder = false
+        crystalOrbRevealID = nil
         thumbnailGeneration = UUID()
         for request in thumbnailRequests.values { request.task.cancel() }
         thumbnailRequests.removeAll(keepingCapacity: false)
@@ -1929,7 +2172,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         presentedGridNavigation = nil
         displayedFrames = []
         displayOrderFrames = []
-        tagFacetTags = []
+        clearPublishedTagSummary()
         displayedRows = []
         beyondCapByGroup = [:]
         cappedGroupSummaries = []
@@ -2098,9 +2341,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         topTagsByFrame = arrangement.topTagsByFrame
         let baseFrames = uniqueFramesByID(arrangement.visible)
         visualOrderBaseFrames = baseFrames
-        displayedFrames = visuallyOrderedFrames(baseFrames)
-        scheduleTagSummary()
-        rebuildDisplayedLayout()
+        let orderedFrames = visuallyOrderedFrames(baseFrames)
+        // Keep the last complete grid until the route is ready. Publishing a
+        // provisional subset/order here makes every thumbnail move twice.
+        if pendingVisualOrderInput == nil {
+            displayedFrames = orderedFrames
+            scheduleTagSummary()
+            rebuildDisplayedLayout()
+        }
         beyondCapByGroup = arrangement.beyondCapByGroup
         var earliestByGroup: [FrameGroupID: Double] = [:]
         for group in groups where arrangement.beyondCapByGroup[group.id] != nil {
@@ -2121,14 +2369,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             return
         }
         let ordered = visuallyOrderedFrames(baseFrames)
-        // Starting a background job often leaves the current sequence unchanged.
-        // Avoid making SwiftUI diff the entire album just to show the spinner.
-        guard groupingEnabled || ordered.map(\.id) != displayedFrames.map(\.id) else { return }
+        guard pendingVisualOrderInput == nil else { return }
+        let orderChanged = ordered.map(\.id) != displayedFrames.map(\.id)
         displayedFrames = ordered
-        rebuildDisplayedLayout()
+        scheduleTagSummary()
+        if groupingEnabled || orderChanged { rebuildDisplayedLayout() }
     }
 
     private func rebuildDisplayedLayout() {
+        if let id = crystalOrbRevealID, let candidate = frame(id: id), !displayedFrames.contains(where: { $0.id == id }) {
+            displayedFrames.append(candidate)
+        }
         displayedRows = FrameArrangement.rows(of: displayedFrames)
         displayOrderFrames = groupingEnabled && !frameOrder.minimalVisualDistance.enabled
             ? displayedRows.flatMap(\.frames) : displayedFrames
@@ -2173,7 +2424,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let generation = UUID()
             visualOrderGeneration = generation
             pendingVisualOrderInput = input
-            isSortingVisualDistance = true
+            isSortingVisualDistance = false
+            Task { [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(330))
+                } catch {
+                    return
+                }
+                guard let self, self.visualOrderGeneration == generation,
+                      self.pendingVisualOrderInput == input else { return }
+                self.isSortingVisualDistance = true
+            }
             let task = Task.detached(priority: .userInitiated) { () -> [FrameID]? in
                 do {
                     // Coalesce slider drags and incoming analysis batches.
@@ -2185,12 +2446,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             visualOrderTask = task
             Task { [weak self] in
-                let ids = await task.value
+                let ids = await task.value ?? shown.map(\.id)
                 guard let self, self.visualOrderGeneration == generation else { return }
                 self.visualOrderTask = nil
                 self.pendingVisualOrderInput = nil
                 self.isSortingVisualDistance = false
-                guard let ids else { return }
                 self.completedVisualOrderInput = input
                 self.visualOrderIDs = ids
                 self.recomputeVisualOrder()
@@ -2204,6 +2464,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             isSortingVisualDistance = false
         }
 
+        // A pending route has no displayable intermediate order.
+        if pendingVisualOrderInput != nil { return displayedFrames }
         let byID = Dictionary(uniqueKeysWithValues: shown.map { ($0.id, $0) })
         let cachedIDs = Set(visualOrderIDs)
         let ordered = visualOrderIDs.compactMap { byID[$0] } + shown.filter { !cachedIDs.contains($0.id) }
@@ -2224,12 +2486,47 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         pendingTagSummaryInput = nil
         completedTagSummaryInput = nil
         completedTagSummaryLabels = nil
+        cancelTagSummaryLoadingIndicator()
+    }
+
+    private func cancelTagSummaryLoadingIndicator() {
+        tagSummaryLoadingTask?.cancel()
+        tagSummaryLoadingTask = nil
         if isSummarizingTags { isSummarizingTags = false }
     }
 
     private func clearPublishedTagSummary() {
-        if !tagFacetTags.isEmpty { tagFacetTags = [] }
-        if !tagCommonTags.isEmpty { tagCommonTags = [] }
+        let empty = TagSummaryPresentation()
+        if tagSummaryPresentation != empty { tagSummaryPresentation = empty }
+    }
+
+    /// Apply individual tag changes to a private draft. Publish only the complete
+    /// draft, so intermediate removals and insertions never reach the layout.
+    private func reconcileTagList(_ current: inout [String], with target: [String]) {
+        let difference = target.difference(from: current)
+        guard !difference.isEmpty else { return }
+
+        for change in difference.removals.sorted(by: {
+            tagChangeOffset($0) > tagChangeOffset($1)
+        }) {
+            if case let .remove(offset, _, _) = change {
+                current.remove(at: offset)
+            }
+        }
+        for change in difference.insertions.sorted(by: {
+            tagChangeOffset($0) < tagChangeOffset($1)
+        }) {
+            if case let .insert(offset, element, _) = change {
+                current.insert(element, at: offset)
+            }
+        }
+    }
+
+    private func tagChangeOffset(_ change: CollectionDifference<String>.Change) -> Int {
+        switch change {
+        case let .insert(offset, _, _), let .remove(offset, _, _):
+            return offset
+        }
     }
 
     private func scheduleTagSummary() {
@@ -2251,19 +2548,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 tagSummaryTask?.cancel()
                 tagSummaryTask = nil
                 pendingTagSummaryInput = nil
-                isSummarizingTags = false
+                cancelTagSummaryLoadingIndicator()
             }
             publishTagSummary(labels)
             return
         }
         guard input != pendingTagSummaryInput else { return }
         tagSummaryTask?.cancel()
+        cancelTagSummaryLoadingIndicator()
         let generation = UUID()
         tagSummaryGeneration = generation
         pendingTagSummaryInput = input
-        if !tagFacetTags.isEmpty { tagFacetTags = [] }
-        if !tagCommonTags.isEmpty { tagCommonTags = [] }
-        isSummarizingTags = true
         let shown = displayedFrames
         let sourceIDs = Set(frames.map(\.id))
         let computer = tagSummaryComputer
@@ -2278,12 +2573,24 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
         }
         tagSummaryTask = task
+        tagSummaryLoadingTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(300))
+            } catch {
+                return
+            }
+            guard let self,
+                  self.tagSummaryGeneration == generation,
+                  self.pendingTagSummaryInput == input else { return }
+            self.tagSummaryLoadingTask = nil
+            self.isSummarizingTags = true
+        }
         Task(priority: .utility) { [weak self] in
             let labels = await task.value
             guard let self, self.tagSummaryGeneration == generation else { return }
             self.tagSummaryTask = nil
             self.pendingTagSummaryInput = nil
-            self.isSummarizingTags = false
+            self.cancelTagSummaryLoadingIndicator()
             guard let labels else { return }
             self.completedTagSummaryInput = input
             self.completedTagSummaryLabels = labels
@@ -2295,8 +2602,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func publishTagSummary(_ labels: TagSummary.Labels) {
         let common = Set(labels.common)
         let available = labels.ranked.filter { !common.contains($0) && !tagFilter.requiredTags.contains($0) }
-        if tagCommonTags != labels.common { tagCommonTags = labels.common }
-        if tagFacetTags != available { tagFacetTags = available }
+        var next = tagSummaryPresentation
+        reconcileTagList(&next.common, with: labels.common)
+        reconcileTagList(&next.available, with: available)
+        if next != tagSummaryPresentation { tagSummaryPresentation = next }
     }
 
     // MARK: - Grouping

@@ -17,6 +17,16 @@ public enum WDMetal {
     case narrow = "32x32x32"
     case occupancy = "64x64x16-w4n2"
 
+    /// QKV already selects full-tile loads by shape. These aliases have
+    /// identical template arguments; library remains a genuinely unfused path.
+    public var effectiveQKVTile: GEMMTile {
+      switch self {
+      case .aligned: return .baseline
+      case .alignedRelaxed: return .relaxed
+      default: return self
+      }
+    }
+
     var dimensions: (Int, Int, Int) {
       precondition(self != .library)
       if self == .occupancy { return (64, 64, 16) }
@@ -91,59 +101,80 @@ public enum WDMetal {
       outputShapes: Array(repeating: [windows, heads, 196, 32], count: 3),
       outputDTypes: [.float16, .float16, .float16])
   }
+  /// Effective native matrix/SIMD geometry, or nil for MLX GEMM + packing.
+  public static func qkvGeometry(tile: GEMMTile, heads: Int)
+    -> (bm: Int, bn: Int, bk: Int, wm: Int)? {
+    precondition(heads > 0 && heads % 2 == 0)
+    guard tile != .library else { return nil }
+    let (bm, requestedBN, bk) = tile.effectiveQKVTile.dimensions
+    var bn = min(requestedBN, heads * 32)
+    while heads * 32 % bn != 0 { bn /= 2 }
+    return (bm, bn, bk, tile == .occupancy ? 4 : 2)
+  }
   public static func projectQKV(
     _ x: MLXArray, weight: MLXArray, bias: MLXArray, scale: MLXArray, heads: Int,
     tile: GEMMTile = .baseline
   ) -> [MLXArray] {
     precondition(
       x.dtype == .float16 && x.ndim == 2 && x.shape[0] % 196 == 0 && x.shape[1] == heads * 32
-        && heads % 2 == 0)
+        && heads > 0 && heads % 2 == 0)
+    precondition(weight.shape == [3 * heads * 32, heads * 32]
+      && bias.size == 3 * heads * 32 && scale.size == heads)
+    guard let (bm, bn, bk, wm) = qkvGeometry(tile: tile, heads: heads) else {
+      return qkv(gemm(x, weight: weight, bias: bias, tile: .library), scale: scale, heads: heads)
+    }
+    let tile = tile.effectiveQKVTile
     let shape = [x.shape[0] / 196, heads, 196, 32]
-    let occupancy = tile == .occupancy
-    let bm = occupancy ? 64 : 32
-    let threads = occupancy ? 256 : 128
+    let threads = wm * 2 * 32
     return projection(
-      [x, weight, bias, scale], template: [("H", heads), ("OCCUPANCY", occupancy)],
-      grid: ((3 * heads / 2) * threads, (x.shape[0] + bm - 1) / bm, 1),
+      [x, weight, bias, scale], template: [
+        ("H", heads), ("TBM", bm), ("TBN", bn), ("TBK", bk), ("TWM", wm),
+        ("RELAXED", tile == .relaxed || tile == .alignedRelaxed),
+        ("M_ALIGNED", x.shape[0] % bm == 0),
+      ],
+      grid: ((3 * heads * 32 / bn) * threads, (x.shape[0] + bm - 1) / bm, 1),
       threadGroup: (threads, 1, 1),
       outputShapes: [shape, shape, shape], outputDTypes: [.float16, .float16, .float16])
   }
   public static func flash(
     _ q: MLXArray, _ k: MLXArray, _ v: MLXArray, bias: MLXArray, regions: MLXArray, windows: Int,
-    shifted: Bool, compactBias: Bool = false
+    shifted: Bool, compactBias: Bool = false, queryRows: Int = 32
   ) -> MLXArray {
     precondition(
       q.dtype == .float16 && q.shape == k.shape && q.shape == v.shape && q.shape[2] == 196
         && q.shape[3] == 32)
+    precondition([16, 32].contains(queryRows))
+    let threads = queryRows * 4
     let heads = q.shape[1]
     precondition(bias.size == heads * (compactBias ? 729 : 196 * 196))
     return attention(
       [q, k, v, bias, regions],
       template: [
-        ("H", heads), ("NW", windows), ("SHIFT", shifted), ("COMPACT_BIAS", compactBias),
+        ("H", heads), ("NW", windows), ("SHIFT", shifted), ("COMPACT_BIAS", compactBias), ("TBQ", queryRows),
       ],
-      grid: (7 * 128, heads, q.shape[0]), threadGroup: (128, 1, 1),
+      grid: (((196 + queryRows - 1) / queryRows) * threads, heads, q.shape[0]), threadGroup: (threads, 1, 1),
       outputShapes: [[q.shape[0] * 196, heads * 32]], outputDTypes: [.float16])[0]
   }
   public static func normalize(
     _ x: MLXArray, residual: MLXArray?, weight: MLXArray, bias: MLXArray, route: MLXArray,
-    spatial: Int, simdRows: Bool = false
+    spatial: Int, simdRows: Bool = false, identityRoute: Bool = false
   ) -> MLXArray {
     let channels = x.shape[1]
     let threads = min(256, x.shape[1])
-    precondition(x.dtype == .float16 && x.ndim == 2 && x.shape[0] % spatial == 0)
+    precondition(x.dtype == .float16 && x.ndim == 2 && x.shape[0] % spatial == 0
+      && (identityRoute || route.size == spatial))
     if simdRows {
       precondition(channels % 32 == 0)
       return normSIMD(
         [x, residual ?? x, weight, bias, route],
-        template: [("C", channels), ("S", spatial), ("ADD_RESIDUAL", residual != nil)],
+        template: [("C", channels), ("S", spatial), ("ADD_RESIDUAL", residual != nil), ("IDENTITY_ROUTE", identityRoute)],
         grid: (x.shape[0] * 32, 1, 1), threadGroup: (128, 1, 1), outputShapes: [x.shape],
         outputDTypes: [.float16])[0]
     }
     return norm(
       [x, residual ?? x, weight, bias, route],
       template: [
-        ("C", channels), ("S", spatial), ("NT", threads), ("ADD_RESIDUAL", residual != nil),
+        ("C", channels), ("S", spatial), ("NT", threads), ("ADD_RESIDUAL", residual != nil), ("IDENTITY_ROUTE", identityRoute),
       ],
       grid: (x.shape[0] * threads, 1, 1), threadGroup: (threads, 1, 1), outputShapes: [x.shape],
       outputDTypes: [.float16])[0]

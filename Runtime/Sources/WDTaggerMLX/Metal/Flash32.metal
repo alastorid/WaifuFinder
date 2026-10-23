@@ -2,7 +2,7 @@
     using T = half;
     using MaskType = half;
     using AccumType = float;
-    constexpr int BQ=32, BK=32, BD=32, BV=32, WM=4, WN=1;
+    constexpr int BQ=TBQ, BK=32, BD=32, BV=32, WM=TBQ/8, WN=1;
     constexpr bool align_Q=false, align_K=false, do_causal=false, has_sinks=false, save_lse=false;
     const uint3 tid = threadgroup_position_in_grid;
     const uint3 lid = thread_position_in_threadgroup;
@@ -13,8 +13,8 @@
     AttnParams storage;
     storage.B=Q_shape[0]; storage.H=H; storage.D=32;
     storage.qL=196; storage.kL=196; storage.gqa_factor=1; storage.scale=0.1767766952966369f;
-    storage.NQ=7; storage.NK=7; storage.NQ_aligned=6; storage.NK_aligned=6;
-    storage.qL_rem=4; storage.kL_rem=4; storage.qL_off=0;
+    storage.NQ=(196+BQ-1)/BQ; storage.NK=(196+BK-1)/BK; storage.NQ_aligned=196/BQ; storage.NK_aligned=196/BK;
+    storage.qL_rem=196%BQ; storage.kL_rem=196%BK; storage.qL_off=0;
     storage.Q_strides[0]=H*196*32; storage.Q_strides[1]=196*32; storage.Q_strides[2]=32;
     storage.K_strides[0]=H*196*32; storage.K_strides[1]=196*32; storage.K_strides[2]=32;
     storage.V_strides[0]=H*196*32; storage.V_strides[1]=196*32; storage.V_strides[2]=32;
@@ -157,17 +157,11 @@
   const short d_half = simd_group_id % WN;
   const short tm = kFragSize * TQ * row_group;
 
-  // Compact relative-bias addressing: displacement index is
-  // 364 + (q + 13*(q/14)) - (k + 13*(k/14)). Build the 196 key
-  // offsets once per threadgroup instead of dividing per score fragment.
-  // The existing threadgroup barrier below publishes these 392 bytes.
-  threadgroup ushort relative_key[COMPACT_BIAS ? 196 : 1];
-  if constexpr (COMPACT_BIAS) {
-    for (uint key = lid.x; key < 196; key += 128) {
-      relative_key[key] = ushort(key + 13u * (key / 14u));
-    }
-  }
+  // Direct constant-divisor arithmetic avoids a dependent coordinate-table load
+  // and per-threadgroup table construction. No lookup publication barrier is needed.
   const uint query_token = uint(tid.x * BQ + tm + sm);
+  const int query_region = SHIFT && query_token < 196
+    ? regions[(tid.z % NW) * 196 + query_token] : 0;
   const uint relative_query = tid.y * 729u + 364u + query_token + 13u * (query_token / 14u);
 
   const short Qs_offset = (tm + sm) * LDQ_tgp + d_half * BDh + sn;
@@ -177,8 +171,7 @@
   constexpr short Qs_tile_stride = kFragSize;
   constexpr short Ks_tile_stride = kFragSize * LDK_tgp;
 
-  threadgroup_barrier(mem_flags::mem_threadgroup);
-
+  // No threadgroup data has been produced yet; Q is retained in registers.
   if constexpr (!q_in_registers) {
     if (!align_Q && int(tid.x) == (params->NQ_aligned)) {
       loader_q.load_safe(short2(BD, params->qL_rem));
@@ -342,12 +335,12 @@
             if (row < 196 && col + jj < 196) {
               const int key = col + jj;
               const int biasIndex = COMPACT_BIAS
-                ? relative_query - uint(relative_key[key])
+                ? relative_query - (uint(key) + 13u * (uint(key) / 14u))
                 : (tid.y * 196 + row) * 196 + key;
               float value = float(bias[biasIndex]);
               if constexpr (SHIFT) {
                 const uint window = tid.z % NW;
-                if (regions[window * 196 + row] != regions[window * 196 + col + jj]) value -= 100.0f;
+                if (query_region != regions[window * 196 + col + jj]) value -= 100.0f;
               }
               Stile.frag_at(i, j)[jj] += M_LOG2E_F * value;
             }

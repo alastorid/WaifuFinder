@@ -4,9 +4,10 @@ import Combine
 /// Photos keeps its album navigation beside the existing ranking workspace.
 /// Choosing another album replaces only the source; the scoring controls and
 /// result grid continue to use the same session as ordinary video imports.
-struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
+struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbControl: View>: View {
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
+    private let orbControl: () -> OrbControl
     private let trailingControls: () -> TrailingControls
     private let onBackToWelcome: () -> Void
     /// Shared with the Sort and Filter fraction; see `ChiaroscuroLink`.
@@ -17,8 +18,10 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     @Environment(\.scenePhase) private var scenePhase
 
     init(session: WaifuSession, link: ChiaroscuroLink, onBackToWelcome: @escaping () -> Void,
+         @ViewBuilder orbControl: @escaping () -> OrbControl,
          @ViewBuilder trailingControls: @escaping () -> TrailingControls,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
+        self.orbControl = orbControl
         self.session = session
         self.link = link
         self.onBackToWelcome = onBackToWelcome
@@ -75,6 +78,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
                     PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                    orbControl()
                     albumControls
                     trailingControls()
                 }

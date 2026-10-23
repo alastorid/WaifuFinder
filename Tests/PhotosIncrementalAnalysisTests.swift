@@ -78,6 +78,22 @@ func registerPhotosIncrementalAnalysisTests() {
         checkEqual(log.cancelled.sorted(), [0, 3, 6, 9], "all four sparse missing-photo requests overlap and are cancelled")
         checkEqual(await sampler.unavailableItemCount, 0, "cancellation is never reported as a missing local photo")
     })
+    Registry.shared.add(suite: suite, TestCase(name: "retry snapshots advance without hiding retained photos", knownBug: nil) {
+        var retained = [0, 4, 7].map(photosAnalysisTestFrame)
+        retained[2].topTags = ["retained tag"]
+        var prefix = [photosAnalysisTestFrame(0), photosAnalysisTestFrame(1)]
+        prefix[0].groupID = FrameGroupID(raw: "updated-group")
+        let first = PhotosAnalysisCheckpoint.includingRetainedTail(retained, after: prefix)
+        checkEqual(first.map(\.timeSeconds), [0, 1, 4, 7], "newly loaded gaps appear before completion and the retained tail stays visible")
+        checkEqual(first[0].groupID, prefix[0].groupID, "the grouped prefix replaces its retained copy")
+        checkEqual(first.last, retained.last, "the unvisited tail retains all completed metadata")
+        let secondPrefix = (0...4).map(photosAnalysisTestFrame)
+        let second = PhotosAnalysisCheckpoint.includingRetainedTail(retained, after: secondPrefix)
+        checkEqual(second.map(\.timeSeconds), [0, 1, 2, 3, 4, 7], "visible loaded count advances on the next snapshot")
+        checkEqual(Set(second.map(\.id)).count, second.count, "retained photos are never duplicated")
+        checkEqual(PhotosAnalysisCheckpoint.includingRetainedTail(retained, after: []), retained, "an empty prefix preserves existing results")
+        checkEqual(PhotosAnalysisCheckpoint.includingRetainedTail([], after: secondPrefix), secondPrefix, "initial loads retain their normal prefix publication")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "an interrupted gap fill retains the tail and retries without duplicates", knownBug: nil) {
         let checkpoint = PhotosAnalysisCheckpoint(sourceURL: URL(string: "waifu-photos://album/interrupted")!, settings: .default)
         for index in [0, 4, 7] { await checkpoint.retain(photosAnalysisTestFrame(index)) }

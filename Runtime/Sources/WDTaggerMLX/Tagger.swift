@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Metal
 import MLX
 
 public enum WDNativeError: Error { case invalid(String) }
@@ -14,6 +15,14 @@ public final class WDNativeTagger {
   public static let defaultCacheMiB = 64
   private let p: [String: MLXArray]
   private let stages: [Stage]
+  private let identityRoutePlaceholder = MLXArray([Int32(0)])
+  public enum GEMMOperation: String, CaseIterable {
+    case qkv, projection, fc1, fc2, reduction
+  }
+  private let gemmOverrides: [GEMMOperation: [WDMetal.GEMMTile]]
+  private static let isMeasuredM3 = MTLCreateSystemDefaultDevice()?.name == "Apple M3"
+  private let automaticBatch8Profile: Bool
+  private let attentionRowsOverride: Int?
   private let gemmTile: WDMetal.GEMMTile
   private let simdNorm: Bool
   private let compactBias: Bool
@@ -23,10 +32,11 @@ public final class WDNativeTagger {
     let prefix: String
     let shifted: Bool
     let transition: MLXArray
+    let transitionIsIdentity: Bool
   }
   private struct Stage {
     let side: Int, heads: Int, windows: Int
-    let identity: MLXArray, first: MLXArray, regions: MLXArray
+    let regions: MLXArray
     let merge: MLXArray?
     let blocks: [Block]
   }
@@ -184,10 +194,17 @@ public final class WDNativeTagger {
   }
 
   public init(
-    weights: URL, compileModel: Bool = true, gemmTile: WDMetal.GEMMTile = .baseline,
-    simdNorm: Bool = false, compactBias: Bool = false, fusedQKV: Bool = true
+    weights: URL, compileModel: Bool = true, gemmTile: WDMetal.GEMMTile? = nil,
+    simdNorm: Bool = false, compactBias: Bool = false, fusedQKV: Bool = true,
+    gemmOverrides: [GEMMOperation: [WDMetal.GEMMTile]] = [:],
+    attentionQueryRows: Int? = nil
   ) throws {
-    self.gemmTile = gemmTile
+    precondition(gemmOverrides.values.allSatisfy { $0.count == 4 })
+    precondition(attentionQueryRows.map { [16, 32].contains($0) } ?? true)
+    self.gemmOverrides = gemmOverrides
+    self.attentionRowsOverride = attentionQueryRows
+    self.automaticBatch8Profile = gemmTile == nil && Self.isMeasuredM3 && fusedQKV && !simdNorm
+    self.gemmTile = gemmTile ?? .baseline
     self.simdNorm = simdNorm
     self.compactBias = compactBias
     self.fusedQKV = fusedQKV
@@ -229,21 +246,21 @@ public final class WDNativeTagger {
         blocks.append(
           Block(
             prefix: "layers.\(stage).blocks.\(block)", shifted: shift != 0,
-            transition: MLXArray(next.map { Int32(inverse[$0]) })))
+            transition: next == order ? identityRoutePlaceholder : MLXArray(next.map { Int32(inverse[$0]) }),
+            transitionIsIdentity: next == order))
         previousOrder = order
       }
       configurations.append(
         Stage(
           side: side, heads: heads, windows: (side / 14) * (side / 14),
-          identity: MLXArray((0..<side * side).map(Int32.init)),
-          first: MLXArray(first.map(Int32.init)), regions: Self.regions(side: side),
+          regions: Self.regions(side: side),
           merge: merge, blocks: blocks))
       previousSide = side
     }
     stages = configurations
     eval(Array(p.values))
     for stage in stages {
-      eval(stage.identity, stage.first, stage.regions)
+      eval(stage.regions)
       if let merge = stage.merge { eval(merge) }
       for block in stage.blocks { eval(block.transition) }
     }
@@ -255,19 +272,25 @@ public final class WDNativeTagger {
   }
   /// Shares immutable weights and routing for controlled kernel comparisons.
   public func variant(
-    gemmTile: WDMetal.GEMMTile, fusedQKV: Bool? = nil, compactingBias: Bool = false
+    gemmTile: WDMetal.GEMMTile, fusedQKV: Bool? = nil, compactingBias: Bool = false,
+    gemmOverrides: [GEMMOperation: [WDMetal.GEMMTile]]? = nil, attentionQueryRows: Int? = nil
   ) -> WDNativeTagger {
     WDNativeTagger(
       copying: self, gemmTile: gemmTile, fusedQKV: fusedQKV ?? self.fusedQKV,
-      compactingBias: compactingBias)
+      compactingBias: compactingBias, gemmOverrides: gemmOverrides, attentionQueryRows: attentionQueryRows)
   }
   private init(
     copying source: WDNativeTagger, gemmTile: WDMetal.GEMMTile, fusedQKV: Bool,
-    compactingBias: Bool
+    compactingBias: Bool, gemmOverrides: [GEMMOperation: [WDMetal.GEMMTile]]?, attentionQueryRows: Int?
   ) {
+    precondition((gemmOverrides ?? [:]).values.allSatisfy { $0.count == 4 })
+    precondition(attentionQueryRows.map { [16, 32].contains($0) } ?? true)
     p = compactingBias && !source.compactBias ? Self.compactBiasWeights(source.p) : source.p
     stages = source.stages
     self.gemmTile = gemmTile
+    self.gemmOverrides = gemmOverrides ?? source.gemmOverrides
+    automaticBatch8Profile = false
+    attentionRowsOverride = attentionQueryRows ?? source.attentionRowsOverride
     simdNorm = source.simdNorm
     compactBias = source.compactBias || compactingBias
     self.fusedQKV = fusedQKV
@@ -275,13 +298,27 @@ public final class WDNativeTagger {
       compiled = compile { [unowned self] x in self.forward(x) }
     }
   }
-  private func linear(_ x: MLXArray, _ name: String) -> MLXArray {
+  /// Explicit global tiles disable automatic selection; per-operation overrides win.
+  /// Only the measured base M3 and batch eight use the confirmed Stage 3 profile.
+  public func selectedTile(_ operation: GEMMOperation, stage: Int, batch: Int) -> WDMetal.GEMMTile {
+    precondition((0..<4).contains(stage) && batch > 0)
+    if let explicit = gemmOverrides[operation] { return explicit[stage] }
+    if automaticBatch8Profile && batch == 8 && stage == 2 && (operation == .qkv || operation == .fc2) {
+      return .m64n64k32
+    }
+    return gemmTile
+  }
+  public func selectedAttentionQueryRows(batch: Int) -> Int {
+    precondition(batch > 0)
+    return attentionRowsOverride ?? (automaticBatch8Profile && batch == 8 ? 16 : 32)
+  }
+  private func linear(_ x: MLXArray, _ name: String, tile: WDMetal.GEMMTile? = nil) -> MLXArray {
     let matrix = weight(name + ".weight")
     if matrix.shape[0] % 64 == 0 && matrix.shape[1] % 32 == 0 {
       return WDMetal.gemm(
         x, weight: matrix,
         bias: p[name + ".bias"] ?? MLXArray.zeros([matrix.shape[0]], dtype: .float16),
-        tile: gemmTile)
+        tile: tile ?? gemmTile)
     }
     if let bias = p[name + ".bias"] { return addMM(bias, x, matrix.T) }
     return matmul(x, matrix.T)
@@ -299,13 +336,13 @@ public final class WDNativeTagger {
       weight("patch_embed.proj.bias"), x, weight("patch_embed.proj.weight").reshaped(128, 48).T)
     x = WDMetal.normalize(
       x, residual: nil, weight: weight("patch_embed.norm.weight"),
-      bias: weight("patch_embed.norm.bias"), route: stages[0].identity, spatial: 112 * 112,
-      simdRows: simdNorm)
+      bias: weight("patch_embed.norm.bias"), route: identityRoutePlaceholder, spatial: 112 * 112,
+      simdRows: simdNorm, identityRoute: true)
     for (index, stage) in stages.enumerated() {
       let spatial = stage.side * stage.side
       if let merge = stage.merge {
         x = WDMetal.patchMerge(x, route: merge, spatial: spatial)
-        x = linear(x, "layers.\(index).downsample.reduction")
+        x = linear(x, "layers.\(index).downsample.reduction", tile: selectedTile(.reduction, stage: index, batch: batch))
         x = MLXFast.layerNorm(
           x, weight: weight("layers.\(index).downsample.norm.weight"),
           bias: weight("layers.\(index).downsample.norm.bias"), eps: 1e-5)
@@ -318,30 +355,31 @@ public final class WDNativeTagger {
             x, weight: weight(attn + ".qkv.weight"),
             bias: weight(attn + "._sdpa_qkv_bias"),
             scale: weight(attn + "._sdpa_query_scale").reshaped(-1),
-            heads: stage.heads, tile: gemmTile)
+            heads: stage.heads, tile: selectedTile(.qkv, stage: index, batch: batch))
         } else {
           let packed = WDMetal.gemm(
             x, weight: weight(attn + ".qkv.weight"), bias: weight(attn + "._sdpa_qkv_bias"),
-            tile: gemmTile)
+            tile: selectedTile(.qkv, stage: index, batch: batch))
           qkv = WDMetal.qkv(
             packed, scale: weight(attn + "._sdpa_query_scale").reshaped(-1), heads: stage.heads)
         }
         var y = WDMetal.flash(
           qkv[0], qkv[1], qkv[2], bias: weight(attn + "._sdpa_bias"), regions: stage.regions,
-          windows: stage.windows, shifted: block.shifted, compactBias: compactBias)
-        y = linear(y, attn + ".proj")
+          windows: stage.windows, shifted: block.shifted, compactBias: compactBias,
+          queryRows: selectedAttentionQueryRows(batch: batch))
+        y = linear(y, attn + ".proj", tile: selectedTile(.projection, stage: index, batch: batch))
         x = WDMetal.normalize(
           y, residual: x, weight: weight(block.prefix + ".norm1.weight"),
-          bias: weight(block.prefix + ".norm1.bias"), route: stage.identity, spatial: spatial,
-          simdRows: simdNorm)
+          bias: weight(block.prefix + ".norm1.bias"), route: identityRoutePlaceholder, spatial: spatial,
+          simdRows: simdNorm, identityRoute: true)
         y = WDMetal.mlpGelu(
           x, weight: weight(block.prefix + ".mlp.fc1.weight"),
-          bias: weight(block.prefix + ".mlp.fc1.bias"), tile: gemmTile)
-        y = linear(y, block.prefix + ".mlp.fc2")
+          bias: weight(block.prefix + ".mlp.fc1.bias"), tile: selectedTile(.fc1, stage: index, batch: batch))
+        y = linear(y, block.prefix + ".mlp.fc2", tile: selectedTile(.fc2, stage: index, batch: batch))
         x = WDMetal.normalize(
           y, residual: x, weight: weight(block.prefix + ".norm2.weight"),
           bias: weight(block.prefix + ".norm2.bias"), route: block.transition, spatial: spatial,
-          simdRows: simdNorm)
+          simdRows: simdNorm, identityRoute: block.transitionIsIdentity)
       }
     }
     x = MLXFast.layerNorm(x, weight: weight("norm.weight"), bias: weight("norm.bias"), eps: 1e-5)

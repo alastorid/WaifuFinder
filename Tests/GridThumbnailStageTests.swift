@@ -266,7 +266,7 @@ private func testAlbumGridPublication(directory: URL, pixels: CGImage, payloads:
     changing = true
     session.updateAnalyzedFrames(frames)
     changing = false
-    await stageWait { !session.isSortingVisualDistance && stage.current?.key.revision == session.gridRevision }
+    await stageWait { !session.isComputingVisualDistance && stage.current?.key.revision == session.gridRevision }
     checkEqual(stage.current?.navigation.frames.count, frames.count, "the grid cannot remain stuck on the initial photo or a prefix")
     checkEqual(stage.current?.navigation.frames.map(\.id), session.displayOrderFrames.map(\.id),
                "the last asynchronous route reaches the displayed layout without another UI event")
@@ -290,6 +290,7 @@ private func testStagePreviewNavigation(_ pixels: CGImage, directory: URL) async
 
     session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
     session.frameOrder.toggleDirection(of: .minimalVisualDistance)
+    await stageWait { !session.isComputingVisualDistance }
     checkEqual(session.displayOrderFrames.map(\.id), frames.reversed().map(\.id), "model already has the reversed visual route")
     stage.submit(stageInput(2, session.displayOrderFrames, generation: generation), viewportSize: size) { await reads.read($0) }
     await stageWait { reads.waiting.count == 2 }

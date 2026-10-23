@@ -102,6 +102,15 @@ struct TagFilterView: View {
                     TaggingPanelStatus(session: session, panel: .tags)
                 }
                 if hasActiveTags || !showsTaggingStatus {
+                    if session.isSummarizingTags, !tags.isEmpty {
+                        HStack(spacing: 5) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Updating tags…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     if session.tagVocabulary == nil && !hasActiveTags {
                         Text("Install WD Tagger in Settings to filter by tags.")
                             .font(.caption)

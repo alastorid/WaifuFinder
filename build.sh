@@ -221,6 +221,7 @@ else
     -framework Metal \
     -framework Accelerate \
     -framework Photos \
+    -framework ImageIO \
     -framework CoreImage \
     -framework CoreML \
     -framework UniformTypeIdentifiers \

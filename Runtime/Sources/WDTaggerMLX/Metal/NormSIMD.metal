@@ -3,7 +3,7 @@
 const uint lane = thread_index_in_simdgroup;
 const uint row = thread_position_in_grid.x / 32;
 if (row >= uint(x_shape[0])) return;
-const uint src = (row / S) * S + route[row % S];
+const uint src = IDENTITY_ROUTE ? row : (row / S) * S + route[row % S];
 float values[C / 32];
 float total = 0.0f;
 #pragma unroll

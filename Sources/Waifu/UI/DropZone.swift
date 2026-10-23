@@ -12,6 +12,8 @@ struct DropZone: View {
     let isPrimary: Bool
     var openPhotos: (() -> Void)? = nil
 
+    var imageDrop: (([NSItemProvider]) -> Bool)? = nil
+
     @State private var isTargeted = false
     @State private var showURL = false
 
@@ -24,7 +26,7 @@ struct DropZone: View {
             }
         }
         .sheet(isPresented: $showURL) { MediaURLSheet(session: session) }
-        .onDrop(of: [.fileURL, .url], isTargeted: $isTargeted) { providers in
+        .onDrop(of: [.fileURL, .url, .image], isTargeted: $isTargeted) { providers in
             acceptDrop(providers)
         }
         .animation(.easeInOut(duration: 0.15), value: isTargeted)
@@ -124,6 +126,7 @@ struct DropZone: View {
     /// decision is therefore returned immediately and one analysis starts after all candidate URLs
     /// have arrived.
     private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
+        if let imageDrop { return imageDrop(providers) }
         let session = session
         let candidates = providers.filter {
             $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||

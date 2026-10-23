@@ -46,6 +46,9 @@ while index < arguments.count {
     index += 1
 }
 
+registerCrystalOrbTests()
+registerCrystalOrbLifecycleTests()
+
 // Model and settings.
 registerFrameArrangementTests()
 registerPanelPresetTests()
@@ -59,6 +62,7 @@ registerTagResultMemoryTests()
 // Video.
 registerMediaImportTests()
 registerPhotosMediaTests()
+registerPhotoMetadataTests()
 registerPhotosWorkflowTests()
 registerPhotosIncrementalAnalysisTests()
 registerVideoDropTests()

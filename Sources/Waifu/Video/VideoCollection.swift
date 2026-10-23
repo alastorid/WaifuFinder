@@ -105,21 +105,50 @@ actor VideoCollectionSampler {
     private let collection: VideoCollection
     private let width: Int
     private let mode: AnalysisMode
+    private let timeRange: ClosedRange<Double>?
+    private let excludingSampleIndices: Set<Int>
     private let onProgress: @Sendable (Int) -> Void
     private var memberIndex = 0
     private var processed = 0
     private var iterator: AsyncThrowingStream<SampledFrame, Error>.Iterator?
 
-    init(collection: VideoCollection, width: Int, mode: AnalysisMode, onProgress: @escaping @Sendable (Int) -> Void) {
-        self.collection = collection; self.width = width; self.mode = mode; self.onProgress = onProgress
+    init(collection: VideoCollection, width: Int, mode: AnalysisMode, timeRange: ClosedRange<Double>?,
+         excludingSampleIndices: Set<Int>,
+         onProgress: @escaping @Sendable (Int) -> Void) {
+        self.collection = collection; self.width = width; self.mode = mode
+        self.timeRange = timeRange; self.excludingSampleIndices = excludingSampleIndices
+        self.onProgress = onProgress
     }
     func next() async throws -> SampledFrame? {
         try Task.checkCancellation()
         while memberIndex < collection.members.count {
             let member = collection.members[memberIndex]
             if iterator == nil {
+                let memberRange: ClosedRange<Double>?
+                if let timeRange {
+                    let start = max(timeRange.lowerBound, member.offset)
+                    let end = min(timeRange.upperBound, member.offset + member.video.durationSeconds)
+                    guard start <= end else {
+                        memberIndex += 1
+                        continue
+                    }
+                    let localStart = max(0, start - member.offset)
+                    let localEnd = min(member.video.durationSeconds - 0.000001, end - member.offset)
+                    guard localStart <= localEnd else {
+                        memberIndex += 1
+                        continue
+                    }
+                    memberRange = localStart...localEnd
+                } else {
+                    memberRange = nil
+                }
+                let memberExclusions = Set(excludingSampleIndices.compactMap { index -> Int? in
+                    guard VideoCollection.sourceIndex(index) == memberIndex else { return nil }
+                    return VideoCollection.localIndex(index)
+                })
                 iterator = AVFoundationFrameSampler().sample(member.video.url, analysisWidth: width,
-                    mode: mode, onProgress: { _ in }).makeAsyncIterator()
+                    mode: mode, timeRange: memberRange, excludingSampleIndices: memberExclusions,
+                    onProgress: { _ in }).makeAsyncIterator()
             }
             var active = iterator!
             let frame = try await active.next(isolation: self)
