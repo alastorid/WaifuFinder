@@ -14,6 +14,9 @@ public enum WDMetal {
     case relaxed = "relaxed32x64x32"
     case aligned = "aligned32x64x32"
     case alignedRelaxed = "aligned-relaxed32x64x32"
+    case relaxed64 = "relaxed64x64x32"
+    case aligned64 = "aligned-relaxed64x64x32"
+    case m64n64k16 = "64x64x16"
     case narrow = "32x32x32"
     case occupancy = "64x64x16-w4n2"
 
@@ -23,6 +26,7 @@ public enum WDMetal {
       switch self {
       case .aligned: return .baseline
       case .alignedRelaxed: return .relaxed
+      case .aligned64: return .relaxed64
       default: return self
       }
     }
@@ -30,8 +34,9 @@ public enum WDMetal {
     var dimensions: (Int, Int, Int) {
       precondition(self != .library)
       if self == .occupancy { return (64, 64, 16) }
-      let specialized = [Self.relaxed, .aligned, .alignedRelaxed].contains(self)
-      let values = (specialized ? "32x64x32" : rawValue).split(separator: "x").map { Int($0)! }
+      // Alias prefixes ("relaxed…", "aligned-relaxed…") never carry digits.
+      let numeric = rawValue.drop { $0.isLetter || $0 == "-" }
+      let values = numeric.split(separator: "x").map { Int($0)! }
       return (values[0], values[1], values[2])
     }
   }
@@ -129,7 +134,8 @@ public enum WDMetal {
     return projection(
       [x, weight, bias, scale], template: [
         ("H", heads), ("TBM", bm), ("TBN", bn), ("TBK", bk), ("TWM", wm),
-        ("RELAXED", tile == .relaxed || tile == .alignedRelaxed),
+        ("RELAXED", tile == .relaxed || tile == .alignedRelaxed || tile == .relaxed64
+          || tile == .aligned64),
         ("M_ALIGNED", x.shape[0] % bm == 0),
       ],
       grid: ((3 * heads * 32 / bn) * threads, (x.shape[0] + bm - 1) / bm, 1),
@@ -227,8 +233,9 @@ public enum WDMetal {
       [x, weight, bias],
       template: [
         ("K", channels), ("N", expanded), ("ACT", gelu), ("TBM", bm), ("TBN", bn), ("TBK", bk),
-        ("RELAXED", tile == .relaxed || tile == .alignedRelaxed),
-        ("FAST_FULL_TILES", tile == .aligned || tile == .alignedRelaxed),
+        ("RELAXED", tile == .relaxed || tile == .alignedRelaxed || tile == .relaxed64
+          || tile == .aligned64),
+        ("FAST_FULL_TILES", tile == .aligned || tile == .alignedRelaxed || tile == .aligned64),
         ("M_ALIGNED", rows % bm == 0),
         ("TWM", wm), ("TWN", wn),
       ],

@@ -60,18 +60,22 @@
 
   constexpr short tgp_mem_0 = (BK + padK) * (BD);
   constexpr short tgp_mem_1 = BK * (BV + padV);
-  constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1;
   // 32 head lanes fit four half matrix fragments per warp; retain Q once
   // rather than reloading it from threadgroup memory for every K/V tile.
   constexpr bool q_in_registers = true;
   constexpr short q_tgp_mem_s = q_in_registers ? 1 : BQ * (BD + padQ);
 
   threadgroup T Q_smem[q_tgp_mem_s];
-  threadgroup T KV_smem[tgp_mem_s];
+  // K and V keep separate staging buffers. Sharing one buffer forced an extra
+  // barrier pair per key block to sequence the score MMA's K reads against
+  // the output MMA's V loads; separate buffers only need a publication
+  // barrier before the score MMA and one at the loop top before reuse.
+  threadgroup T K_smem[tgp_mem_0];
+  threadgroup T V_smem[tgp_mem_1];
 
   threadgroup T* Qs = Q_smem;
-  threadgroup T* Ks = KV_smem;
-  threadgroup T* Vs = KV_smem;
+  threadgroup T* Ks = K_smem;
+  threadgroup T* Vs = V_smem;
 
   // Prepare block loaders
   using QBlockLoader = BlockLoaderT<
@@ -235,12 +239,15 @@
 
   // Loop over KV seq length
   for (int kb = 0; kb < kb_lim; kb++) {
-    // Load K block and apply scale
+    // Wait until the previous iteration's score and output MMA reads have
+    // finished before either staging buffer is overwritten.
     threadgroup_barrier(mem_flags::mem_threadgroup);
     if (!align_K && kb == (params->NK_aligned)) {
       loader_k.load_safe(short2(BD, params->kL_rem));
+      loader_v.load_safe(short2(BV, params->kL_rem));
     } else {
       loader_k.load_unsafe();
+      loader_v.load_unsafe();
     }
 
     // Do S = Q @ K.T
@@ -349,15 +356,7 @@
       }
     }
 
-
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-
-    // Load V blocks
-    if (!align_K && kb == (params->NK_aligned)) {
-      loader_v.load_safe(short2(BV, params->kL_rem));
-    } else {
-      loader_v.load_unsafe();
-    }
+    // V is already staged above; the softmax below runs while it settles.
 
     // Do softmax
 
@@ -399,9 +398,6 @@
 
     // Update O
     Otile.template row_bin_op<MulOp>(factor);
-
-    // Load V into registers
-    threadgroup_barrier(mem_flags::mem_threadgroup);
 
     STEEL_PRAGMA_UNROLL
     for (short iq = 0; iq < TQ; iq++) {

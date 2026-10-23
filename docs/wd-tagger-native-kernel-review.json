@@ -11631,5 +11631,93 @@
       "No new natural-image or other-hardware performance evidence",
       "Serial worker use retained; no new concurrency contract"
     ]
+  },
+  "round4": {
+    "date": "2026-10-23",
+    "device": "MacBook Air M3 base (8-core GPU), 16 GB, macOS 26.5.1, MLX Swift 0.31.2",
+    "baseline": {
+      "predictionFramesPerSecond": 14.7251,
+      "configuration": "automatic measured-m3-b8-round2 profile, 64 synthetic RGBA inputs, batch 8, repeats 3, 448/64 MiB budgets, thermal nominal",
+      "peakPhysicalFootprintBytes": 709116912
+    },
+    "retained": {
+      "flash32SplitKVBuffers": {
+        "change": "Separate threadgroup staging for K and V; two barriers per 32-key block instead of four",
+        "attentionDispatchMillisecondsPerPrediction": {
+          "old": 69.081,
+          "new": 66.09,
+          "method": "Sum of query-16 dense per-stage medians weighted by each stage's shifted/unshifted block counts"
+        },
+        "probabilitiesByteIdentical": true,
+        "kernelRevision": "swinv2-native-metal32-fused-qkv-v3"
+      },
+      "stateLock": "Uncontended NSLock guards configurations/compiled/compactParameters cache mutation; serial worker confinement unchanged",
+      "tileVocabulary": [
+        "relaxed64x64x32",
+        "aligned-relaxed64x64x32",
+        "64x64x16 (WM2/WN2) added; validated, none selected"
+      ]
+    },
+    "pairedRuns": {
+      "flashSplitEndToEnd": [
+        {
+          "old": 14.79,
+          "new": 14.83
+        },
+        {
+          "old": 14.78,
+          "new": 14.75
+        },
+        {
+          "old": 14.6517,
+          "new": 14.6428
+        },
+        {
+          "old": 14.65,
+          "new": 14.64
+        }
+      ],
+      "controlsDuringTileSweeps": [
+        14.66,
+        14.67,
+        14.66
+      ]
+    },
+    "rejectedTrials": {
+      "qkv3Relaxed64": 14.6334,
+      "fc2Relaxed64": 14.6695,
+      "qkv3_64x64x16": 14.6972,
+      "fc2_64x64x16": 14.6537,
+      "fc2_64x64x64": 14.4182,
+      "qkvStages1and2_64x64x32": 14.2795,
+      "commitThresholds": {
+        "MLX_MAX_MB_PER_BUFFER_128": 13.2973,
+        "MLX_MAX_MB_PER_BUFFER_256": 12.7234,
+        "MLX_MAX_OPS_PER_BUFFER_512": 13.9585,
+        "MLX_MAX_MB_128_OPS_512": 12.081,
+        "blockControls": [
+          12.866,
+          14.11,
+          12.87
+        ],
+        "note": "Thermal drift across blocks; comparisons are within-block. Smaller-than-default was already measured worse on M4 (memory pass)."
+      },
+      "allTileVariantProbabilitiesByteIdentical": true
+    },
+    "correctness": {
+      "kernelChecksAllTiles": 633,
+      "profileChecks": 41,
+      "fullModelByteIdenticalVsRound3Kernel": true,
+      "v3RevisionConfirmation": {
+        "predictionFramesPerSecond": 14.6565,
+        "profile": "measured-m3-b8-round2"
+      }
+    },
+    "limitations": [
+      "All runs on one fanless base M3 with session-to-session clock variance; end-to-end deltas below ~0.5% are not resolvable",
+      "Synthetic arithmetic inputs only; no natural-image corpus this round",
+      "No GPU trace or occupancy counters; barrier reasoning is source-level",
+      "M4, M5 and M3 Pro/Max remain unmeasured on kernel revision v3"
+    ]
   }
 }

@@ -8,7 +8,7 @@ public enum WDNativeError: Error { case invalid(String) }
 /// Native Swift graph orchestration and fixed-shape Metal kernels.
 public final class WDNativeTagger {
   public static let version = "swinv2-native-metal32-v1"
-  public static let implementationVersion = "swinv2-native-metal32-fused-qkv-v2"
+  public static let implementationVersion = "swinv2-native-metal32-fused-qkv-v3"
   // Soft scheduling/cache budgets selected with the direct RGBA input path.
   // Workers isolate these process-wide MLX settings from other app models.
   public static let defaultMemoryMiB = 448
@@ -30,6 +30,11 @@ public final class WDNativeTagger {
   private var configurations: [Int: WDResolvedKernelConfiguration] = [:]
   private var compiled: [String: (MLXArray) -> MLXArray] = [:]
   private var compactParameters: [String: MLXArray]?
+  /// Production callers confine prediction to one actor-owned worker process,
+  /// but the caches below mutate lazily on first use. This lock keeps that
+  /// mutation safe if a future call site ever loses the serial contract; it is
+  /// uncontended in every shipped path.
+  private let stateLock = NSLock()
   private struct Block {
     let prefix: String
     let shifted: Bool
@@ -326,6 +331,8 @@ public final class WDNativeTagger {
   }
   /// Cached once per workload, outside graph tracing and block execution.
   public func resolvedConfiguration(batch: Int) throws -> WDResolvedKernelConfiguration {
+    stateLock.lock()
+    defer { stateLock.unlock() }
     if let cached = configurations[batch] { return cached }
     let resolved = try WDOptimizationRegistry.resolve(gpu: capabilities, batch: batch,
       gemmTile: gemmTile, gemmOverrides: gemmOverrides, attentionQueryRows: attentionRowsOverride,
@@ -359,7 +366,9 @@ public final class WDNativeTagger {
     do { configuration = try resolvedConfiguration(batch: x.shape[0]) }
     catch { preconditionFailure("Invalid native workload: \(error)") }
     if configuration.compactBias && compactParameters == nil {
-      compactParameters = Self.compactBiasWeights(p)
+      stateLock.lock()
+      if compactParameters == nil { compactParameters = Self.compactBiasWeights(p) }
+      stateLock.unlock()
     }
     let biases = configuration.compactBias ? compactParameters : nil
     guard compileModel else { return forward(x, configuration: configuration, biasWeights: biases) }
@@ -368,7 +377,9 @@ public final class WDNativeTagger {
     let graph = compile { [unowned self] input in
       self.forward(input, configuration: configuration, biasWeights: biases)
     }
+    stateLock.lock()
     compiled[key] = graph
+    stateLock.unlock()
     return graph(x)
   }
   private func forward(_ image: MLXArray, configuration: WDResolvedKernelConfiguration,

@@ -11,7 +11,9 @@ Inference, weight preparation, correctness checks and timing require no Python.
 - `Flash32.metal`: fixed 196-token, 32-lane tiled attention with FP32 online
   softmax. The selected query tile is 16 rows for measured M3 or compatible
   inherited batch-eight execution and 32 rows for the conservative native profile. Compact per-head positional bias and per-window region IDs preserve
-  shifted-window masking without an expanded score/mask tensor. The output is
+  shifted-window masking without an expanded score/mask tensor. K and V stage in
+  separate threadgroup buffers, so each 32-key block needs two threadgroup
+  barriers instead of the four the previously aliased buffer forced. The output is
   token-major, ready for the projection GEMM.
 - `QKVCosine.metal`: one SIMD group per token/head combines FP32 cosine
   normalization, learned Q scaling, Q/K/V splitting and layout conversion.
@@ -141,6 +143,8 @@ and hoisted shifted-query regions remain available on every compatible GPU.
 Alternating Stage 3 blocks now also share two immutable directional route arrays,
 removing 47,040 bytes of duplicate payload. Configuration capture eliminates
 per-block policy evaluation. Neither change claims a measured throughput gain.
+Flash32's split K/V staging (Round 4) is also universal: byte-identical output,
+−4.3% isolated attention dispatch time, end-to-end within session noise.
 The 448 MiB allocation and 64 MiB cache budgets, checkpoint format, WDT4 worker
 protocol, FP16 rounding boundaries and FP32 reduction order remain unchanged.
 
@@ -171,6 +175,10 @@ with independent coverage audits in the [native checks](../../WaifuWDTaggerValid
 | NormRoute and routing | `IDENTITY_ROUTE` removes route fetches and route index arithmetic from both normalization implementations. The model passes a shared one-element placeholder for identity operations. Unused `Stage.first` maps, full identity maps, and identity transition maps were eliminated: 200,704 bytes of route payload replaced by a four-byte placeholder. The two-pass FP32 algorithm, rounding boundaries and residual order remain; NormSIMD stays opt-in. |
 | Projection/FC2 plus LayerNorm | The current output channels span threadgroups. Whole-row ownership at C=512 with the current BK=32 padded layout needs 43,520 shared bytes before statistics, exceeding this M3's 32 KiB limit. BK=16 can fit, but a 32×512 tile at 128 threads needs 128 FP32 accumulator components per thread, before retaining rounded values and reduction state. No efficient replacement was established. Adding residual before LayerNorm is mathematically wrong for this postnorm model. |
 | Patch projection, packing and buffer lifetime | A dedicated K=48/N=128 projection+norm kernel is feasible; full-row synchronization is not impossible here. It requires different K tiling from the current native GEMM, and no measured bottleneck justified replacing the library path. Existing FP16 input rounding and direct window order remain. Weight loads already vectorize contiguous K; offline repacking adds checkpoint/layout complexity without an established benefit. MLX submission retains buffers until GPU completion; extra evaluation barriers would sacrifice graph scheduling. |
+| K/V staging aliasing (Round 4) | Flash32 previously staged K and then V through one threadgroup buffer, paying four barriers per 32-key block. Separate buffers cut this to two with identical loads and math; outputs stayed byte-identical and isolated attention time fell 4.3%, though attention's ~12% share keeps the end-to-end effect inside session noise. A further registers-only K/V variant was assessed and skipped: barriers proved nearly free, bounding its upside below noise against uncoalesced-load risk. |
+| Tile vocabulary completeness (Round 4) | `relaxed64x64x32` and `aligned-relaxed64x64x32` make relaxed synchronization (and full-tile loads, for the alias) reachable at 64×64 geometry, and `64x64x16` provides upstream's WM=2/WN=2 medium-device default that the `occupancy` case's 256-thread variant does not represent. All pass ownership/correctness checks and measured neutral on base M3; none is selected. `dimensions()` parses alias prefixes by stripping non-digits, so alias names cannot drift from their parsed geometry. |
+| Commit thresholds (Round 4) | MLX command-buffer commit thresholds are a closed direction: 16 MiB measured −5.9% on M4 earlier, and 128 MiB (−9%), 256 MiB (−13%) and combined larger op/MB limits (−14%) all measured slower on base M3. The defaults sit at a bracketed local optimum; no worker environment variable is set. |
+| Cache mutation safety (Round 4) | `WDNativeTagger`'s lazily mutated caches (`configurations`, `compiled`, optional compact parameters) are guarded by one uncontended `NSLock`. Production access remains serially confined through the actor-owned worker subprocess; the lock is insurance against call-site drift, not a concurrency claim. `MLXArray` is not `Sendable` in mlx-swift 0.31.2, so broader conformance is not currently expressible. |
 
 ### Validation and limits
 

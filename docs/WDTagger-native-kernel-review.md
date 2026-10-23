@@ -357,3 +357,98 @@ quantization check pass. Additional GPU generations remain unmeasured; synthetic
 capability tests verify policy, not physical hardware performance. No interactive
 UI testing was needed. Results and final source hashes are appended under `round3`
 in the existing evidence JSON, retaining the previous rounds unchanged.
+
+## Round 4 — barrier and scheduling sweep, 2026-10-23
+
+Round 4 attacked the two structural findings of a fresh subagent-assisted review:
+Flash32's K/V threadgroup aliasing, and the fact that the selected production
+profile never reaches the relaxed-synchronization/full-tile-load paths (they
+were reachable only through 32×64×32-only aliases). The session baseline on the
+same base M3 was 14.73 fps prediction-only with the automatic measured profile,
+64 synthetic RGBA inputs, batch eight; controls in each measurement block stayed
+within ±0.1 fps except where thermal drift is noted.
+
+### Retained changes
+
+- **Flash32 stages K and V in separate threadgroup buffers.** The single aliased
+  buffer forced four threadgroup barriers per 32-key block (reuse protection,
+  publication, K-read-done before V overwrite, V publication). Separate buffers
+  need two. Loaded values, MMA order, and the FP32 online-softmax order are
+  unchanged: all 695,104 probabilities are byte-identical to the Round 3 binary
+  across every configuration tested this round. The isolated attention
+  microbenchmark improved from 69.08 ms to 66.09 ms of per-prediction dispatch
+  time (−4.3%), concentrated in unshifted stage 1 (−8.1%) and stage 3 (−26.7%,
+  offset by a shifted regression); attention is roughly 12% of prediction time,
+  so the end-to-end effect is within session noise (paired runs: 14.61/14.65 old
+  versus 14.66/14.64 new). Retained because the kernel is strictly faster and
+  simpler to reason about; threadgroup memory rises from 2,561 to 4,866 bytes,
+  far below the 32 KiB limit. The kernel revision becomes
+  `swinv2-native-metal32-fused-qkv-v3`; registry entries pick it up automatically
+  and the measured M3 profile was re-confirmed on the new revision (14.66 fps,
+  byte-identical).
+- **Cache mutations in `WDNativeTagger` are lock-guarded.** Production access is
+  serially confined (actor-owned backend → worker subprocess stdin loop; no
+  concurrent caller exists today), but `configurations`, `compiled`, and the lazy
+  `compactParameters` path mutated shared dictionaries unlocked. An uncontended
+  `NSLock` now guards all three for insurance against call-site drift, at
+  nanosecond cost against ~68 ms predictions. No throughput claim.
+- **Three tile geometries joined the vocabulary** and pass all checks:
+  `relaxed64x64x32` and `aligned-relaxed64x64x32` (relaxed synchronization, and
+  for the alias also full-tile loads, at 64×64×32 — previously unreachable in
+  combination), and `64x64x16` at WM=2/WN=2, the configuration current upstream
+  MLX ships as its medium-device default for these fp16 shapes (the existing
+  `occupancy` case is a different 256-thread kernel). None is selected by any
+  profile: measured neutral on this M3 (see below). They remain available
+  building blocks for future per-device profiles.
+
+### Measured and rejected
+
+| Experiment | Result (vs adjacent controls 14.6–14.7 fps) | Verdict |
+|---|---|---|
+| Stage 3 QKV `relaxed64x64x32` | 14.63 | neutral; relaxed sync at 64×64 geometry buys nothing here |
+| Stage 3 FC2 `relaxed64x64x32` | 14.67 | neutral |
+| Stage 3 QKV `64x64x16` (WM2/WN2) | 14.70 | within noise |
+| Stage 3 FC2 `64x64x16` | 14.65 | within noise |
+| Stage 3 FC2 `64x64x64` | 14.42 (−1.6%) | rejected: halved K-loop iterations do not pay for 18.4 KiB threadgroup tiles |
+| Stage 1+2 QKV `64x64x32` | 14.28 (−2.5%) | rejected: larger M-tiles hurt the small-C stages |
+| `MLX_MAX_MB_PER_BUFFER=128` | 13.30 (−9%) | rejected |
+| `MLX_MAX_MB_PER_BUFFER=256` | 12.72 (−13%) | rejected |
+| `MLX_MAX_OPS_PER_BUFFER=512` | 13.96 (−1%) | rejected |
+| `MLX_MAX_MB_PER_BUFFER=128` + ops 512 | 12.08 (−14%) | rejected |
+
+All tile-variant outputs were byte-identical to the baseline probabilities; the
+commit-threshold runs used the unchanged default kernels. Together with the M4
+measurement that 16 MiB commits cost 5.9%, the default commit thresholds are now
+bracketed from both sides: smaller and larger are both worse, and this direction
+is closed.
+
+### Findings and limits
+
+- The M3 tile landscape is at a measured local optimum. Every geometry adjacent
+  to the Round 2 selection — including the two never-before-compilable
+  combinations — is neutral or slower. Further tile search on this device class
+  has no expected value without new hardware evidence.
+- Per-op timing recorded by earlier M4 passes attributes ~80–85% of batch time
+  to the dense GEMM kernels; attention is ~12% (66–69 ms of ~540 ms per batch-8
+  prediction in dispatch-time microbenchmarks). Flash32 K/V-in-registers (zero
+  barriers) was assessed and skipped: with barriers already shown nearly free by
+  the split-buffer result, its remaining upside is bounded well below session
+  noise, against nontrivial uncoalesced-load risk.
+- The fused-QKV cosine epilogue was audited against a lane-exact model: its one
+  remaining barrier plus 512-byte partials is the minimum for cross-SIMD-head
+  ownership; any MMA-based re-reduction would change the mandated FP32 order.
+  Confirmed already optimal, not re-tried.
+- The classifier head (`head.fc`, M=8, K=1024, N=10861 prime) stays on the MLX
+  library path; it is a single ~22 MB memory-bound read, ≈0.05% of batch time.
+  A `gemv_wide`-style kernel cannot pay for itself here.
+- Concurrency audit: `WDTaggerWorker` is `@unchecked Sendable` with unlocked
+  pipe I/O, safe only because the actor backend is its sole caller; the worker
+  subprocess loop is single-threaded. `MLXArray` is not `Sendable` in
+  mlx-swift 0.31.2, so full `Sendable` conformance for `WDNativeTagger` is not
+  available without `@unchecked` plus the lock now in place.
+
+**633 native checks passed** (528 prior + 105 from the three new tile geometries,
+including lane-ownership audits for every new effective QKV shape at two/six/model
+head counts). Full-model output remains byte-identical on all 64 inputs for every
+retained change. Raw samples are appended under `round4` in the
+[evidence JSON](wd-tagger-native-kernel-review.json).
