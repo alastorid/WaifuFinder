@@ -4,21 +4,24 @@ struct CrystalOrbInspectorView: View {
     @ObservedObject var model: WaifuCrystalOrbModel
     private enum Control: Hashable { case display, channel, tolerance, gain }
     @FocusState private var focusedControl: Control?
-    @State private var metadataExpanded = true
+    @State private var advanced = false
     @State private var advancedMetadata = false
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("IMAGE INFORMATION").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                analysisControls
+                metadata
+                if model.candidateIsPhoto { Button("Open in Photos.app") { model.revealCandidateInPhotos() } }
                 Divider()
-                alignmentControls
-                Divider()
-                statistics
-                Divider()
-                pixelInspector
-                Divider()
-                DisclosureGroup("Source metadata", isExpanded: $metadataExpanded) { metadata }
+                DisclosureGroup("Comparison controls", isExpanded: $advanced) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        analysisControls
+                        CrystalOrbOpacitySlider(value: $model.opacity, focusChanged: { model.opacityControlFocused = $0 })
+                        alignmentControls
+                        Toggle("Overview", isOn: $model.showOverview)
+                        statistics
+                    }.padding(.top, 8)
+                }
                 DisclosureGroup("Detailed metadata", isExpanded: $advancedMetadata) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Target A").font(.headline)
@@ -47,6 +50,7 @@ struct CrystalOrbInspectorView: View {
             Slider(value: $model.differenceSettings.tolerance, in: 0...64, step: 0.5).focused($focusedControl, equals: .tolerance).accessibilityLabel("Difference tolerance")
             HStack { Text("Display gain"); Spacer(); Text(String(format: "%.1f×", model.differenceSettings.gain)).monospacedDigit() }
             Slider(value: $model.differenceSettings.gain, in: 1...32).focused($focusedControl, equals: .gain).accessibilityLabel("Difference display gain")
+            Toggle("Extend differences to full brightness", isOn: $model.differenceSettings.autoStretch).toggleStyle(.checkbox)
             Button("Reset sensitivity") { model.differenceSettings = .init() }
             Text("Gamma-encoded sRGB · 8-bit statistics · Absolute Δ 0–1 · RGB magnitude = largest channel. Luminance uses Rec.709 luma Y′. Transparency compares over black. Magenta = unmatched; empty canvas is excluded.")
                 .font(.caption2).foregroundStyle(.secondary)
@@ -107,60 +111,34 @@ struct CrystalOrbInspectorView: View {
             Text("Unmatched: \((value.covered-value.overlap).formatted()) pixels").foregroundStyle(.secondary)
         }.monospacedDigit()
     }
-    private var pixelInspector: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("Pixel inspector").font(.headline)
-            Toggle("Synchronized crosshair", isOn: $model.showCrosshair).toggleStyle(.checkbox)
-            Toggle("Pixel grid at high zoom", isOn: $model.showPixelGrid).toggleStyle(.checkbox)
-            if let pixel = model.pixel {
-                Button("Pixel \(Int(pixel.point.x)), \(Int(pixel.point.y))") { model.center(on: pixel.point) }.buttonStyle(.link)
-                Text("Bottom-left comparison coordinates").font(.caption2).foregroundStyle(.secondary)
-                Text("A: " + coordinate(pixel.targetPoint) + "  RGB " + rgb(pixel.a))
-                Text("B: " + coordinate(pixel.candidatePoint) + "  RGB " + rgb(pixel.b))
-                Text("Δ RGB " + rgb(pixel.delta)).fontWeight(.medium)
-                Text(String(format: "Luma Δ %.5f", pixel.luma))
-                Text(pixel.targetPoint == nil || pixel.candidatePoint == nil ? "No valid correspondence" : (pixel.significant ? "Exceeds tolerance" : "Within tolerance"))
-                HStack { pixelGrid(pixel.targetGrid, label: "A"); pixelGrid(pixel.candidateGrid, label: "B") }
-                Text("11 × 11 registered sRGB samples, over black; fractional source positions are resampled. These are converted display values, not raw file samples.")
-                    .font(.caption2).foregroundStyle(.secondary)
-            } else { Text("Move the pointer over an image to sample corresponding pixels.").foregroundStyle(.secondary) }
-        }.monospacedDigit()
-    }
-    private func pixelGrid(_ image: CGImage, label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(label)
-            Image(decorative: image, scale: 1).resizable().interpolation(.none).aspectRatio(1, contentMode: .fit)
-                .overlay { GeometryReader { geometry in
-                    Rectangle().stroke(.yellow, lineWidth: 1).frame(width: geometry.size.width/11, height: geometry.size.height/11)
-                        .position(x: geometry.size.width/2, y: geometry.size.height/2)
-                }}
-        }
-    }
-    private func rgb(_ values: [UInt8]) -> String { values.map { String(format: "%3d", Int($0)) }.joined(separator: " ") }
-    private func coordinate(_ point: CGPoint?) -> String { point.map { String(format: "%.2f, %.2f", $0.x, $0.y) } ?? "Unmatched" }
     private var metadata: some View {
         let a = model.query?.metadata, b = model.candidateMetadata
-        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
-            GridRow { Text(""); Text("TARGET A").fontWeight(.semibold); Text("CANDIDATE B").fontWeight(.semibold) }
-            row("Dimensions", a?.dimensionsText, (model.pairIsCurrent ? model.pair : nil).map { "\(Int($0.candidateNativeSize.width)) × \(Int($0.candidateNativeSize.height))" })
-            row("File", a?.filename, b?.filename ?? (model.candidateIsPhoto ? "Photo" : "Video frame"))
-            row("Size", a?.fileSizeBytes.map(PhotoMetadataFormatter.fileSize), b?.fileSizeBytes.map(PhotoMetadataFormatter.fileSize))
-            row("Captured", a?.captureDate.map(PhotoMetadataFormatter.dateTime), b?.captureDate.map(PhotoMetadataFormatter.dateTime))
-            row("Photos date", a?.photosCreationDate.map(PhotoMetadataFormatter.dateTime), b?.photosCreationDate.map(PhotoMetadataFormatter.dateTime))
-            row("Camera", a?.cameraModel, b?.cameraModel)
-            row("Lens", a?.lensModel, b?.lensModel)
-            row("Profile", a?.colorProfile, b?.colorProfile)
-            row("Orientation", a?.orientation, b?.orientation)
-            row("Aperture", a?.aperture.map(PhotoMetadataFormatter.aperture), b?.aperture.map(PhotoMetadataFormatter.aperture))
-            row("Exposure", a?.exposureTime.map(PhotoMetadataFormatter.shutterSpeed), b?.exposureTime.map(PhotoMetadataFormatter.shutterSpeed))
-            row("ISO", a?.iso.map(String.init), b?.iso.map(String.init))
-        }.padding(.top, 6)
-    }
-    private func row(_ label: String, _ a: String?, _ b: String?) -> some View {
-        GridRow(alignment: .top) {
-            Text(label).foregroundStyle(.secondary)
-            Text(a ?? "Unavailable").frame(maxWidth: .infinity, alignment: .leading)
-            Text(b ?? "Unavailable").frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(.vertical, 2).background(a != b ? Color.accentColor.opacity(0.07) : .clear)
+        let rows: [(String, String?, String?)] = [
+            ("Dimensions", a?.dimensionsText, (model.pairIsCurrent ? model.pair : nil).map { "\(Int($0.candidateNativeSize.width)) × \(Int($0.candidateNativeSize.height))" }),
+            ("File", a?.filename, b?.filename ?? (model.candidateIsPhoto ? "Photo" : "Video frame")),
+            ("Size", a?.fileSizeBytes.map(PhotoMetadataFormatter.fileSize), b?.fileSizeBytes.map(PhotoMetadataFormatter.fileSize)),
+            ("Captured", a?.captureDate.map(PhotoMetadataFormatter.dateTime), b?.captureDate.map(PhotoMetadataFormatter.dateTime)),
+            ("Photos date", a?.photosCreationDate.map(PhotoMetadataFormatter.dateTime), b?.photosCreationDate.map(PhotoMetadataFormatter.dateTime)),
+            ("Camera", a?.cameraModel, b?.cameraModel), ("Lens", a?.lensModel, b?.lensModel),
+            ("Profile", a?.colorProfile, b?.colorProfile), ("Orientation", a?.orientation, b?.orientation),
+            ("Aperture", a?.aperture.map(PhotoMetadataFormatter.aperture), b?.aperture.map(PhotoMetadataFormatter.aperture)),
+            ("Exposure", a?.exposureTime.map(PhotoMetadataFormatter.shutterSpeed), b?.exposureTime.map(PhotoMetadataFormatter.shutterSpeed)),
+            ("ISO", a?.iso.map(String.init), b?.iso.map(String.init))
+        ]
+        let differences = rows.filter { $0.1 != $0.2 }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Metadata differences").font(.headline)
+            if differences.isEmpty { Text("No metadata differences").foregroundStyle(.secondary) }
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 7) {
+                GridRow { Text(""); Text("TARGET").fontWeight(.semibold); Text("CANDIDATE").fontWeight(.semibold) }
+                ForEach(Array(differences.enumerated()), id: \.offset) { _, row in
+                    GridRow(alignment: .top) {
+                        Text(row.0).foregroundStyle(.secondary)
+                        Text(row.1 ?? "Unavailable").frame(maxWidth: .infinity, alignment: .leading)
+                        Text(row.2 ?? "Unavailable").frame(maxWidth: .infinity, alignment: .leading)
+                    }.padding(.vertical, 2)
+                }
+            }
+        }
     }
 }

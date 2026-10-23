@@ -1,9 +1,18 @@
 import SwiftUI
 import Combine
 
+/// Gesture-rate updates stay out of the session/search/metadata observation tree.
+@MainActor final class CrystalOrbNavigation: ObservableObject {
+    @Published var zoom: CGFloat = 1
+    @Published var actualPixels = false
+    @Published var fillViewport = false
+    @Published var pan = CGSize.zero
+    @Published var center: CGPoint?
+}
+
 @MainActor
 final class WaifuCrystalOrbModel: ObservableObject {
-    enum Mode: String, CaseIterable { case inspect = "Inspect", sideBySide = "Side by Side", swipe = "Swipe", toggle = "Toggle", difference = "Difference" }
+    enum Mode: String, CaseIterable { case sideBySide = "Side by Side", swipe = "Swipe", toggle = "Toggle", difference = "Difference" }
     struct Pair {
         let queryID: UUID
         let frame: AnalyzedFrame
@@ -29,8 +38,9 @@ final class WaifuCrystalOrbModel: ObservableObject {
     @Published private(set) var comparisonError: String?
     @Published var candidateMetadata: PhotoMetadata?
     @Published var metadataLoading = false
-    @Published var mode: Mode = .inspect {
+    @Published var mode: Mode = .sideBySide {
         didSet {
+            if oldValue != mode { maximizedPane = nil }
             if mode != .toggle { holdingToggle = false }
             if mode == .difference { opacityControlFocused = false }
         }
@@ -42,11 +52,12 @@ final class WaifuCrystalOrbModel: ObservableObject {
     @Published var holdingToggle = false
     var opacityControlFocused = false
     var inspectionControlFocused = false
-    @Published var zoom: CGFloat = 1
-    @Published var actualPixels = false
-    @Published var fillViewport = false
-    @Published var pan = CGSize.zero
-    @Published var navigationCenter: CGPoint?
+    let navigation = CrystalOrbNavigation()
+    var zoom: CGFloat { get { navigation.zoom } set { navigation.zoom = newValue } }
+    var actualPixels: Bool { get { navigation.actualPixels } set { navigation.actualPixels = newValue } }
+    var fillViewport: Bool { get { navigation.fillViewport } set { navigation.fillViewport = newValue } }
+    var pan: CGSize { get { navigation.pan } set { navigation.pan = newValue } }
+    var navigationCenter: CGPoint? { get { navigation.center } set { navigation.center = newValue } }
     @Published var cursor: CGPoint?
     @Published var roi: CGRect? { didSet { scheduleMeasurements() } }
     @Published var selectingRegion = false
@@ -71,8 +82,8 @@ final class WaifuCrystalOrbModel: ObservableObject {
     @Published private(set) var alignmentMessage = "Centered · No registration"
     @Published var maximizedPane: String?
     @Published var differenceCollapsed = false
-    @Published var showCrosshair = true
-    @Published var showPixelGrid = true
+    @Published var showCrosshair = false
+    @Published var showPixelGrid = false
     @Published var showOverview = false
     private var registrationTask: Task<Void, Never>?
     private var measurementTask: Task<Void, Never>?
@@ -85,7 +96,7 @@ final class WaifuCrystalOrbModel: ObservableObject {
         measurementTask?.cancel(); pixelTask?.cancel(); pixelTask = nil; pixelTicket = UUID()
         measurements = nil; pixel = nil
     }
-    static let matchLimit = 19
+    static let matchLimit = 7
     private var followsBestMatch = true
     private var queryOriginalUnavailable = false
     private var candidateOriginalUnavailable = false
@@ -328,7 +339,7 @@ final class WaifuCrystalOrbModel: ObservableObject {
         if automatic, selectedID == id { return }
         let upgrade = !automatic && selectedID == id && pair?.candidateIsOriginal != true && !originalRequested
         if selectedID == id, !upgrade, loading || (pairIsCurrent && comparisonError == nil) { return }
-        originalRequested = !automatic
+        originalRequested = true
         if selectedID != id {
             cancelInspection()
             registrationByFrame[id] = registrationByFrame[id] ?? .init()
@@ -364,14 +375,15 @@ final class WaifuCrystalOrbModel: ObservableObject {
                     }
                 } catch { /* Retain the best available preview while the original proceeds. */ }
             }
-            // Automatic rank-one presentation is preview-only. Originals are
-            // requested only after a deliberate candidate click/Load original.
+            // The best preview paints first; original acquisition follows the
+            // existing Photos network preference automatically.
             if originalRequested {
                 comparisonTask = Task {
                 do {
                     let image = try await PhotosMedia.shared.image(source, seconds: match.frame.timeSeconds)
                     guard !Task.isCancelled, comparisonTicket == ticket, session.video?.url == source else { return }
                     publishImage(image, original: true, frame: match.frame, ticket: ticket)
+                    loadDetailedMetadata()
                 } catch {
                     guard !Task.isCancelled, comparisonTicket == ticket else { return }
                     candidateOriginalUnavailable = true
@@ -453,6 +465,16 @@ final class WaifuCrystalOrbModel: ObservableObject {
         }
     }
 
+    func originalAccessChanged() {
+        guard let id = selectedID, pair?.candidateIsOriginal != true else { return }
+        originalRequested = false
+        select(id)
+    }
+    func revealCandidateInPhotos() {
+        guard let source = session?.video?.url, let frame = selected?.frame,
+              let photo = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) else { return }
+        PhotosAppIntegration.reveal(photo)
+    }
     func loadDetailedMetadata() {
         guard let session, let match = selected, let source = session.video?.url,
               let photo = PhotosMedia.shared.photoItemURL(for: source, seconds: match.frame.timeSeconds) else { return }
@@ -479,7 +501,10 @@ final class WaifuCrystalOrbModel: ObservableObject {
 
     func resetZoom() { zoom = 1; actualPixels = false; fillViewport = false; pan = .zero; navigationCenter = nil }
 
-    func center(on point: CGPoint) { navigationCenter = point; pan = .zero }
+    func center(on point: CGPoint) {
+        if navigationCenter != point { navigationCenter = point }
+        if pan != .zero { pan = .zero }
+    }
     func zoomToRegion(_ region: CGRect) {
         guard !region.isNull, !region.isEmpty else { return }
         center(on: CGPoint(x: region.midX, y: region.midY)); actualPixels = false; fillViewport = false
@@ -587,7 +612,6 @@ final class WaifuCrystalOrbModel: ObservableObject {
         case 124: if opacityControlFocused { opacity = min(1, opacity + 0.01) } else { step(1) }
         default:
             switch event.charactersIgnoringModifiers?.lowercased() {
-            case "i": mode = .inspect
             case "s": mode = .sideBySide
             case "w": mode = .swipe
             case "t": mode = .toggle

@@ -84,4 +84,91 @@ struct SourceFrameTimeline: Sendable {
         guard !timeline.timestamps.isEmpty else { throw FrameSamplingError.decodingFailed("No frame timestamps") }
         return timeline
     }
+
+    /// Reads only the sample timestamps around a requested interval. Sample
+    /// cursors seek by presentation time, so this work stays local to the range
+    /// instead of walking a long video's entire sample table.
+    static func load(source: URL, around range: ClosedRange<Double>) async throws -> SourceFrameTimeline {
+        let asset = try await PhotosMedia.asset(source).value
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw FrameSamplingError.noVideoTrack
+        }
+        let segments = try await track.load(.segments)
+        var times: [Double] = []
+        let targetStart = CMTime(seconds: max(0, range.lowerBound), preferredTimescale: 600)
+        let targetEnd = CMTime(seconds: max(range.lowerBound, range.upperBound), preferredTimescale: 600)
+
+        if let segment = segment(containingOrBefore: targetStart, in: segments) {
+            let mediaStart = CMTimeMapTimeFromRangeToRange(targetStart,
+                fromRange: segment.timeMapping.target, toRange: segment.timeMapping.source)
+            if let cursor = track.makeSampleCursor(presentationTimeStamp: mediaStart) {
+                func mappedTime() -> Double? {
+                    let mediaTime = cursor.presentationTimeStamp
+                    for segment in segments where !segment.isEmpty {
+                        let mapping = segment.timeMapping
+                        if CMTimeRangeContainsTime(mapping.source, time: mediaTime) {
+                            return CMTimeMapTimeFromRangeToRange(mediaTime, fromRange: mapping.source,
+                                                                toRange: mapping.target).seconds
+                        }
+                    }
+                    return nil
+                }
+
+                // Include one preceding sample when the cursor lands just after
+                // the requested start. It gives timestamp-to-ordinal mapping a
+                // stable local origin for frames at the range boundary.
+                while let seconds = mappedTime(), seconds > range.lowerBound,
+                      cursor.stepInPresentationOrder(byCount: -1) == -1 {}
+
+                while true {
+                    try Task.checkCancellation()
+                    if let seconds = mappedTime() {
+                        if seconds > targetEnd.seconds { break }
+                        if seconds.isFinite, seconds >= 0 { times.append(seconds) }
+                    }
+                    guard cursor.stepInPresentationOrder(byCount: 1) == 1 else { break }
+                }
+            }
+        }
+
+        // Some formats do not provide sample cursors. AVAssetReader's compressed
+        // passthrough still avoids image decoding and honors the requested range.
+        if times.isEmpty {
+            let reader = try AVAssetReader(asset: asset)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            output.alwaysCopiesSampleData = false
+            guard reader.canAdd(output) else { throw FrameSamplingError.noVideoTrack }
+            reader.add(output)
+            let duration = CMTimeSubtract(targetEnd, targetStart)
+            reader.timeRange = CMTimeRange(start: targetStart, duration: duration)
+            guard reader.startReading() else {
+                throw FrameSamplingError.assetReaderFailed(reader.error?.localizedDescription ?? "Cannot read timing")
+            }
+            defer { reader.cancelReading() }
+            while let sample = output.copyNextSampleBuffer() {
+                try Task.checkCancellation()
+                let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                if seconds.isFinite, seconds >= 0 { times.append(seconds) }
+            }
+            if reader.status == .failed {
+                throw FrameSamplingError.assetReaderFailed(reader.error?.localizedDescription ?? "Cannot read timing")
+            }
+        }
+
+        try Task.checkCancellation()
+        let timeline = SourceFrameTimeline(timestamps: times)
+        guard !timeline.timestamps.isEmpty else { throw FrameSamplingError.decodingFailed("No frame timestamps in the requested range") }
+        return timeline
+    }
+
+    private static func segment(containingOrBefore time: CMTime,
+                                in segments: [AVAssetTrackSegment]) -> AVAssetTrackSegment? {
+        let usable = segments.filter { !$0.isEmpty }
+        if let containing = usable.first(where: { CMTimeRangeContainsTime($0.timeMapping.target, time: time) }) {
+            return containing
+        }
+        return usable.filter { CMTimeCompare($0.timeMapping.target.start, time) <= 0 }
+            .max { CMTimeCompare($0.timeMapping.target.start, $1.timeMapping.target.start) < 0 }
+            ?? usable.first
+    }
 }

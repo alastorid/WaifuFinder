@@ -36,7 +36,7 @@ struct RootView: View {
             if showWelcomeScreen {
                 DropZone(session: session, isPrimary: true, openPhotos: openPhotosWorkspace, imageDrop: { CrystalOrbImport.accept($0, model: orb, session: session) })
             } else if showPhotosWorkspace {
-                PhotosWorkspaceView(session: session, link: link, onBackToWelcome: returnToWelcome,
+                PhotosWorkspaceView(session: session, link: link, onBackToWelcome: returnToWelcome, orb: orb,
                                     orbControl: { orbButton }, trailingControls: { workspaceControls }) {
                     mainContent
                 }
@@ -138,10 +138,14 @@ struct RootView: View {
                     .accessibilityLabel("Back to welcome screen")
                 }
             }
+            if orb.isOpen && session.video == nil {
+                ToolbarItem(placement: .primaryAction) { HStack(spacing: 8) { CrystalOrbSearchBadge(model: orb); orbButton; workspaceControls } }
+            }
             if !showPhotosWorkspace && session.video != nil {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
-                        PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                        if orb.isOpen, !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: orb) }
+                        else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
                         orbButton
                         if session.uncover == nil {
                             if photosAlbum != nil {
@@ -211,11 +215,11 @@ struct RootView: View {
                 if rightPanelExpanded { preview.pause() }
                 rightPanelExpanded.toggle()
             } label: {
-                Label("Preview and controls", systemImage: "sidebar.right")
+                Label(orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
             }
             .labelStyle(.iconOnly)
-            .help(rightPanelExpanded ? "Collapse preview and controls" : "Expand preview and controls")
-            .accessibilityLabel(rightPanelExpanded ? "Collapse preview and controls" : "Expand preview and controls")
+            .help(rightPanelExpanded ? "Hide right panel" : "Show right panel")
+            .accessibilityLabel(rightPanelExpanded ? "Hide right panel" : "Show right panel")
 
             Button { session.showExportSheet = true } label: {
                 Label("Export selected frames", systemImage: "square.and.arrow.up")

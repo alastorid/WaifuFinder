@@ -1,5 +1,6 @@
 import AppKit
 import CoreImage
+import Combine
 
 private func inspectPattern(shiftX: Int = 0, shiftY: Int = 0, change: Bool = false) -> CGImage {
     let width = 128, height = 96
@@ -163,11 +164,38 @@ func registerCrystalOrbInspectionTests() {
         let raw = CrystalOrbAnalysis.bytes(CIImage(cgImage: other),rect: CGRect(x: 0,y: 0,width: 32,height: 32))
         checkEqual(Array(raw.prefix(4)),[255,255,255,255],"the correct new pixels are present")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "five comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "difference auto stretch makes faint changes visible and keeps identical and noise pixels black", knownBug: nil) {
+        let a = try ImageFixture.cgImage(width: 32,height: 24,gray: 0.5)
+        let b = try ImageFixture.cgImage(width: 32,height: 24,gray: 0.52)
+        let diff = try CrystalOrbDifferenceRenderer.render(target: a,candidate: b)
+        let visible = CrystalOrbAnalysis.bytes(CIImage(cgImage:diff.difference),rect:CGRect(x:0,y:0,width:1,height:1))
+        check((visible.prefix(3).max() ?? 0) >= 250,"faint differences stretch to full 255 brightness")
+        let same = try CrystalOrbDifferenceRenderer.render(target: a,candidate: a)
+        let equal = CrystalOrbAnalysis.bytes(CIImage(cgImage:same.difference),rect:CGRect(x:0,y:0,width:1,height:1))
+        checkEqual(Array(equal.prefix(3)),[0,0,0],"identical images cannot amplify rounding noise")
+        var settings=diff.settings; settings.tolerance=20
+        let quiet=try CrystalOrbDifferenceRenderer.remap(diff,settings:settings)
+        let noise=CrystalOrbAnalysis.bytes(CIImage(cgImage:quiet.difference),rect:CGRect(x:0,y:0,width:1,height:1))
+        checkEqual(Array(noise.prefix(3)),[0,0,0],"sub-threshold noise stays black under auto stretch")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "gesture-rate navigation does not invalidate search metadata or the workspace shell", knownBug: nil) {
+        await Task { @MainActor in
+            let model=WaifuCrystalOrbModel()
+            var shellUpdates=0, navigationUpdates=0
+            let shell=model.objectWillChange.sink { shellUpdates += 1 }
+            let navigation=model.navigation.objectWillChange.sink { navigationUpdates += 1 }
+            for i in 0..<120 { model.center(on:CGPoint(x:i,y:i)); model.zoom=1+CGFloat(i)/120 }
+            checkEqual(shellUpdates,0,"pan and zoom do not rebuild search or metadata")
+            check(navigationUpdates>0,"image panes still receive responsive navigation updates")
+            checkEqual(WaifuCrystalOrbModel.matchLimit,7,"gallery is limited to seven candidates")
+            withExtendedLifetime((shell,navigation)) {}
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "four comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
         try await Task { @MainActor in
             let model = WaifuCrystalOrbModel()
-            checkEqual(model.mode,.inspect,"Inspect is the default")
-            checkEqual(WaifuCrystalOrbModel.Mode.allCases.count,5,"all original modes remain")
+            checkEqual(model.mode,.sideBySide,"Side by Side is the default")
+            checkEqual(WaifuCrystalOrbModel.Mode.allCases.count,4,"all original modes remain")
             let session = WaifuSession(settingsURL: try Temporary.directory("orb-inspection-keys").appendingPathComponent("settings.json"))
             model.open(session: session)
             func key(_ characters: String,_ code: UInt16,_ type: NSEvent.EventType = .keyDown) -> NSEvent {
@@ -181,11 +209,15 @@ func registerCrystalOrbInspectionTests() {
             check(!model.holdingToggle,"release restores source")
             checkEqual(model.zoom,3,"toggle never changes zoom")
             checkEqual(model.navigationCenter,CGPoint(x: 42,y: 17),"toggle never changes focal coordinate")
-            check(model.handleKey(key("i",34)),"Inspect shortcut")
-            checkEqual(model.mode,.inspect,"Inspect shortcut selects fifth mode")
+            check(model.handleKey(key("s",1)),"Side by Side shortcut")
+            checkEqual(model.mode,.sideBySide,"Side by Side shortcut selects the default mode")
+            model.maximizedPane = "A"
+            check(model.handleKey(key("d",2)),"difference shortcut works from a maximized source")
+            check(model.maximizedPane == nil,"mode changes restore the correct comparison pane")
+            model.mode = .sideBySide
             model.inspectionControlFocused = true
             check(!model.handleKey(key("s",1)),"focused analysis control owns keyboard input")
-            checkEqual(model.mode,.inspect,"focused controls cannot accidentally switch modes")
+            checkEqual(model.mode,.sideBySide,"focused controls cannot accidentally switch modes")
             model.close()
         }.value
     })

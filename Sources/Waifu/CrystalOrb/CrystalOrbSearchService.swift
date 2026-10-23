@@ -189,13 +189,13 @@ actor CrystalOrbSearchService {
 }
 
 /// Monotonic publication gate for live rankings. Search may run at full speed;
-/// presentation coalesces to two distinct snapshots per second.
+/// presentation coalesces to one distinct snapshot per second.
 struct CrystalOrbPublicationGate {
     private var lastTime: TimeInterval?
     private var lastRanking: [CrystalOrbMatch] = []
     func delay(for ranking: [CrystalOrbMatch], at time: TimeInterval) -> TimeInterval? {
         guard ranking != lastRanking else { return nil }
-        return lastTime.map { max(0, 0.5 - (time - $0)) } ?? 0
+        return lastTime.map { max(0, 1 - (time - $0)) } ?? 0
     }
     mutating func published(_ ranking: [CrystalOrbMatch], at time: TimeInterval) {
         lastRanking = ranking; lastTime = time

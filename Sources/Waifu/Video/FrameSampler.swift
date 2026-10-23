@@ -100,12 +100,14 @@ final class AVFoundationFrameSampler: FrameSampling {
         mode: AnalysisMode,
         timeRange: ClosedRange<Double>?,
         excludingSampleIndices: Set<Int>,
+        sampleIndexMaps: [Int: FrameSampleIndexMap] = [:],
         onProgress: @escaping @Sendable (Int) -> Void
     ) -> AsyncThrowingStream<SampledFrame, Error> {
         if let collection = VideoCollection.get(url) {
             let producer = VideoCollectionSampler(collection: collection, width: analysisWidth, mode: mode,
                                                   timeRange: timeRange,
                                                   excludingSampleIndices: excludingSampleIndices,
+                                                  sampleIndexMaps: sampleIndexMaps,
                                                   onProgress: onProgress)
             return AsyncThrowingStream(unfolding: { try await producer.next() })
         }
@@ -119,6 +121,7 @@ final class AVFoundationFrameSampler: FrameSampling {
             mode: mode,
             timeRange: timeRange,
             excludingSampleIndices: excludingSampleIndices,
+            sampleIndexMap: sampleIndexMaps[0],
             onProgress: onProgress
         )
         // `AsyncThrowingStream` has no `unfolding:onCancel:` (only the non-throwing
@@ -246,6 +249,18 @@ struct SyncSampleIndex: Sendable {
     }
 }
 
+/// Maps a short, locally scanned presentation timeline back to the decoded
+/// ordinals already used by an analysis. Calibrating at an existing frame also
+/// accounts for any leading compressed samples the decoder does not emit.
+struct FrameSampleIndexMap: Sendable {
+    let timeline: SourceFrameTimeline
+    let ordinalOffset: Int
+
+    func index(at seconds: Double) -> Int {
+        max(0, timeline.index(at: seconds) + ordinalOffset)
+    }
+}
+
 // Holds the reader and does the work of walking the file, one frame per `next()`.
 //
 // An actor because the pipeline may pull from more than one task, and the reader
@@ -256,6 +271,7 @@ private actor FrameSamplingProducer {
     private let mode: AnalysisMode
     private let timeRange: ClosedRange<Double>?
     private let excludingSampleIndices: Set<Int>
+    private let sampleIndexMap: FrameSampleIndexMap?
     private let onProgress: @Sendable (Int) -> Void
 
     private let rasterizer = FrameRasterizer()
@@ -276,12 +292,14 @@ private actor FrameSamplingProducer {
 
     init(url: URL, analysisWidth: Int, mode: AnalysisMode, timeRange: ClosedRange<Double>?,
          excludingSampleIndices: Set<Int>,
+         sampleIndexMap: FrameSampleIndexMap?,
          onProgress: @escaping @Sendable (Int) -> Void) {
         self.url = url
         self.analysisWidth = analysisWidth
         self.mode = mode
         self.timeRange = timeRange
         self.excludingSampleIndices = excludingSampleIndices
+        self.sampleIndexMap = sampleIndexMap
         self.onProgress = onProgress
     }
 
@@ -404,21 +422,16 @@ private actor FrameSamplingProducer {
             let decodedIndex = decodedCount
             decodedCount += 1
 
-            if excludingSampleIndices.contains(decodedIndex) { continue }
-
-            // The mode's grid over decoded ordinals: the full pass
-            // steps by one, the quick pass by `frameStep`, and the
-            // first frame is always on the grid. The reader cannot
-            // skip frames, so this saves the rasterisation, not the
-            // decode. Keyframe mode has no grid — its step is one,
-            // and the sync-sample index decides.
-            guard decodedIndex % frameStep == 0 else { continue }
-
             let presentation = CMSampleBufferGetPresentationTimeStamp(buffer)
             guard presentation.isValid, presentation != .invalid else { continue }
             let seconds = presentation.seconds
             guard seconds >= 0, seconds.isFinite else { continue }
             if let timeRange, !timeRange.contains(seconds) { continue }
+            let sampleIndex = sampleIndexMap?.index(at: seconds) ?? decodedIndex
+            // Apply the mode's grid to source ordinals. A focused pass can seek
+            // into the file, so its local reader count is not the source ordinal.
+            guard sampleIndex % frameStep == 0 else { continue }
+            if excludingSampleIndices.contains(sampleIndex) { continue }
 
             // Keyframe mode keeps only the frames the encoder made
             // self-sufficient, matched by timestamp against the index
@@ -433,7 +446,7 @@ private actor FrameSamplingProducer {
             guard let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else {
                 throw FrameSamplingError.decodingFailed("sample buffer has no image buffer at \(seconds)s")
             }
-            return DecodedFrame(sampleIndex: decodedIndex, timeSeconds: seconds, pixels: imageBuffer)
+            return DecodedFrame(sampleIndex: sampleIndex, timeSeconds: seconds, pixels: imageBuffer)
         }
     }
 
@@ -483,6 +496,18 @@ private actor FrameSamplingProducer {
             throw FrameSamplingError.assetReaderFailed("cannot add the video output")
         }
         reader.add(readerOutput)
+
+        // Filtering timestamps after reading still makes AVFoundation decode
+        // the entire file. Constrain the reader itself so it can seek to the
+        // nearest decodable point before the requested interval.
+        if let timeRange {
+            let start = CMTime(seconds: max(0, timeRange.lowerBound), preferredTimescale: 600)
+            let requestedEnd = CMTime(seconds: max(timeRange.lowerBound, timeRange.upperBound),
+                                      preferredTimescale: 600)
+            let frameDuration = CMTime(seconds: 1 / max(videoInfo.frameRate, 1), preferredTimescale: 600)
+            let end = CMTimeAdd(requestedEnd, frameDuration)
+            reader.timeRange = CMTimeRange(start: start, duration: CMTimeSubtract(end, start))
+        }
 
         guard reader.startReading() else {
             throw FrameSamplingError.assetReaderFailed(reader.error?.localizedDescription ?? "unknown error")

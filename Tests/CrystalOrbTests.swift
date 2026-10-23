@@ -41,17 +41,17 @@ func registerCrystalOrbTests() {
         checkEqual(CrystalOrbMatch.ranked(matches).map(\.id.sampleIndex), [3, 2, 8], "ties use source identity")
         check(CrystalOrbMatch.ranked([]).isEmpty, "empty results safe")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "live ranking gate caps changed lists to twice per second and skips unchanged lists", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "live ranking gate caps changed lists to once per second and skips unchanged lists", knownBug: nil) {
         let first = [CrystalOrbMatch(frame: orbFrame(0), distance: 1)]
         let next = [CrystalOrbMatch(frame: orbFrame(1), distance: 0)]
         var gate = CrystalOrbPublicationGate()
         checkEqual(gate.delay(for: first, at: 10), 0, "first ranking appears immediately")
         gate.published(first, at: 10)
         check(gate.delay(for: first, at: 11) == nil, "unchanged ranking never republishes")
-        checkClose(gate.delay(for: next, at: 10.1) ?? -1, 0.4, tolerance: 0.0001, "early changes wait for the half-second boundary")
-        checkEqual(gate.delay(for: next, at: 10.5), 0, "second changed ranking is eligible after half a second")
-        gate.published(next, at: 10.5)
-        checkClose(gate.delay(for: first, at: 10.6) ?? -1, 0.4, tolerance: 0.0001, "cap applies to every subsequent publication")
+        checkClose(gate.delay(for: next, at: 10.1) ?? -1, 0.9, tolerance: 0.0001, "early changes wait for the one-second boundary")
+        checkEqual(gate.delay(for: next, at: 11), 0, "second changed ranking is eligible after one second")
+        gate.published(next, at: 11)
+        checkClose(gate.delay(for: first, at: 11.1) ?? -1, 0.9, tolerance: 0.0001, "cap applies to every subsequent publication")
     })
     Registry.shared.add(suite: suite, TestCase(name: "alignment preserves aspect and upscales smaller sources without cropping", knownBug: nil) {
         let a = CrystalOrbAlignment(target: CGSize(width: 4032, height: 3024), candidate: CGSize(width: 1920, height: 1080))
@@ -242,15 +242,13 @@ func registerCrystalOrbLifecycleTests() {
             check(CrystalOrbImport.accept([imageProvider], model: model, session: session), "external image representation accepted")
             try await orbWait { model.query != nil && !model.searching && !model.matches.isEmpty }
             try await orbWait { !model.loading && model.pair != nil }
-            check(model.pair?.candidateIsOriginal == false, "automatic best candidate stays preview-only")
-            check(model.canLoadOriginal, "original is available through deliberate user action")
+            check(model.pair?.candidateIsOriginal == true, "automatic best candidate upgrades to the original")
+            check(!model.canLoadOriginal, "automatic upgrade does not require a load button")
             for (earlier, later) in zip(rankingTimes, rankingTimes.dropFirst()) {
-                check(later - earlier >= 0.49, "live ranked list updates at most twice a second")
+                check(later - earlier >= 0.99, "live ranked list updates at most once a second")
             }
-            check(rankingTimes.count >= 2, "first and completed live rankings are presented")
+            check(rankingTimes.count >= 2, "first and completed rankings are presented")
             let id = model.selectedID
-            if let id { model.select(id) }
-            try await orbWait { !model.loading && model.pair?.candidateIsOriginal == true }
             checkEqual(session.selectedFrameIDs, Set(id.map { [$0] } ?? []), "search selected exact underlying frame")
             checkEqual(model.pair?.frame.id, id, "loaded original belongs to selected identity")
             checkEqual(model.pair?.candidate.width, 320, "native original loaded")

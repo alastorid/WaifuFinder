@@ -3,26 +3,20 @@ import AppKit
 
 struct CrystalOrbComparisonView: View {
     @ObservedObject var model: WaifuCrystalOrbModel
+    @ObservedObject private var navigation: CrystalOrbNavigation
+    init(model: WaifuCrystalOrbModel) { self.model = model; self.navigation = model.navigation }
     @Environment(\.displayScale) private var backing
     var body: some View {
         GeometryReader { outer in
             if let pair = model.pair {
-                let divided = model.mode == .inspect || model.mode == .sideBySide
+                let divided = model.mode == .sideBySide
                 let reference = CGSize(width: divided ? outer.size.width / 2 : outer.size.width,
-                    height: model.mode == .inspect && !model.differenceCollapsed ? outer.size.height / 2 : outer.size.height)
+                    height: outer.size.height)
                 let fit = model.fillViewport ? max(reference.width / pair.alignment.size.width, reference.height / pair.alignment.size.height) : min(reference.width / pair.alignment.size.width, reference.height / pair.alignment.size.height)
                 let scale = max(0.00001, (model.actualPixels ? 1 / backing : fit) * model.zoom)
                 Group {
                     if let pane = model.maximizedPane {
                         paneView(pane, pair: pair, scale: scale)
-                    } else if model.mode == .inspect {
-                        VSplitView {
-                            HSplitView {
-                                paneView("A", pair: pair, scale: scale).frame(minWidth: 100)
-                                paneView("B", pair: pair, scale: scale).frame(minWidth: 100)
-                            }.frame(minHeight: 100)
-                            if !model.differenceCollapsed { paneView("Δ", pair: pair, scale: scale).frame(minHeight: 80) }
-                        }
                     } else if model.mode == .sideBySide {
                         HSplitView { paneView("A", pair: pair, scale: scale); paneView("B", pair: pair, scale: scale) }
                     } else { paneView(model.mode == .difference ? "Δ" : "Mixed", pair: pair, scale: scale) }
@@ -42,6 +36,10 @@ private struct CrystalOrbInspectionPane: View {
     let pair: WaifuCrystalOrbModel.Pair
     let kind: String
     let scale: CGFloat
+    @ObservedObject private var navigation: CrystalOrbNavigation
+    init(model: WaifuCrystalOrbModel, pair: WaifuCrystalOrbModel.Pair, kind: String, scale: CGFloat) {
+        self.model = model; self.pair = pair; self.kind = kind; self.scale = scale; self.navigation = model.navigation
+    }
     @State private var dragCenter: CGPoint?
     @State private var dragRegistration: CrystalOrbRegistration?
     @State private var dragStart: CGPoint?
@@ -60,7 +58,7 @@ private struct CrystalOrbInspectionPane: View {
                 pixels(viewport)
                     .allowsHitTesting(false)
                 annotation(viewport).allowsHitTesting(false)
-                CrystalOrbPointerSurface(onMove: { model.sample(at: viewport.comparison($0)) },
+                CrystalOrbPointerSurface(onMove: { _ in },
                     onDrag: { start, current, ended in drag(start, current, ended, viewport: viewport) },
                     onPan: { delta in model.center(on: CGPoint(x: center.x - delta.width / scale, y: center.y + delta.height / scale)) },
                     onZoom: { factor, location in
@@ -71,7 +69,9 @@ private struct CrystalOrbInspectionPane: View {
                         model.center(on: CGPoint(x: anchor.x - (anchor.x - center.x) / ratio, y: anchor.y - (anchor.y - center.y) / ratio))
                     })
                 HStack(spacing: 6) {
-                    Text(title).font(.caption.weight(.medium)).lineLimit(1)
+                    if model.mode == .toggle {
+                        Button(title) { model.showCandidate.toggle() }.buttonStyle(.plain).font(.caption.weight(.medium)).help("Click to switch Target and Candidate · Hold Space to compare")
+                    } else { Text(title).font(.caption.weight(.medium)).lineLimit(1) }
                     if !(kind == "Δ" ? pair.differenceIsOriginal : (kind == "A" ? pair.targetIsOriginal : pair.isOriginal)) { Text("Preview").font(.caption2).foregroundStyle(.yellow) }
                     if !model.pairIsCurrent { Text("Previous pair").font(.caption2) }
                     else if kind == "Δ", let diff = pair.difference,

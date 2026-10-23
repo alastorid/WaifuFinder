@@ -128,3 +128,33 @@ was 189 ms in that standalone run and is avoided entirely by default CPU queries
 Source decoding, initial feature creation, index construction, main-thread result
 publication and the intentional 500 ms UI coalescing interval are separate costs.
 The submillisecond scan numbers must not be described as complete UI search latency.
+
+## Verification
+
+A fixed copy of production and test sources completed the native regression suite:
+**419 passed, 0 failed, 8 skipped**, including 12 vector-search cases. The skipped
+cases require optional model/media fixtures. The optimized background benchmark
+also checks canonical near-tie results and native Vision ranking agreement.
+
+The three vector-engine source files still matched that verified copy afterward.
+Surrounding comparison UI edits continued after the snapshot; the app is rebuilt
+separately against the current workspace. The full-suite snapshot result should
+not be represented as testing those subsequent UI changes. No interactive UI test
+was run.
+
+## Files
+
+- `Sources/Waifu/VectorSearch/WaifuVectorSearch.swift`: packed storage, CPU search,
+  bounded selection, canonical refinement, planner, reusable actor and batch API.
+- `Sources/Waifu/VectorSearch/WaifuMetalVectorSearch.swift`: distance kernels,
+  tile Top-K/merge, persistent resources and exclusive command scratch leases.
+- `Sources/Waifu/VectorSearch/WaifuVisionVectorIndex.swift`: public Vision extraction,
+  descriptor checks, incremental rows and per-query metric validation.
+- `Sources/Waifu/CrystalOrb/CrystalOrbSearchService.swift`: progressive preparation,
+  packed search, native reranking, warm mapping reuse and cancellation guards.
+- `Sources/Waifu/CrystalOrb/WaifuCrystalOrbModel.swift`: bounded result requests and
+  separate readable-candidate counts in the existing summary.
+- `Tests/VectorSearchTests.swift` and `Tests/main.swift`: regression coverage/registration.
+- `tools/benchmark-vector-search.sh` and `tools/benchmark-vector-search.swift`:
+  reproducible optimized 1k/10k benchmarks, optionally including the complete Orb path.
+- `docs/WaifuVectorSearch.md`: measured results, algorithm decisions and limits.

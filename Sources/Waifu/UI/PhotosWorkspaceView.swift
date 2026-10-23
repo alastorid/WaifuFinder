@@ -8,6 +8,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
     private let orbControl: () -> OrbControl
+    @ObservedObject private var orb: WaifuCrystalOrbModel
     private let trailingControls: () -> TrailingControls
     private let onBackToWelcome: () -> Void
     /// Shared with the Sort and Filter fraction; see `ChiaroscuroLink`.
@@ -17,10 +18,11 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
     @State private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: WaifuSession, link: ChiaroscuroLink, onBackToWelcome: @escaping () -> Void,
+    init(session: WaifuSession, link: ChiaroscuroLink, onBackToWelcome: @escaping () -> Void, orb: WaifuCrystalOrbModel,
          @ViewBuilder orbControl: @escaping () -> OrbControl,
          @ViewBuilder trailingControls: @escaping () -> TrailingControls,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
+        self.orb = orb
         self.orbControl = orbControl
         self.session = session
         self.link = link
@@ -77,7 +79,8 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
             ToolbarItem(placement: .principal) { albumTitle }
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
-                    PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                    if orb.isOpen, !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: orb) }
+                    else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
                     orbControl()
                     albumControls
                     trailingControls()

@@ -124,19 +124,17 @@ struct CrystalOrbOpacitySlider: View {
 struct WaifuCrystalOrbView: View {
     @ObservedObject var model: WaifuCrystalOrbModel
     @ObservedObject var session: WaifuSession
-    @State private var info = false
-    @AppStorage("crystalOrb.showInspector") private var showInspector = true
+    @AppStorage("rightPanelExpanded") private var showInspector = true
+    @State private var candidatesExpanded = false
+    @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
             if model.query == nil {
                 VStack(spacing: 14) {
                     Image(systemName: "sparkle.magnifyingglass").font(.system(size: 40)).foregroundStyle(.secondary)
                     Text("Drop an image to find visually similar frames or photos.").font(.title3)
-                    Text("Paste an image with ⌘V, or choose an image file.").foregroundStyle(.secondary)
-                    Button("Choose image…") { model.chooseFile(session: session) }
+                    Text("Drop or paste an image with ⌘V.").foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 controls
@@ -146,15 +144,12 @@ struct WaifuCrystalOrbView: View {
                     if showInspector { CrystalOrbInspectorView(model: model).frame(minWidth: 260, idealWidth: 310, maxWidth: 420) }
                 }
                 if let error = model.comparisonError { Text(error).font(.caption).foregroundStyle(.secondary).padding(6) }
-                metadata
-                Divider()
-                candidates
+                if candidatesExpanded { Divider(); candidates }
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .transaction { $0.animation = nil }
-        .onChange(of: info) { _, shown in if shown { model.loadDetailedMetadata() } }
-        .onChange(of: model.selectedID) { _, _ in if info { model.loadDetailedMetadata() } }
+        .onChange(of: downloadFromICloud) { _, enabled in if enabled { model.originalAccessChanged() } }
         .task(id: model.selectedID) {
             guard let id = model.selectedID, let index = model.matches.firstIndex(where: { $0.id == id }) else { return }
             let neighbors = [index + 1, index - 1].filter { model.matches.indices.contains($0) }.map { model.matches[$0].frame }
@@ -169,111 +164,43 @@ struct WaifuCrystalOrbView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Text("WaifuCrystalOrb").font(.headline)
-            CrystalOrbGlyph(active: model.searching || model.loading || model.importing)
-            Text(model.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(model.status)
-            Spacer()
-            Button { model.chooseFile(session: session) } label: { Image(systemName: "photo.badge.plus") }.help("Replace query image")
-            if model.canLoadOriginal {
-                Button("Load original") { if let id = model.selectedID { model.select(id) } }
-                    .help("Load the full-resolution candidate")
-            }
-            if model.query != nil { Button("Search again") { model.search() }.disabled(model.searching) }
-            Button { showInspector.toggle() } label: { Image(systemName: "sidebar.right") }.help("Show or hide image inspector")
-            Button { model.close() } label: { Image(systemName: "xmark") }.help("Close WaifuCrystalOrb (Escape)")
-                .accessibilityLabel("Close WaifuCrystalOrb")
-        }.padding(.horizontal, 14).padding(.vertical, 10)
-    }
-
-    @ViewBuilder private var controls: some View {
+    private var controls: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { modes; Spacer(); zoomControls }
-            VStack(spacing: 7) { HStack { modes; Spacer() }; HStack { zoomControls; Spacer() } }
+            HStack(spacing: 8) { modes; Spacer(minLength: 4); compactActions }
+            VStack(spacing: 4) { HStack { modes; Spacer() }; HStack { compactActions; Spacer() } }
+        }.padding(.horizontal, 8).padding(.vertical, 5).controlSize(.small)
+    }
+    private var compactActions: some View {
+        HStack(spacing: 6) {
+            Button("Fit") { model.resetZoom() }
+            Button("1:1") { model.actualPixels = true; model.zoom = 1 }
+            if model.mode != .difference { Toggle("Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox) }
+            Button { candidatesExpanded.toggle() } label: { Label("Candidates", systemImage: candidatesExpanded ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset.filled") }
+                .labelStyle(.iconOnly).help(candidatesExpanded ? "Hide candidates" : "Show top 7 candidates")
+                .accessibilityLabel(candidatesExpanded ? "Hide candidates" : "Show top 7 candidates")
         }
-        HStack(spacing: 10) {
-            overlayControls
-            Button("Auto Align") { model.autoAlign() }.disabled(model.alignmentLocked || model.registering || !model.pairIsCurrent)
-            if model.mode == .inspect { Toggle("Difference pane", isOn: Binding(get: { !model.differenceCollapsed }, set: { model.differenceCollapsed = !$0 })).toggleStyle(.checkbox) }
-            Toggle("Overview", isOn: $model.showOverview).toggleStyle(.checkbox)
-            Spacer(minLength: 0)
-        }.padding(.horizontal, 10).padding(.bottom, 6).controlSize(.small)
-
     }
     private var modes: some View {
-        Picker("Comparison mode", selection: $model.mode) {
-            ForEach(WaifuCrystalOrbModel.Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.pickerStyle(.segmented).labelsHidden().frame(minWidth: 340, idealWidth: 380)
-    }
-    private var overlayControls: some View {
-        HStack(spacing: 10) {
-            Toggle("Red Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox).disabled(model.mode == .difference)
-            CrystalOrbOpacitySlider(value: $model.opacity, focusChanged: { model.opacityControlFocused = $0 })
-        }.help("Red difference overlay and compositing opacity")
-    }
-    private var zoomControls: some View {
-        HStack(spacing: 6) {
-            if model.mode == .toggle {
-                Button(model.showCandidate ? "Candidate" : "Target") { model.showCandidate.toggle() }.help("Toggle image · Hold Space to compare")
+        HStack(spacing: 2) {
+            ForEach(WaifuCrystalOrbModel.Mode.allCases, id: \.self) { mode in
+                Button {
+                    if mode == .toggle, model.mode == .toggle { model.showCandidate.toggle() }
+                    else { model.mode = mode }
+                    model.maximizedPane = nil
+                } label: {
+                    Text(mode == .toggle && model.mode == .toggle ? "Toggle · " + (model.showCandidate ? "Candidate" : "Target") : mode.rawValue)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(model.mode == mode ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                }.buttonStyle(.plain)
+                    .accessibilityAddTraits(model.mode == mode ? .isSelected : [])
+                    .help(mode == .toggle ? "Click Toggle again to switch images · Hold Space to compare" : mode.rawValue)
             }
-            Button("−") { model.zoom = max(0.1, model.zoom / 1.25) }.help("Zoom out")
-            Button("+") { model.zoom = min(128, model.zoom * 1.25) }.help("Zoom in")
-            Button("Fit") { model.resetZoom() }
-            Button("Fill") { model.fillViewport = true; model.actualPixels = false; model.zoom = 1 }
-            Button("1:1") { model.actualPixels = true; model.zoom = 1; model.pan = .zero }.help("One comparison pixel per display pixel · Linked zoom and pan")
         }
     }
-    private var metadata: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(model.query?.metadata.filename ?? "Target").fontWeight(.medium)
-                if let metadata = model.query?.metadata { Text("\(metadata.dimensionsText) · \(metadata.fileType)" + (metadata.fileSizeBytes.map { " · " + PhotoMetadataFormatter.fileSize($0) } ?? "")) }
-            }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 3) {
-                if let selected = model.selected {
-                    Text(model.candidateMetadata?.filename ?? "Frame \(selected.id.sampleIndex)").fontWeight(.medium)
-                    Text(candidateDimensions)
-                    if let source = session.video?.url, PhotosMedia.shared.photoItemURL(for: source, seconds: selected.frame.timeSeconds) == nil {
-                        let resolved = VideoCollection.resolve(source, seconds: selected.frame.timeSeconds)
-                        Text("\(resolved.0.lastPathComponent) · \(timecode(resolved.1)) · Video frame")
-                    }
-                }
-            }.lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-            if let frame = model.selected?.frame, let source = session.video?.url,
-               let photo = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) {
-                Button("Open in Photos.app") { PhotosAppIntegration.reveal(photo) }
-            }
-            Button { info.toggle() } label: { Image(systemName: "info.circle") }.help("Inspect source metadata")
-                .popover(isPresented: $info) {
-                    HStack(alignment: .top, spacing: 16) {
-                        VStack(alignment: .leading) {
-                            Text("Target").font(.headline)
-                            PhotoMetadataInspectorView(metadata: model.query?.metadata, isLoading: false, errorMessage: nil)
-                            if let query = model.query {
-                                if let url = query.fileURL { Text(url.path).font(.caption2).textSelection(.enabled) }
-                                if let date = query.fileCreated { Text("File created: " + PhotoMetadataFormatter.dateTime(date)).font(.caption2) }
-                                if let date = query.fileModified { Text("File modified: " + PhotoMetadataFormatter.dateTime(date)).font(.caption2) }
-                            }
-                        }
-                        VStack { Text("Candidate").font(.headline); PhotoMetadataInspectorView(metadata: model.candidateMetadata, isLoading: model.metadataLoading,
-                            errorMessage: model.candidateMetadata == nil && !model.metadataLoading ? "Video source and timestamp are shown below the canvas. Camera EXIF is unavailable for decoded video frames." : nil) }
-                    }.padding().frame(width: 700, height: 460)
-                }
-        }.font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            .frame(height: 48, alignment: .top).padding(10)
-    }
-
-    private var candidateDimensions: String {
-        if let pair = model.pair, model.pairIsCurrent { return "\(Int(pair.candidateNativeSize.width)) × \(Int(pair.candidateNativeSize.height))" }
-        if let metadata = model.candidateMetadata { return metadata.dimensionsText }
-        return "Preview"
-    }
-
     private var candidates: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("Top 19 candidates").font(.caption.weight(.medium))
+                Text("Top 7 candidates").font(.caption.weight(.medium))
                 Spacer()
                 Text("Closest first · Vision distance, lower is closer").font(.caption2).foregroundStyle(.secondary)
             }
@@ -329,5 +256,17 @@ private struct CrystalOrbCandidateCell: View {
                     }
                 }
             }.onDisappear { presentation.disappear(identity: identity) }
+    }
+}
+
+/// Reuses the title-bar keyword-job slot; no second header takes image space.
+struct CrystalOrbSearchBadge: View {
+    @ObservedObject var model: WaifuCrystalOrbModel
+    var body: some View {
+        Text(model.searching || model.importing ? "Finding matches…" : (model.loading ? "Refining photo…" : model.status))
+            .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(.quaternary, in: Capsule()).frame(maxWidth: 260)
+            .help(model.status)
     }
 }

@@ -1750,6 +1750,53 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     // MARK: Pipeline
 
+    /// Builds timestamp-to-ordinal maps only for the focused interval. The
+    /// nearest existing frame anchors each local map to the IDs already shown
+    /// in the grid, without scanning earlier video samples.
+    private nonisolated func focusedRangeSampleIndexMaps(video: VideoInfo,
+                                                        timeRange: ClosedRange<Double>,
+                                                        existingFrames: [AnalyzedFrame]) async throws
+        -> [Int: FrameSampleIndexMap] {
+        if let collection = VideoCollection.get(video.url) {
+            var maps: [Int: FrameSampleIndexMap] = [:]
+            for (sourceIndex, member) in collection.members.enumerated() {
+                let start = max(timeRange.lowerBound, member.offset)
+                let end = min(timeRange.upperBound, member.offset + member.video.durationSeconds)
+                guard start <= end else { continue }
+                let localRange = max(0, start - member.offset)...min(member.video.durationSeconds,
+                                                                     end - member.offset)
+                let sourceFrames = existingFrames.filter {
+                    VideoCollection.sourceIndex($0.id.sampleIndex) == sourceIndex
+                }
+                let localAnchor = sourceFrames
+                    .filter { localRange.contains($0.timeSeconds - member.offset) }
+                    .min { abs($0.timeSeconds - member.offset - (localRange.lowerBound + localRange.upperBound) / 2)
+                        < abs($1.timeSeconds - member.offset - (localRange.lowerBound + localRange.upperBound) / 2) }
+                let timeline = try await SourceFrameTimeline.load(source: member.video.url, around: localRange)
+                let ordinalOffset: Int
+                if let localAnchor {
+                    ordinalOffset = VideoCollection.localIndex(localAnchor.id.sampleIndex)
+                        - timeline.index(at: localAnchor.timeSeconds - member.offset)
+                } else {
+                    ordinalOffset = Int((localRange.lowerBound * max(1, member.video.frameRate)).rounded())
+                        - timeline.index(at: localRange.lowerBound)
+                }
+                maps[sourceIndex] = FrameSampleIndexMap(timeline: timeline, ordinalOffset: ordinalOffset)
+            }
+            return maps
+        }
+
+        let anchor = existingFrames.min {
+            abs($0.timeSeconds - (timeRange.lowerBound + timeRange.upperBound) / 2)
+                < abs($1.timeSeconds - (timeRange.lowerBound + timeRange.upperBound) / 2)
+        }
+        let timeline = try await SourceFrameTimeline.load(source: video.url, around: timeRange)
+        let ordinalOffset = anchor.map { $0.id.sampleIndex - timeline.index(at: $0.timeSeconds) }
+            ?? (Int((timeRange.lowerBound * max(1, video.frameRate)).rounded())
+                - timeline.index(at: timeRange.lowerBound))
+        return [0: FrameSampleIndexMap(timeline: timeline, ordinalOffset: ordinalOffset)]
+    }
+
     /// Score missing frames in a bounded timeline range while retaining the
     /// existing analysis. The sampler excludes already analyzed decoded indices
     /// before it rasterizes or sends a frame to Vision.
@@ -1768,8 +1815,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             await acceptProgress(progress, token: token)
             try Task.checkCancellation()
             let excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
+            let sampleIndexMaps = try await focusedRangeSampleIndexMaps(video: video, timeRange: timeRange,
+                                                                         existingFrames: existingFrames)
             let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
-                mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices, onProgress: { _ in })
+                mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
+                sampleIndexMaps: sampleIndexMaps, onProgress: { _ in })
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                 videoStem: video.url.deletingPathExtension().lastPathComponent)
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(

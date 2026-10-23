@@ -5,8 +5,9 @@ import Foundation
 struct CrystalOrbDifferenceSettings: Sendable, Equatable {
     enum Channel: String, CaseIterable, Sendable { case rgb = "RGB", luminance = "Luminance", red = "Red", green = "Green", blue = "Blue" }
     enum Display: String, CaseIterable, Sendable { case color = "Color difference", heatmap = "Heatmap", luminance = "Luminance difference", red = "Red overlay" }
-    var tolerance: Double = 0 // gamma-encoded sRGB channel units, 0...255
+    var tolerance: Double = 1 // gamma-encoded sRGB channel units, 0...255
     var gain: Double = 1
+    var autoStretch = true
     var channel: Channel = .rgb
     var display: Display = .color
 }
@@ -89,7 +90,17 @@ enum CrystalOrbDifferenceRenderer {
         // Threshold only the presentation; preserve raw deltas for samples/statistics.
         let threshold = metric.applyingFilter("CIColorThreshold", parameters: ["inputThreshold": (settings.tolerance + 0.01) / 255])
         let significant = threshold.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: overlap])
-        let gain = Float(settings.gain)
+        // Stretch the valid measured range to full display brightness, without
+        // boosting equal pixels or sub-tolerance rounding noise. Raw data stays
+        // untouched; gain is a presentation mapping only.
+        let validMetric = metric.applyingFilter("CIBlendWithMask", parameters: [kCIInputBackgroundImageKey: black, kCIInputMaskImageKey: overlap])
+        var peak = [Float](repeating: 0, count: 4)
+        if settings.autoStretch {
+            let maximum = validMetric.applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
+            peak.withUnsafeMutableBytes { context.render(maximum, toBitmap: $0.baseAddress!, rowBytes: 16, bounds: CGRect(x: 0,y: 0,width: 1,height: 1), format: .RGBAf, colorSpace: color) }
+        }
+        let stretch: Double = settings.autoStretch && Double(peak[0]) > (settings.tolerance + 0.01)/255 ? 1 / Double(peak[0]) : 1
+        let gain = Float(settings.gain * stretch)
         func amplify(_ image: CIImage) -> CIImage {
             image.applyingFilter("CIColorMatrix", parameters: ["inputRVector": CIVector(x: CGFloat(gain), y: 0, z: 0, w: 0),
                 "inputGVector": CIVector(x: 0, y: CGFloat(gain), z: 0, w: 0), "inputBVector": CIVector(x: 0, y: 0, z: CGFloat(gain), w: 0)])

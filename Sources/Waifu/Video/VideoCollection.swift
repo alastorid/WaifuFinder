@@ -107,6 +107,7 @@ actor VideoCollectionSampler {
     private let mode: AnalysisMode
     private let timeRange: ClosedRange<Double>?
     private let excludingSampleIndices: Set<Int>
+    private let sampleIndexMaps: [Int: FrameSampleIndexMap]
     private let onProgress: @Sendable (Int) -> Void
     private var memberIndex = 0
     private var processed = 0
@@ -114,9 +115,11 @@ actor VideoCollectionSampler {
 
     init(collection: VideoCollection, width: Int, mode: AnalysisMode, timeRange: ClosedRange<Double>?,
          excludingSampleIndices: Set<Int>,
+         sampleIndexMaps: [Int: FrameSampleIndexMap],
          onProgress: @escaping @Sendable (Int) -> Void) {
         self.collection = collection; self.width = width; self.mode = mode
         self.timeRange = timeRange; self.excludingSampleIndices = excludingSampleIndices
+        self.sampleIndexMaps = sampleIndexMaps
         self.onProgress = onProgress
     }
     func next() async throws -> SampledFrame? {
@@ -148,6 +151,7 @@ actor VideoCollectionSampler {
                 })
                 iterator = AVFoundationFrameSampler().sample(member.video.url, analysisWidth: width,
                     mode: mode, timeRange: memberRange, excludingSampleIndices: memberExclusions,
+                    sampleIndexMaps: [0: sampleIndexMaps[memberIndex]].compactMapValues { $0 },
                     onProgress: { _ in }).makeAsyncIterator()
             }
             var active = iterator!
