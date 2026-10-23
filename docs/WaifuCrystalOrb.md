@@ -21,16 +21,24 @@ distance, reusing existing `FeaturePrintCodec` payloads. Missing features are co
 from analysis renditions sequentially, away from the main actor. It computes one
 query feature per query identity and retains decoded source features across queries.
 Results sort by distance then stable frame ID; distance is not a confidence percentage.
-The strip initially displays 24 matches and can show more. The summary reports
+The strip displays the live top 19. Search publishes the first examined candidate
+immediately, then coalesces changed rankings to at most twice per second (500 ms apart),
+including the final ranking. Unchanged lists do not publish again. Rank one fills the candidate pane automatically as better matches arrive;
+a deliberate user selection takes control until the next search. The summary reports
 unavailable candidates and Photos assets not yet analyzed; Orb never scans unrelated
 albums or the entire library.
 
 Originals come from `PhotosMedia.image`, which handles video collections, PhotoKit,
-orientation, native resolution and the existing iCloud preference. Only selected candidates request originals. Up to three recently inspected pairs
+orientation, native resolution and the existing iCloud preference. Only deliberate candidate clicks or Load original request originals; automatic rank-one presentation and gallery thumbnails stay preview-only. Up to three recently inspected pairs
 share a 160 MB cost-limited cache, so revisiting a match is immediate. New pairs commit
-originals and difference previews together; the previous complete pair stays visible
-without a dimming flash. Query replacements also preserve content until decoding
-succeeds. Headers and metadata have stable geometry during loading. Visible thumbnails share `GridThumbnailLoader`,
+the best already cached candidate thumbnail immediately, then replace its pixels
+with a larger local PhotoKit preview up to 2048 pixels when available. Explicitly loaded
+candidates then upgrade to the original in the background. Difference processing runs independently and
+never substitutes a loading splash for the photograph. Small preview comparisons
+remain visible until native comparisons are ready and are labelled Preview.
+External queries first decode an oriented ImageIO preview up to 2048 pixels, start
+searching, and upgrade to the original under the same query identity. Query replacements
+preserve content until preview decoding succeeds. Headers and metadata have stable geometry during loading. Visible thumbnails share `GridThumbnailLoader`,
 `GridThumbnailPresentation`, and foreground work priority with the grid; two adjacent
 candidate thumbnails are prefetched. Optional Photos metadata is independent of the
 first image display and uses `PhotoMetadataService`; expensive original-resource
@@ -53,6 +61,12 @@ long edge; lazy native-resolution Core Image graphs render only the visible view
 at the window's backing resolution for zoomed inspection. A 50 MP test retained
 8192 × 6144 native coordinates, generated 1600 × 1200 previews and a 256 × 192
 native-detail tile in 143 ms. Original image loading is not included in that timing.
+
+Alignment uses declared native image dimensions even while a preview is displayed.
+Upgrading query/candidate pixels preserves zoom, pan, actual-pixel mode, swipe position,
+comparison mode, toggle position, and red-overlay controls. Only an explicit Fit action
+resets the zoom/pan settings. The orb glows and sparkles during search and refinement;
+the inspection canvas has no blocking loading state.
 
 All modes share zoom and pan. Fit uses the viewport dimensions; 1:1 accounts for the
 screen backing scale. Source toggling retains the same geometry. Swipe clips in
@@ -120,7 +134,7 @@ Integration changes:
 
 Verification and notes:
 
-- `Tests/CrystalOrbTests.swift` — twelve native search, renderer, lifecycle and integration cases.
+- `Tests/CrystalOrbTests.swift` — sixteen native search, renderer, lifecycle and integration cases.
 - `Tests/main.swift` — register new suites.
 - `Tests/GridThumbnailStageTests.swift` — wait for actual asynchronous sort completion,
   independently of its deliberately delayed spinner.

@@ -576,6 +576,41 @@ final class PhotosMedia: @unchecked Sendable {
         throw Self.failure("Photos integration supports still photos only. Open video files or URLs from the main loading panel.")
     }
 
+    /// Inspection can use a larger local preview than the analysis cache. This
+    /// request never starts an extra iCloud download; the original request owns
+    /// the user's existing network policy independently.
+    static func inspectionRenditionSize(width: Int, height: Int) -> CGSize {
+        let w = CGFloat(max(1, width)), h = CGFloat(max(1, height))
+        let scale = min(1, 2048 / max(w, h))
+        return CGSize(width: max(1, (w * scale).rounded()), height: max(1, (h * scale).rounded()))
+    }
+
+    func inspectionPreview(_ url: URL, onPreview: @escaping @Sendable (CGImage) -> Void) async throws -> CGImage {
+        try Task.checkCancellation()
+        guard let item = item(url), item.isStill else { throw Self.failure("This Photos item is unavailable.") }
+        let options = PHImageRequestOptions()
+        options.version = .current
+        options.deliveryMode = .opportunistic
+        options.resizeMode = .fast
+        options.isNetworkAccessAllowed = false
+        options.isSynchronous = false
+        let delivery = PhotosRenditionDelivery()
+        let request = PhotosRequest<CGImage>(timeout: 10, timeoutError: Self.localUnavailable(),
+                                            timeoutFallback: { delivery.bestImage })
+        let size = Self.inspectionRenditionSize(width: item.asset.pixelWidth, height: item.asset.pixelHeight)
+        let result = try await request.perform { completion in
+            PHImageManager.default().requestImage(for: item.asset, targetSize: size, contentMode: .aspectFit, options: options) { image, info in
+                if (info?[PHImageCancelledKey] as? Bool) == true { completion(.failure(CancellationError())); return }
+                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
+                let pixels = image.flatMap(Self.renditionPixels)
+                if let pixels { onPreview(pixels) }
+                if let value = delivery.receive(pixels, isDegraded: degraded) { completion(value) }
+            }
+        }
+        try Task.checkCancellation()
+        return result
+    }
+
     /// Reads a Photos still directly into memory and detects animated formats for
     /// preview playback. Ordinary analysis continues to use small PhotoKit renditions.
     func previewContent(_ url: URL) async throws -> PhotosPreviewContent {

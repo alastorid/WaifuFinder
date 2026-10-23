@@ -6,6 +6,17 @@ struct PhotoMetadataInspectorView: View {
     let metadata: PhotoMetadata?
     let isLoading: Bool
     let errorMessage: String?
+    let tags: [String]
+    let rating: String?
+
+    init(metadata: PhotoMetadata?, isLoading: Bool, errorMessage: String?,
+         tags: [String] = [], rating: String? = nil) {
+        self.metadata = metadata
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.tags = tags
+        self.rating = rating
+    }
 
     @State private var generalExpanded = true
     @State private var cameraExpanded = true
@@ -35,7 +46,7 @@ struct PhotoMetadataInspectorView: View {
                                 row("File type", metadata.fileType)
                                 row("Native resolution", metadata.dimensionsText)
                                 if !metadata.megapixelsText.isEmpty { row("Megapixels", metadata.megapixelsText) }
-                                row("Original file size", metadata.fileSizeBytes.map(PhotoMetadataFormatter.fileSize) ?? unavailableSizeText(metadata))
+                                if let bytes = metadata.fileSizeBytes { row("Original file size", PhotoMetadataFormatter.fileSize(bytes)) }
                                 if let date = metadata.captureDate {
                                     row(metadata.captureDateSource?.rawValue ?? "Capture date", PhotoMetadataFormatter.dateTime(date))
                                 }
@@ -82,17 +93,25 @@ struct PhotoMetadataInspectorView: View {
                             }
                         }
 
-                        DisclosureGroup("Keywords & Descriptions", isExpanded: $descriptionExpanded) {
-                            VStack(alignment: .leading, spacing: 7) {
-                                row("Photos.app keywords", "Unavailable through public PhotoKit APIs",
-                                    tooltip: "PhotoKit does not expose the Photos library keyword list. WaifuFinder never reads private Photos databases or substitutes AI-generated traits.")
-                                if metadata.embeddedKeywords.isEmpty {
-                                    row("Embedded IPTC/XMP keywords", metadata.extractionStatus == .complete ? "None recorded" : unavailableSizeText(metadata))
-                                } else {
-                                    row("Embedded IPTC/XMP keywords", metadata.embeddedKeywords.joined(separator: ", "))
+                        if metadata.hasDescriptionDetails {
+                            DisclosureGroup("Keywords & Descriptions", isExpanded: $descriptionExpanded) {
+                                VStack(alignment: .leading, spacing: 7) {
+                                    if !metadata.embeddedKeywords.isEmpty {
+                                        row("Embedded IPTC/XMP keywords", metadata.embeddedKeywords.joined(separator: ", "))
+                                    }
+                                    if let value = metadata.title { row("Title", value) }
+                                    if let value = metadata.description { row("Description / caption", value) }
                                 }
-                                if let value = metadata.title { row("Title", value) }
-                                if let value = metadata.description { row("Description / caption", value) }
+                                .padding(.top, 6)
+                            }
+
+                        }
+
+                        if rating != nil || !tags.isEmpty {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("Waifu Tagging").fontWeight(.semibold)
+                                if let rating { row("Rating", rating) }
+                                if !tags.isEmpty { row("Tags", tags.joined(separator: ", ")) }
                             }
                             .padding(.top, 6)
                         }
@@ -113,7 +132,10 @@ struct PhotoMetadataInspectorView: View {
                     Spacer()
                     Button {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(metadata.copyableText(), forType: .string)
+                        var text = metadata.copyableText()
+                        if let rating { text += "\nWaifu rating: \(rating)" }
+                        if !tags.isEmpty { text += "\nWaifu tags: " + tags.joined(separator: ", ") }
+                        NSPasteboard.general.setString(text, forType: .string)
                     } label: {
                         Label("Copy Photo Info", systemImage: "doc.on.doc")
                     }
@@ -129,13 +151,14 @@ struct PhotoMetadataInspectorView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            } else {
-                Text(errorMessage ?? "Photo information is unavailable.")
+            } else if let errorMessage {
+                Text(errorMessage)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
             }
+            if metadata == nil { Spacer(minLength: 0) }
         }
         .padding(14)
         .frame(width: 350)
@@ -156,8 +179,10 @@ struct PhotoMetadataInspectorView: View {
             }
             HStack(spacing: 8) {
                 Text(metadata.dimensionsText)
-                Text("·")
-                Text(metadata.fileSizeBytes.map(PhotoMetadataFormatter.fileSize) ?? unavailableSizeText(metadata))
+                if let bytes = metadata.fileSizeBytes {
+                    Text("·")
+                    Text(PhotoMetadataFormatter.fileSize(bytes))
+                }
             }
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.secondary)
@@ -170,20 +195,19 @@ struct PhotoMetadataInspectorView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            HStack(alignment: .top, spacing: 5) {
-                Image(systemName: "tag")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 2)
-                Text(metadata.summaryKeywordText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(metadata.embeddedKeywords.isEmpty ? .tertiary : .secondary)
-                    .lineLimit(2)
-                    .textSelection(.enabled)
+            if !metadata.embeddedKeywords.isEmpty {
+                HStack(alignment: .top, spacing: 5) {
+                    Image(systemName: "tag")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                    Text(metadata.summaryKeywordText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
             }
-            Text("Embedded IPTC/XMP only · Photos.app library keywords are not exposed by public PhotoKit APIs")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
         }
         .textSelection(.enabled)
     }
@@ -202,13 +226,4 @@ struct PhotoMetadataInspectorView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func unavailableSizeText(_ metadata: PhotoMetadata) -> String {
-        switch metadata.extractionStatus {
-        case .loadingOriginal: "Reading…"
-        case .complete: "Unavailable"
-        case .originalUnavailableLocally: "Unavailable locally"
-        case .originalResourceMissing: "Unavailable"
-        case .unreadableOriginal: "Unreadable original"
-        }
-    }
 }

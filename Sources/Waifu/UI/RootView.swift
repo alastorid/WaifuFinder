@@ -90,7 +90,9 @@ struct RootView: View {
         .onChange(of: session.thumbnailGeneration) { _, _ in orb.sourceChanged(session: session) }
         .onChange(of: orb.isOpen) { _, active in if active { preview.pause() } }
         .onOpenURL { url in
-            if let source = FirefoxIntegration.incomingURL(url) {
+            if CrystalOrbImageSource.isImage(url) {
+                orb.importImage(url: url, session: session)
+            } else if let source = FirefoxIntegration.incomingURL(url) {
                 showWelcomeScreen = false
                 showPhotosWorkspace = false
                 session.loadVideo(at: source)

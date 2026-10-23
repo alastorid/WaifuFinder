@@ -294,7 +294,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private(set) var gridNavigationFrameID: FrameID?
 
     /// An explicit navigation event, with no initial/replayed value when a lazy
-    /// row appears. Pointer selection must never generate a scrolling command.
+    /// row appears. The grid checks visibility before moving the viewport.
     var gridScrollRequests: AnyPublisher<FrameID, Never> {
         gridScrollSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
@@ -1654,6 +1654,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     func selectFrame(_ id: FrameID, command: Bool = false, shift: Bool = false) {
+        defer {
+            if selectedFrameIDs.contains(id) {
+                focusedFrameID = id
+                requestGridScroll(to: id)
+            }
+        }
         // Only a range selection needs the full visual order.
         if !shift {
             if command { select(id) }

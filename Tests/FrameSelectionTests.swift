@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 func registerFrameSelectionTests() {
-    Registry.shared.add(suite: "Frame selection", TestCase(name: "pointer clicks select without requesting scrolling or rebuilding grid geometry", knownBug: nil) {
+    Registry.shared.add(suite: "Frame selection", TestCase(name: "pointer selection requests visibility checks without rebuilding grid geometry", knownBug: nil) {
         let directory = try Temporary.directory("pointer-scroll")
         try await Task { @MainActor in
             let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
@@ -19,7 +19,8 @@ func registerFrameSelectionTests() {
                 session.selectFrame(id, command: true)
             }
             try await Task.sleep(for: .milliseconds(30))
-            check(scrolls.isEmpty, "clicking or toggling thumbnails must not move the viewport")
+            checkEqual(scrolls, (0..<400).map { FrameID(sampleIndex: $0) },
+                       "each newly selected thumbnail requests a visibility check; deselection does not")
             checkNil(session.gridNavigationFrameID, "pointer selection cancels pending navigation intent")
             checkEqual(session.gridRevision, revision, "selection keeps the existing layout geometry")
             withExtendedLifetime(subscription) {}
@@ -97,6 +98,33 @@ func registerFrameSelectionTests() {
                    ungrouped.id, "video strips retain row navigation")
         checkNil(FrameGridScrollTarget.resolve(frame: FrameID(sampleIndex: 10_000), snapshot: flow),
                  "a target absent from the displayed snapshot waits for a later layout")
+    })
+    Registry.shared.add(suite: "Frame selection", TestCase(name: "visibility checks reveal clipped thumbnails and leave visible items in place", knownBug: nil) {
+        await Task { @MainActor in
+            func needs(_ lower: CGFloat, _ upper: CGFloat) -> Bool {
+                FrameGridScrollVisibility.needsReveal(lower: lower, upper: upper,
+                    visibleLower: 100, visibleUpper: 400)
+            }
+            check(!needs(100, 230), "an item aligned with the leading edge stays put")
+            check(!needs(270, 400), "an item aligned with the trailing edge stays put")
+            check(needs(99, 229), "a clipped leading edge needs revealing")
+            check(needs(271, 401), "a clipped trailing edge needs revealing")
+            check(needs(500, 630), "an offscreen item needs revealing")
+            check(needs(50, 450), "an oversized clipped item reveals its leading edge")
+            check(!needs(100, 500), "an oversized item already aligned at the leading edge stays put")
+            check(needs(450, 850), "an oversized offscreen item still needs revealing")
+            check(needs(99.9, 229.9), "even a fractional leading-edge clip needs revealing")
+            check(needs(270.1, 400.1), "even a fractional trailing-edge clip needs revealing")
+            func offset(_ lower: CGFloat, _ upper: CGFloat) -> CGFloat? {
+                FrameGridScrollVisibility.revealOffset(lower: lower, upper: upper,
+                    visibleLower: 100, visibleUpper: 400)
+            }
+            checkEqual(offset(99, 229), 99, "reveal the leading edge with the smallest scroll")
+            checkEqual(offset(271, 401), 101, "reveal the trailing edge with the smallest scroll")
+            checkEqual(offset(9000, 9130), 8830, "far-off lazy rows use absolute offsets without cell IDs")
+            checkEqual(offset(50, 450), 50, "oversized clipped thumbnails align their leading edge")
+
+        }.value
     })
     let order = (0..<6).map { FrameID(sampleIndex: $0) }
     Registry.shared.add(suite: "Frame selection", TestCase(name: "plain clicks replace selection and command clicks toggle individual frames", knownBug: nil) {

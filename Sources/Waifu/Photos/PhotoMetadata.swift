@@ -119,7 +119,6 @@ struct PhotoMetadata: Sendable, Equatable {
         if !embeddedKeywords.isEmpty { lines.append("Embedded keywords: \(embeddedKeywords.joined(separator: ", "))") }
         append("Title", title, to: &lines)
         append("Description", description, to: &lines)
-        lines.append("Photos.app library keywords: unavailable through public PhotoKit APIs")
         return lines.joined(separator: "\n")
     }
 

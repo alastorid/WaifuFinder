@@ -1,3 +1,6 @@
+> Current policy: the capability-aware registry below supersedes Round 2’s exact-name
+> automatic-selection restriction. Historical measurements remain scoped to base M3.
+
 # Native WDTagger kernel review — 2026-10-23
 
 The fused native architecture remains selected. Round 1 fixed QKV tile dispatch
@@ -260,3 +263,97 @@ Round 1 controls exactly, and selected the baseline geometry as intended.
 Natural-image and M4 validation were not
 available in this pass. Raw samples, capabilities and final source hashes are
 appended under `round2` in the existing [evidence JSON](wd-tagger-native-kernel-review.json).
+
+
+## Capability-aware profile registry — Round 3
+
+The exact base-M3 gate is now a measurement identity in
+[`OptimizationProfiles.swift`](../Runtime/Sources/WDTaggerMLX/OptimizationProfiles.swift),
+not the foundation of kernel eligibility. Portable fused kernels remain the
+foundation. The registry stores matching rules, provenance, kernel revision,
+batch constraints, the fixed native SwinV2 workload, four independent stage
+configurations, bias storage and evidence. The exact measured entry preserves
+Stage 3 QKV/FC2 64×64×32, other GEMMs 32×64×32, query-16/key-32, dense bias and
+standard NormRoute. The 1.5–1.9% claim and exact probabilities still describe only
+the documented base-M3 synthetic-corpus measurements.
+
+Metal discovery queries Apple7/Apple9 support and actual maximum threadgroup
+memory/dimensions. Apple's [feature table](https://developer.apple.com/metal/capabilities/)
+places SIMD matrix and reduction operations in Apple7;
+[Apple9](https://developer.apple.com/documentation/metal/mtlgpufamily/apple9) is a
+shared feature contract, including multiple chip generations, not a marketing
+version number. No GPU family is converted to an invented M-series product list.
+
+| Hardware/workload evidence | Automatic selection |
+|---|---|
+| Exact measured base M3, batch 8, standard fused graph | Round 2 measured profile |
+| Unmeasured device reporting Apple9 compatibility, batch 8, standard fused graph | Same M3-derived configuration, explicitly inherited/unmeasured |
+| Compatible M1/M2, smaller batches, or no modern feature contract | Conservative architecture-derived native baseline |
+| No more specific applicable entry | Resource-validated universal native baseline |
+| Missing required matrix/reduction contract or insufficient baseline resources | Clear unsupported-native diagnostic |
+
+M3 variants and M4 or later devices are eligible through reported compatibility,
+not names. Future M5/M6/M7 or unfamiliar names require no source update if they
+report existing compatible features. Compatibility is checked, and performance is
+not inferred from greater resource limits. New exact measured entries supersede
+inheritance by registry priority. No additional hardware was available in this
+pass, so no other GPU acquired a measured performance claim.
+
+Explicit operation/stage tiles win over explicit global configuration, which wins
+over measured, compatible inherited, architecture-derived and universal entries.
+The existing global option also pins query-32 unless attention is explicitly
+specified. Per-operation arrays survive a global override. Unspecified optional
+norm/bias settings use profile choices; explicit values remain authoritative.
+Current automatic profiles keep dense bias/standard NormRoute. Stage 1 reduction
+is absent; patch projection and classifier retain their existing library fallback.
+Invalid explicit geometry/resources produce descriptive errors. Inapplicable
+automatic candidates fall through with rejection reasons exposed in diagnostics.
+Checks include the real K/N shapes, QKV segment-safe effective geometry, padded
+shared memory and group width. Partial M tiles remain safe: Stage 4 batch-eight
+has 1,568 rows, including a 32-row remainder for BM=64.
+
+Resolved typed plans are cached by batch before graph tracing; compiled closures
+capture them per input shape/dtype. There is no per-block registry evaluation,
+per-call logging, startup benchmark, persistent calibration or added dependency.
+Diagnostics expose GPU, feature/resource snapshot, effective/base provenance,
+profile/evidence/revision, overrides, workload and actual per-stage choices.
+Both native and Core ML comparison reports include this information. Existing
+nonthrowing prediction/comparison interfaces retain descriptive precondition
+failures for invalid requests; the constructor/resolver expose throwing diagnostics.
+The model remains intended for serial worker use, as before.
+
+An additional universal change shares Stage 3's identical directional routes:
+17 nonidentity block maps become two immutable maps, eliminating
+`15 * 784 * 4 = 47,040` payload bytes. Fused QKV, register-based NormRoute,
+identity elimination, direct input/window layout, fused GELU and bias/mask indexing
+optimizations remain universal. No new throughput claim is attached to route
+sharing or resolver overhead removal. Postnorm ordering and FP16/FP32 boundaries,
+448/64 MiB budgets, prepared weights and WDT4 protocol are preserved.
+
+The full-row GEMM/LayerNorm ownership/resource limitations, patch K=48 tradeoff,
+compact-bias memory/performance distinction and rejected whole-head/larger Flash
+trials recorded above still apply. Static compatibility checks cannot measure
+physical register spills or certify pipeline-specific residency/optimality.
+Registering future measurements means adding one revision/workload-scoped profile
+entry with evidence; no inference logic or chip-name switch changes are required.
+
+The [Metal README](../Runtime/Sources/WDTaggerMLX/Metal/README.md) now documents the
+registry architecture, generation handling, precedence, diagnostics, extension
+procedure and universal changes beside the preserved Round 1/2 decision record.
+
+### Registry validation
+
+Both release products build successfully. **528 checks passed**: the existing
+487 ownership/kernel checks plus 41 pure profile-policy checks. Policy checks
+cover older-generation conservative selection, unknown compatible devices,
+misleading names, exact-profile priority, revision/shape scope, all partial batches,
+resource fallback, authoritative overrides (including overrides that make a
+candidate valid), malformed entries, index bounds and serializable diagnostics.
+The compiled M3 batch-eight output remains byte-identical to the Round 2 selected
+profile across all 695,104 probabilities from 64 synthetic inputs. Batches 1–7
+match their retained same-batch controls exactly; compact-bias batch-eight output
+also matches all 64 retained inputs exactly. Worker readiness and the 86,888-score
+quantization check pass. Additional GPU generations remain unmeasured; synthetic
+capability tests verify policy, not physical hardware performance. No interactive
+UI testing was needed. Results and final source hashes are appended under `round3`
+in the existing evidence JSON, retaining the previous rounds unchanged.

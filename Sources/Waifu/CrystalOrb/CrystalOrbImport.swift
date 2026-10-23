@@ -9,11 +9,17 @@ enum CrystalOrbImport {
         let imageProvider = providers.first { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
         guard !urls.isEmpty || imageProvider != nil else { return false }
         let ticket = model.beginDrop()
+        // Bitmap providers already identify an image: enter Orb before waiting
+        // for a cross-application representation to arrive.
+        if imageProvider != nil && urls.isEmpty { model.beginImageDrop(session: session) }
         Task {
             let values = await VideoDrop.urls(from: urls)
             guard model.dropTicket == ticket else { return }
             if let image = values.first(where: CrystalOrbImageSource.isImage) {
                 model.importImage(url: image, session: session)
+            } else if values.contains(where: { $0.isFileURL }) {
+                if model.isOpen { model.close() }
+                session.loadVideos(at: values)
             } else if let imageProvider {
                 do {
                     let data: Data = try await withCheckedThrowingContinuation { continuation in
@@ -24,7 +30,7 @@ enum CrystalOrbImport {
                     }
                     guard model.dropTicket == ticket else { return }
                     model.importImage(data: data, session: session)
-                } catch { session.errorMessage = error.localizedDescription }
+                } catch { model.failImageDrop(ticket: ticket, message: error.localizedDescription) }
             } else if !values.isEmpty {
                 if model.isOpen { model.close() }
                 session.loadVideos(at: values)

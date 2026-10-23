@@ -539,8 +539,9 @@ private func compareNative(weights: URL, inputs: URL, rounds: Int) throws -> [St
   }
   let middle = rounds / 2
   let baseline = sweeps[0].sorted()[middle]
-  let records: [[String: Any]] = variants.enumerated().map { i, variant in
+  let records: [[String: Any]] = try variants.enumerated().map { i, variant in
     ["variant": variant.0, "sweepSeconds": sweeps[i], "framesPerSecond": Double(frames) / sweeps[i].sorted()[middle],
+     "optimizationProfile": try variant.1.resolvedConfiguration(batch: batch).diagnostics,
      "speedRatio": baseline / sweeps[i].sorted()[middle], "maximumAbsoluteError": errors[i],
      "thresholdDifferences": thresholdChanges[i]]
   }
@@ -591,8 +592,16 @@ do {
       .write(to: URL(fileURLWithPath: output))
     exit(0)
   }
+  if args.contains("--check-profiles") {
+    let checks = try profileChecks()
+    print("Native profile correctness: \(checks.count) checks passed")
+    if let report = option("--report") {
+      try JSONSerialization.data(withJSONObject: ["checks": checks, "passed": true], options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: report))
+    }
+    exit(0)
+  }
   if args.contains("--check-kernels") {
-    let checks = try kernelChecks(
+    let checks = try profileChecks() + kernelChecks(
       tiles: args.contains("--check-gemm-tiles") ? WDMetal.GEMMTile.allCases : [gemmTile])
     if let report = option("--report") {
       try JSONSerialization.data(
@@ -659,8 +668,8 @@ do {
   let memory = PeakMemory()
   let tagger = try WDNativeTagger(
     weights: URL(fileURLWithPath: weights), compileModel: !args.contains("--no-compile"),
-    gemmTile: option("--gemm-tile") == nil ? nil : gemmTile, simdNorm: args.contains("--simd-norm"),
-    compactBias: args.contains("--compact-bias"), fusedQKV: fusedQKV,
+    gemmTile: option("--gemm-tile") == nil ? nil : gemmTile, simdNorm: args.contains("--simd-norm") ? true : nil,
+    compactBias: args.contains("--compact-bias") ? true : nil, fusedQKV: fusedQKV,
     gemmOverrides: gemmOverrides,
     attentionQueryRows: option("--attention-query-rows") == nil ? nil : queryRows)
   Memory.clearCache()
@@ -728,6 +737,7 @@ do {
     "normImplementation": args.contains("--simd-norm") ? "simd-registers" : "threadgroup-two-pass",
     "compactAttentionBias": args.contains("--compact-bias"),
     "fusedQKV": fusedQKV,
+    "optimizationProfile": try tagger.resolvedConfiguration(batch: batch).diagnostics,
     "attentionQueryRows": tagger.selectedAttentionQueryRows(batch: batch),
     "stageTiles": Dictionary(uniqueKeysWithValues: WDNativeTagger.GEMMOperation.allCases.map { operation in
       (operation.rawValue, (0..<4).map { tagger.selectedTile(operation, stage: $0, batch: batch).rawValue })

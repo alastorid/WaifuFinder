@@ -35,6 +35,7 @@ struct FramePreviewView: View {
     @State private var displayedFrameID: FrameID?
     @State private var note: String?
     @State private var reading = false
+    @State private var showReadingStatus = false
     /// A failed read is finished too; an unreadable frame must not trap held arrows.
     @State private var completedReadFrameID: FrameID?
     /// Zoom as a multiple of the frame's fit-to-window size (1 = fit).
@@ -49,6 +50,9 @@ struct FramePreviewView: View {
     @State private var photoMetadata: PhotoMetadata?
     @State private var metadataLoading = false
     @State private var metadataError: String?
+    @State private var metadataFrameID: FrameID?
+    @State private var metadataTags: [String] = []
+    @State private var metadataRating: String?
 
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
@@ -82,7 +86,9 @@ struct FramePreviewView: View {
                             .frame(maxHeight: .infinity)
                         PhotoMetadataInspectorView(metadata: photoMetadata,
                                                    isLoading: metadataLoading,
-                                                   errorMessage: metadataError)
+                                                   errorMessage: metadataError,
+                                                   tags: metadataFrameID == frame.id ? orderedTopTags : metadataTags,
+                                                   rating: metadataFrameID == frame.id ? frame.tagRating?.rawValue.capitalized : metadataRating)
                             .frame(maxHeight: .infinity)
                             .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
                     }
@@ -93,12 +99,13 @@ struct FramePreviewView: View {
         }
         .task(id: frame.id) { await load(frame) }
         .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
-        .onChange(of: frame.id) { _, _ in
-            // Clear synchronously with navigation so a rapid selection change
-            // can never leave the preceding photo's details in the inspector.
-            photoMetadata = nil
-            metadataError = nil
-            metadataLoading = false
+        .task(id: "\(reading):\(loadID)") {
+            showReadingStatus = false
+            guard reading else { return }
+            do { try await Task.sleep(for: .milliseconds(330)) }
+            catch { return }
+            guard !Task.isCancelled, reading else { return }
+            showReadingStatus = true
         }
         // While this overlay is up it *owns* the navigation keys, rather than hoping they
         // reach whoever holds the keyboard. Using a zoom button moves focus into this
@@ -253,7 +260,7 @@ struct FramePreviewView: View {
                 .help(RemoteClient.shared.offersAnyRemoteUncover
                       ? "Open Uncover — reconstruction can run on \(RemoteClient.shared.capabilities?.serverName ?? "the server")"
                       : "Open Uncover")
-            Text(reading ? "preview · loading original" : (note == nil ? "original frame" : "preview"))
+            Text(showReadingStatus ? "preview · loading original" : (note == nil ? "original frame" : "preview"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Divider().frame(height: 16)
@@ -319,14 +326,14 @@ struct FramePreviewView: View {
                                    zoomRatio: $zoom, center: $zoomCenter)
             } else {
                 VStack(spacing: 8) {
-                    if reading { ProgressView() }
-                    Text(note ?? "Loading the original frame…")
+                    if showReadingStatus { ProgressView() }
+                    Text(note ?? (showReadingStatus ? "Loading the original frame…" : ""))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            if reading {
+            if showReadingStatus {
                 Text("reading…")
                     .font(.caption)
                     .foregroundStyle(.white)
@@ -350,10 +357,12 @@ struct FramePreviewView: View {
         loadID = request
         note = nil
         reading = true
+        showReadingStatus = false
         animation = nil
         defer {
             if loadID == request {
                 reading = false
+                showReadingStatus = false
                 if !Task.isCancelled { completedReadFrameID = target.id }
             }
         }
@@ -415,28 +424,38 @@ struct FramePreviewView: View {
     private func loadPhotoMetadata(for target: AnalyzedFrame) async {
         guard let source = session.video?.url,
               let photoURL = PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) else { return }
-        metadataLoading = true
+        metadataLoading = false
         metadataError = nil
+        let loadingIndicator = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(330)) }
+            catch { return }
+            guard !Task.isCancelled, session.previewFrame?.id == target.id,
+                  session.video?.url == source else { return }
+            metadataLoading = true
+        }
         defer {
+            loadingIndicator.cancel()
             if !Task.isCancelled, session.previewFrame?.id == target.id {
                 metadataLoading = false
             }
         }
         do {
-            if let initial = await PhotoMetadataService.shared.basic(for: photoURL) {
-                guard !Task.isCancelled, session.previewFrame?.id == target.id,
-                      session.video?.url == source else { return }
-                photoMetadata = initial
-            }
             let result = try await PhotoMetadataService.shared.load(for: photoURL)
             guard !Task.isCancelled, session.previewFrame?.id == target.id,
                   session.video?.url == source,
                   PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) == photoURL else { return }
             photoMetadata = result
+            metadataFrameID = target.id
+            metadataTags = orderedTopTags
+            metadataRating = frame.tagRating?.rawValue.capitalized
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, session.previewFrame?.id == target.id else { return }
+            photoMetadata = nil
+            metadataFrameID = nil
+            metadataTags = []
+            metadataRating = nil
             metadataError = error.localizedDescription
         }
     }

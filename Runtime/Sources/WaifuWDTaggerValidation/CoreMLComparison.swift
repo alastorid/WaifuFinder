@@ -175,6 +175,7 @@ func compareCoreML(
   var report: [String: Any] = [
     "native": true, "batch": batch, "frames": frames, "rounds": rounds,
     "implementation": WDNativeTagger.implementationVersion,
+    "optimizationProfile": try native.resolvedConfiguration(batch: batch).diagnostics,
     "attentionQueryRows": attentionQueryRows,
     "qkvBackend": !fusedQKV || (0..<4).contains { native.selectedTile(.qkv, stage: $0, batch: batch) == .library }
       ? "includes-unfused" : "native-fused",

@@ -68,8 +68,9 @@ struct CrystalOrbRasterView: NSViewRepresentable {
             CATransaction.commit()
             task = Task { [weak self] in
                 do {
+                    try await Task.sleep(for: .milliseconds(20))
                     let pixels = try await CrystalOrbViewportRenderer.shared.render(image: image, canvas: canvas,
-                        viewport: next.size, scale: scale, pan: pan, backing: backing)
+                        viewport: next.size, scale: scale, pan: pan, backing: backing, identity: identity)
                     guard !Task.isCancelled, let self, ticket == request else { return }
                     CATransaction.begin(); CATransaction.setDisableActions(true)
                     detail.contents = pixels
@@ -87,16 +88,34 @@ actor CrystalOrbViewportRenderer {
         .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
         .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, .cacheIntermediates: false])
 
-    func render(image: CIImage, canvas: CGSize, viewport: CGSize, scale: CGFloat, pan: CGSize, backing: CGFloat) throws -> CGImage {
+    private var tiles: [String: CGImage] = [:]
+    private var order: [String] = []
+    private var cost = 0
+    private var material: String?
+    func render(image: CIImage, canvas: CGSize, viewport: CGSize, scale: CGFloat, pan: CGSize, backing: CGFloat, identity: String? = nil) throws -> CGImage {
         try Task.checkCancellation()
+        let key = identity.map { "\($0):\(canvas):\(viewport):\(scale):\(pan):\(backing)" }
+        if let key, let cached = tiles[key] { return cached }
+        let nextMaterial = identity?.split(separator: ":").first.map(String.init)
+        if nextMaterial != material { context.clearCaches(); material = nextMaterial }
         let offset = CGPoint(x: (viewport.width - canvas.width * scale) / 2 + pan.width,
                              y: (viewport.height - canvas.height * scale) / 2 - pan.height)
-        let transformed = image.transformed(by: CGAffineTransform(scaleX: scale * backing, y: scale * backing))
+        let sampled = scale * backing >= 8 ? image.samplingNearest() : image
+        let transformed = sampled.transformed(by: CGAffineTransform(scaleX: scale * backing, y: scale * backing))
             .transformed(by: CGAffineTransform(translationX: offset.x * backing, y: offset.y * backing))
         let extent = CGRect(x: 0, y: 0, width: ceil(viewport.width * backing), height: ceil(viewport.height * backing))
         guard let result = context.createCGImage(transformed, from: extent, format: .RGBA8,
                                                  colorSpace: CGColorSpace(name: CGColorSpace.sRGB)) else { throw CrystalOrbImageSource.failure }
         try Task.checkCancellation()
+        let bytes = result.bytesPerRow * result.height
+        if let key, bytes <= 64 * 1024 * 1024 {
+            while cost + bytes > 64 * 1024 * 1024 || order.count >= 8 {
+                guard !order.isEmpty else { break }
+                let oldest = order.removeFirst()
+                if let removed = tiles.removeValue(forKey: oldest) { cost -= removed.bytesPerRow * removed.height }
+            }
+            tiles[key] = result; order.append(key); cost += bytes
+        }
         return result
     }
 }

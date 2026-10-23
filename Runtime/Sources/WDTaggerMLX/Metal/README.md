@@ -1,16 +1,16 @@
 # WDTagger Metal kernels
 
-[Current memory/input results](../../../../../docs/WDTagger-native-memory.md).
+[Current memory/input results](../../../../docs/WDTagger-native-memory.md).
 
-**[Performance matrix and optimization guide](../../../../../docs/WDTagger-native-tuning.md)**
+**[Performance matrix and optimization guide](../../../../docs/WDTagger-native-tuning.md)**
 (main matrix also appears near the top of the repository README).
 
 These kernels are dispatched directly by Swift through MLX's native Metal API.
 Inference, weight preparation, correctness checks and timing require no Python.
 
 - `Flash32.metal`: fixed 196-token, 32-lane tiled attention with FP32 online
-  softmax. The selected query tile is 16 rows for measured M3 batch-eight execution
-  and 32 rows otherwise. Compact per-head positional bias and per-window region IDs preserve
+  softmax. The selected query tile is 16 rows for measured M3 or compatible
+  inherited batch-eight execution and 32 rows for the conservative native profile. Compact per-head positional bias and per-window region IDs preserve
   shifted-window masking without an expanded score/mask tensor. The output is
   token-major, ready for the projection GEMM.
 - `QKVCosine.metal`: one SIMD group per token/head combines FP32 cosine
@@ -19,7 +19,7 @@ Inference, weight preparation, correctness checks and timing require no Python.
   geometry-specialized native matrix tiles. The baseline 32×64×32 tile keeps
   FP16 projected values in registers; 512 bytes of FP32 partial reductions cross
   SIMD groups. V bypasses normalization. `QKVCosine.metal` remains the unfused
-  comparison path. See the [kernel review](../../../../../docs/WDTagger-native-kernel-review.md)
+  comparison path. See the [kernel review](../../../../docs/WDTagger-native-kernel-review.md)
   for supported geometries and the explicit unfused library reference.
 - `NormRoute.metal`: two-pass FP32 LayerNorm, affine transform, residual addition
   and the next block's spatial permutation in one dispatch. Each thread retains
@@ -45,9 +45,9 @@ This is the selected app backend on Apple Silicon. The worker uses fused QKV,
 batch eight and a 448 MiB soft allocation budget and 64 MiB cache. See the linked measurements for
 the Core ML comparison, memory tradeoff and numerical limitations.
 
-## Optimization decisions — Rounds 1 and 2
+## Optimization policy and review record
 
-The [review and evidence](../../../../../docs/WDTagger-native-kernel-review.md#round-2-decisions)
+The [review and evidence](../../../../docs/WDTagger-native-kernel-review.md#round-2-decisions)
 records the measurements, numerical checks and rejected trials. Device capability
 queries reported **Apple M3**, **32,768 threadgroup bytes**, and a **1,024-thread group-width
 limit**. Physical register spills and resident SIMD-group counts were not measured.
@@ -57,20 +57,99 @@ limit**. Physical register spills and resident SIMD-group counts were not measur
 | Default execution | Stage 3 QKV / FC2 | Other GEMMs | Attention Q×K tile |
 |---|---|---|---|
 | Base Apple M3, batch 8, native fused QKV and standard normalization | 64×64×32 | 32×64×32 | 16×32, 64 threads |
-| Other devices, smaller batches, or comparison implementations | 32×64×32 | 32×64×32 | 32×32, 128 threads |
+| Unmeasured devices reporting Apple family 9 compatibility, batch 8, native fused QKV and standard normalization | 64×64×32 (inherited) | 32×64×32 | 16×32, 64 threads |
+| Other compatible devices, smaller batches, or comparison implementations | 32×64×32 | 32×64×32 | 32×32, 128 threads |
 
 The M3 combination improved adjacent full-model prediction throughput by
 **1.5–1.9%** in three comparisons; all output probabilities matched the control
 exactly on 64 synthetic inputs. This is not a whole-app throughput measurement.
-M3 Pro/Max and M4 keep the baseline until measured; the device-name gate is exact.
+The exact-name gate now identifies **measurement provenance only**. Compatible
+family-9 devices provisionally inherit this configuration, with no performance
+claim for M3 variants, M4 or subsequent chips. See the registry policy below.
 Existing 448 MiB scheduling and 64 MiB cache defaults remain.
 
-[Tagger.swift](../Tagger.swift)'s `selectedTile` chooses by operation, stage and
-batch at graph-trace time. An explicit `gemmTile` disables automatic selection;
-`gemmOverrides` supplies four stage entries per overridden operation (`qkv`,
-`projection`, `fc1`, `fc2`, `reduction`). Reduction has no Stage 1 entry in the
-execution graph, so its first override entry is ignored. `attentionQueryRows` overrides attention independently. The
-validation tool reports the effective choices, not just the requested label.
+### Capability-aware registry and precedence
+
+[OptimizationProfiles.swift](../OptimizationProfiles.swift) separates device discovery,
+profile data, resource validation and the resolved four-stage configuration.
+[Tagger.swift](../Tagger.swift) caches plans by batch, and compiled closures by input
+shape and dtype. Each closure captures its complete plan before graph tracing or
+Metal specialization; blocks read that plan without registry lookups. There is no
+startup calibration, shader-probing benchmark or per-inference logging.
+
+Selection follows this precedence:
+
+1. Explicit operation/stage tiles override every lower layer.
+2. Explicit global GEMM configuration replaces all remaining tiles and pins the
+   legacy query-32 scheduling; explicit attention scheduling then overrides it.
+3. An exact measured device/workload entry wins over compatible entries.
+4. A compatible Apple family 9 entry inherits the M3 batch-eight candidate.
+5. Apple SIMD matrix compatibility selects the conservative architecture profile.
+6. The universal native entry is the last compatible fallback.
+
+An explicit global tile never erases operation overrides. Existing four-entry
+operation arrays remain supported; reduction's Stage 1 entry has no operation to
+execute. Optional normalization and bias arguments distinguish unspecified values
+from explicit false. Profiles support four independent attention schedules and
+normalization choices, plus a bias storage choice. Current automatic entries all
+use standard NormRoute and dense bias. Patch-merge/final normalization retain MLX
+LayerNorm. Comparison variants preserve the existing nonthrowing API and report
+invalid tuning as a descriptive precondition failure; initialization and the
+public resolver throw descriptive errors.
+
+Discovery reads the actual device name, Apple7/Apple9 feature contracts and all
+three maximum threadgroup dimensions plus threadgroup memory. Apple7 establishes
+SIMD matrix/reduction compatibility for the retained FP16/FP32 kernels; Apple9 is
+an inheritance criterion, **not a one-to-one marketing generation identifier**.
+See Apple's [feature tables](https://developer.apple.com/metal/capabilities/) and
+[Apple9 documentation](https://developer.apple.com/documentation/metal/mtlgpufamily/apple9).
+M1/M2 families receive the full fused native baseline with 32×64×32 GEMMs and
+query-32 attention; valid larger tiles alone are insufficient performance evidence.
+M3-and-newer devices reporting Apple9, including previously unseen names, are
+eligible for the inherited batch-eight candidate after resource checks. An unknown
+name without that feature contract gets the conservative optimized native profile;
+no M5/M6/M7 name parsing or invented product/capability table is needed. If future
+hardware stops reporting the required feature contracts, compatibility cannot be
+assumed: initialization gives a clear unsupported-native error.
+
+Each candidate is scoped to the kernel implementation revision, fixed 448×448
+SwinV2 shapes, batch constraints, and standard fused implementation where required.
+Resolution validates actual stage K/N divisibility, effective fused-QKV geometry,
+thread count, and padded shared-memory bytes (including cosine partials). M tails
+remain safe and do not require padding the input batch. Row alignment is reported;
+aligned aliases retain their existing shape-guarded full-tile paths. Inapplicable
+automatic candidates descend through the registry. Invalid explicit choices throw
+instead of silently choosing another tile. The patch projection (K=48) and
+classifier (N=10861) retain their existing library geometry fallback.
+
+To register new measurements, add a small `WDGPUOptimizationProfile` entry with an
+exact matching rule, supported batches, revision, four stage configurations,
+provenance and an evidence reference. Exact entries sort before inherited entries,
+regardless of declaration position; ties retain registry order. No inference branch
+changes. Changing a kernel revision requires revalidating or retiring its evidence.
+The exported `resolvedConfiguration(batch:).diagnostics` and validation reports show
+the actual GPU/capabilities, base and effective provenance, overrides, selection
+reason, batch, stage rows/channels, tile choices, alignment, attention and norm/bias
+choices. Measured, inherited, architecture-derived, universal and user-override
+statuses are distinct. `--check-profiles` exercises policy without GPU execution.
+
+### Universal structural optimizations
+
+Fused QKV/cosine/packing, register-retained NormRoute values, identity-route
+elimination, direct RGBA/window packing, fused FC1 GELU, direct compact-bias indexing,
+and hoisted shifted-query regions remain available on every compatible GPU.
+Alternating Stage 3 blocks now also share two immutable directional route arrays,
+removing 47,040 bytes of duplicate payload. Configuration capture eliminates
+per-block policy evaluation. Neither change claims a measured throughput gain.
+The 448 MiB allocation and 64 MiB cache budgets, checkpoint format, WDT4 worker
+protocol, FP16 rounding boundaries and FP32 reduction order remain unchanged.
+
+The Round 2 exact base-M3 entry remains the only measured tuning profile. All
+other modern selections are provisional. Register occupancy and pipeline-specific
+resource limits still depend on Metal compilation; static resource validation does
+not measure physical spills or establish the fastest geometry. No earlier rejected
+kernel experiment was reintroduced.
+
 `--gemm-tile 32x64x32 --attention-query-rows 32` pins the original geometry.
 
 Dispatch and effective geometry are in [Kernels.swift](../Kernels.swift). Lane

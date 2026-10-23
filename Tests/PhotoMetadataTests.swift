@@ -169,8 +169,8 @@ func registerPhotoMetadataTests() {
         checkEqual(parsed.embeddedKeywords, ["travel", "beach", "sunset"], "embedded keywords merge IPTC and XMP without duplicates")
         checkEqual(parsed.title, "Coastline", "IPTC object name takes priority over the XMP title")
         checkEqual(parsed.description, "A quiet beach at sunset", "IPTC caption is available")
-        check(parsed.copyableText().contains("Photos.app library keywords: unavailable through public PhotoKit APIs"),
-              "copied text does not imply embedded keywords came from the Photos library")
+        check(!parsed.copyableText().contains("Photos.app library keywords"),
+              "copied text omits unsupported Photos library keyword fields")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "missing EXIF keeps basic file information and invents no camera values", knownBug: nil) {

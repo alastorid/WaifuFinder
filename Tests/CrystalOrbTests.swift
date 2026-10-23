@@ -2,6 +2,7 @@ import AppKit
 import CoreImage
 import ImageIO
 import Vision
+import Combine
 
 private func orbFrame(_ index: Int, feature: Data? = nil) -> AnalyzedFrame {
     AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index), faceScore: nil,
@@ -39,6 +40,18 @@ func registerCrystalOrbTests() {
                        CrystalOrbMatch(frame: orbFrame(3), distance: 0), CrystalOrbMatch(frame: orbFrame(4), distance: .nan)]
         checkEqual(CrystalOrbMatch.ranked(matches).map(\.id.sampleIndex), [3, 2, 8], "ties use source identity")
         check(CrystalOrbMatch.ranked([]).isEmpty, "empty results safe")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "live ranking gate caps changed lists to twice per second and skips unchanged lists", knownBug: nil) {
+        let first = [CrystalOrbMatch(frame: orbFrame(0), distance: 1)]
+        let next = [CrystalOrbMatch(frame: orbFrame(1), distance: 0)]
+        var gate = CrystalOrbPublicationGate()
+        checkEqual(gate.delay(for: first, at: 10), 0, "first ranking appears immediately")
+        gate.published(first, at: 10)
+        check(gate.delay(for: first, at: 11) == nil, "unchanged ranking never republishes")
+        checkClose(gate.delay(for: next, at: 10.1) ?? -1, 0.4, tolerance: 0.0001, "early changes wait for the half-second boundary")
+        checkEqual(gate.delay(for: next, at: 10.5), 0, "second changed ranking is eligible after half a second")
+        gate.published(next, at: 10.5)
+        checkClose(gate.delay(for: first, at: 10.6) ?? -1, 0.4, tolerance: 0.0001, "cap applies to every subsequent publication")
     })
     Registry.shared.add(suite: suite, TestCase(name: "alignment preserves aspect and upscales smaller sources without cropping", knownBug: nil) {
         let a = CrystalOrbAlignment(target: CGSize(width: 4032, height: 3024), candidate: CGSize(width: 1920, height: 1080))
@@ -210,19 +223,52 @@ func registerCrystalOrbLifecycleTests() {
             try await orbWait { session.video != nil && !session.progress.isRunning }
             check(!model.isOpen, "video drop remains in ordinary import workflow")
             check(session.errorMessage == nil, "native fixture analyzed")
+            for frame in session.frames {
+                if let thumbnail = await session.thumbnailData(for: frame) {
+                    _ = await GridThumbnailLoader.shared.image(data: thumbnail, identity: session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey)
+                }
+            }
+            var rankingTimes: [TimeInterval] = []
+            let rankingObserver = model.$matches.sink { matches in
+                if !matches.isEmpty { rankingTimes.append(ProcessInfo.processInfo.systemUptime) }
+            }
+            var previewAlignment: CrystalOrbAlignment?
+            let observer = model.$pair.sink { pair in
+                if let pair, !pair.candidateIsOriginal { previewAlignment = pair.alignment }
+            }
+            model.zoom = 2.75; model.pan = CGSize(width: 21, height: -13)
+            model.swipe = 0.36; model.opacity = 0.47; model.redOverlay = true
             let imageProvider = NSItemProvider(item: data as NSData, typeIdentifier: "public.png")
             check(CrystalOrbImport.accept([imageProvider], model: model, session: session), "external image representation accepted")
             try await orbWait { model.query != nil && !model.searching && !model.matches.isEmpty }
             try await orbWait { !model.loading && model.pair != nil }
+            check(model.pair?.candidateIsOriginal == false, "automatic best candidate stays preview-only")
+            check(model.canLoadOriginal, "original is available through deliberate user action")
+            for (earlier, later) in zip(rankingTimes, rankingTimes.dropFirst()) {
+                check(later - earlier >= 0.49, "live ranked list updates at most twice a second")
+            }
+            check(rankingTimes.count >= 2, "first and completed live rankings are presented")
             let id = model.selectedID
+            if let id { model.select(id) }
+            try await orbWait { !model.loading && model.pair?.candidateIsOriginal == true }
             checkEqual(session.selectedFrameIDs, Set(id.map { [$0] } ?? []), "search selected exact underlying frame")
             checkEqual(model.pair?.frame.id, id, "loaded original belongs to selected identity")
             checkEqual(model.pair?.candidate.width, 320, "native original loaded")
+            check(previewAlignment != nil, "cached thumbnail paints before the original")
+            checkEqual(model.pair?.alignment, previewAlignment, "preview and original share native geometry")
+            checkEqual(model.selectedID, model.matches.first?.id, "rank one automatically fills candidate pane")
+            checkEqual(model.zoom, 2.75, "search and quality upgrades preserve zoom")
+            checkEqual(model.pan, CGSize(width: 21, height: -13), "quality upgrades preserve pan")
+            checkEqual(model.swipe, 0.36, "quality upgrades preserve divider")
+            checkEqual(model.opacity, 0.47, "quality upgrades preserve opacity")
+            check(model.redOverlay, "quality upgrades preserve overlay preference")
+            withExtendedLifetime((observer, rankingObserver)) {}
             let mask = model.pair?.difference?.redMask
             if let id, let other = model.matches.last?.id, other != id {
                 let firstDifference = model.pair?.difference?.id
                 model.select(other)
-                checkEqual(model.pair?.difference?.id, firstDifference, "complete old pair stays visible while the replacement loads")
+                checkEqual(model.pair?.frame.id, other, "click paints the cached preview immediately")
+                check(model.pair?.candidateIsOriginal == false, "the immediate image is identified as a preview")
                 try await orbWait { !model.loading && model.pair?.frame.id == other }
                 checkEqual(session.selectedFrameIDs, [other], "different candidate selects exact grid identity")
                 model.select(id)
@@ -248,6 +294,64 @@ func registerCrystalOrbLifecycleTests() {
             check(model.matches.isEmpty && model.pair == nil && model.selectedID == nil, "source replacement clears stale matches and pixels synchronously")
             model.close(); session.cancel()
         }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "Photos inspection requests the largest useful local preview independently of analysis size", knownBug: nil) {
+        checkEqual(PhotosMedia.inspectionRenditionSize(width: 6000, height: 4000), CGSize(width: 2048, height: 1365), "inspection gets more detail than a 512-pixel analysis thumbnail")
+        checkEqual(PhotosMedia.inspectionRenditionSize(width: 3000, height: 6000), CGSize(width: 1024, height: 2048), "portrait preview preserves aspect")
+        checkEqual(PhotosMedia.inspectionRenditionSize(width: 320, height: 240), CGSize(width: 320, height: 240), "small sources are never needlessly upscaled")
+        checkEqual(PhotosMedia.renditionSize(width: 6000, height: 4000, maxPixelSize: 2048).width, 512, "analysis cache bounds stay unchanged")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "query previews upgrade to originals without changing identity or inspection settings", knownBug: nil) {
+        let directory = try Temporary.directory("orb-query-upgrade")
+        let image = try orbImage(0, width: 4096, height: 2304)
+        let bytes = orbPNG(image)
+        let preview = try CrystalOrbImageSource.read(data: bytes, maxPixelSize: 2048)
+        checkEqual(preview.image.width, 2048, "best quick query preview is decoded without full-size buffers")
+        checkEqual(preview.nativeSize, CGSize(width: 4096, height: 2304), "preview carries original coordinate size")
+        check(!preview.isOriginal, "preview quality is explicit")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+            var previews: [UUID] = []
+            let observer = model.$query.sink { query in
+                if let query, !query.isOriginal { previews.append(query.id) }
+            }
+            model.zoom = 3; model.pan = CGSize(width: 15, height: -8); model.mode = .swipe
+            model.swipe = 0.31; model.opacity = 0.82; model.redOverlay = true; model.actualPixels = true
+            model.importImage(data: bytes, session: session)
+            try await orbWait { model.query?.isOriginal == true }
+            checkEqual(previews, model.query.map { [$0.id] } ?? [], "thumbnail and original keep one query identity")
+            checkEqual(model.query?.image.width, 4096, "background decode upgrades to original")
+            checkEqual(model.zoom, 3, "zoom is never reset by importing or upgrading")
+            checkEqual(model.pan, CGSize(width: 15, height: -8), "pan survives")
+            checkEqual(model.mode, .swipe, "mode survives")
+            checkEqual(model.swipe, 0.31, "divider survives")
+            checkEqual(model.opacity, 0.82, "opacity survives")
+            check(model.redOverlay && model.actualPixels, "overlay and actual-pixel settings survive")
+            model.close(); withExtendedLifetime(observer) {}
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "progressive search publishes correctly ranked live top nineteen before completion", knownBug: nil) {
+        let query = try orbImage(0)
+        let other = try await GenerateImageFeaturePrintRequest(.revision2).perform(on: orbImage(1))
+        let exact = try await GenerateImageFeaturePrintRequest(.revision2).perform(on: query)
+        let otherData = FeaturePrintCodec.encode(other)
+        let frames = (0..<2048).map { orbFrame($0, feature: $0 == 2047 ? FeaturePrintCodec.encode(exact) : otherData) }
+        let snapshots = OrbSearchSnapshots()
+        let result = try await CrystalOrbSearchService().search(query: query, queryID: UUID(), frames: frames,
+            sourceURL: URL(fileURLWithPath: "/unused"), generation: UUID(),
+            partial: { matches, done, total in await snapshots.record(matches, done: done, total: total) }) { _, _ in }
+        let states = await snapshots.values
+        check(states.count >= 2, "results appear before the whole source is scanned")
+        checkEqual(states.first?.done, 1, "first readable candidate is published immediately")
+        checkEqual(states.first?.matches.first?.id.sampleIndex, 0, "initial best can be displayed immediately")
+        checkEqual(states.last?.matches.first?.id.sampleIndex, 2047, "new best replaces rank one during the search")
+        for state in states {
+            check(state.matches.count <= 19, "gallery never publishes more than nineteen")
+            checkEqual(state.matches, CrystalOrbMatch.ranked(state.matches), "each partial list is correctly ranked")
+            check(state.matches.allSatisfy { $0.id.sampleIndex < state.done }, "no unexamined candidates leak into a partial ranking")
+        }
+        checkEqual(states.last?.matches, Array(result.prefix(19)), "final live list equals exact top nineteen")
     })
     Registry.shared.add(suite: suite, TestCase(name: "large native comparisons use bounded previews and viewport tiles without a size rejection", knownBug: nil) {
         let large = try ImageFixture.cgImage(width: 8192, height: 6144, gray: 0)
@@ -309,4 +413,10 @@ func registerCrystalOrbLifecycleTests() {
         checkEqual(orbPixel(sameTransparent.difference), [0, 0, 0, 255], "identical transparent pixels are valid black matches")
         checkEqual(orbPixel(sameTransparent.redMask)[3], 0, "transparent matches have no false overlay")
     })
+}
+
+private actor OrbSearchSnapshots {
+    struct Snapshot: Sendable { let matches: [CrystalOrbMatch]; let done: Int; let total: Int }
+    private(set) var values: [Snapshot] = []
+    func record(_ matches: [CrystalOrbMatch], done: Int, total: Int) { values.append(Snapshot(matches: matches, done: done, total: total)) }
 }

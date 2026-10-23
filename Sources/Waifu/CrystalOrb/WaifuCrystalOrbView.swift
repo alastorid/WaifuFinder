@@ -6,16 +6,7 @@ struct CrystalOrbToolbarButton: View {
     @State private var hovering = false
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.16))
-                    .overlay(Circle().stroke(.secondary.opacity(0.85), lineWidth: 1))
-                    .frame(width: 16, height: 16)
-                Circle()
-                    .fill(.secondary.opacity(0.55))
-                    .frame(width: 2, height: 2)
-                    .offset(x: -3, y: -3)
-            }
+            CrystalOrbGlyph(active: model.isOpen && (model.searching || model.importing || model.loading))
             .frame(width: 24, height: 24)
             .background((model.isOpen || hovering ? Color.accentColor.opacity(0.2) : .clear), in: RoundedRectangle(cornerRadius: 5))
         }
@@ -23,6 +14,82 @@ struct CrystalOrbToolbarButton: View {
         .help("WaifuCrystalOrb — Find Visually Similar Images")
         .accessibilityLabel("WaifuCrystalOrb — Find Visually Similar Images")
         .accessibilityValue(model.isOpen ? "Open" : "Closed")
+    }
+}
+
+/// The same small orb signals ongoing search/quality refinement without a splash.
+struct CrystalOrbGlyph: View {
+    let active: Bool
+
+    var body: some View {
+        ZStack {
+            // A little antique stand makes this read as a crystal ball rather
+            // than a generic glowing dot at toolbar size.
+            Ellipse().fill(CrystalOrbPalette.bronze)
+                .frame(width: 15, height: 3).offset(y: 8.5)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(CrystalOrbPalette.brass)
+                .frame(width: 6, height: 2).offset(y: 7)
+
+            Circle()
+                .fill(RadialGradient(stops: [
+                    .init(color: CrystalOrbPalette.lilac, location: 0),
+                    .init(color: CrystalOrbPalette.amethyst, location: 0.43),
+                    .init(color: CrystalOrbPalette.plum, location: 0.78),
+                    .init(color: CrystalOrbPalette.deepViolet, location: 1)
+                ], center: UnitPoint(x: 0.28, y: 0.22), startRadius: 0, endRadius: 16))
+                .overlay(Circle().stroke(CrystalOrbPalette.brass.opacity(0.8), lineWidth: 0.8))
+                .overlay {
+                    CrystalOrbSwirl()
+                        .stroke(CrystalOrbPalette.mist.opacity(0.7),
+                                style: StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
+                        .padding(1.5)
+                }
+                .frame(width: 16, height: 16)
+                .offset(y: -1)
+                .shadow(color: CrystalOrbPalette.mist.opacity(active ? 0.42 : 0), radius: 3)
+
+            Image(systemName: "sparkle")
+                .font(.system(size: 4.5, weight: .medium))
+                .foregroundStyle(CrystalOrbPalette.brassHighlight)
+                .symbolEffect(.pulse, options: .repeating, isActive: active)
+                .offset(x: 4, y: -5)
+        }.frame(width: 24, height: 24)
+        .accessibilityLabel(active ? "Crystal Orb is working" : "Crystal Orb")
+    }
+}
+
+private enum CrystalOrbPalette {
+    static let lilac = Color(red: 0.70, green: 0.61, blue: 0.78)
+    static let amethyst = Color(red: 0.43, green: 0.32, blue: 0.61)
+    static let plum = Color(red: 0.25, green: 0.20, blue: 0.40)
+    static let deepViolet = Color(red: 0.12, green: 0.13, blue: 0.26)
+    static let mist = Color(red: 0.72, green: 0.72, blue: 0.86)
+    static let brass = Color(red: 0.56, green: 0.40, blue: 0.22)
+    static let brassHighlight = Color(red: 0.78, green: 0.63, blue: 0.37)
+    static let bronze = Color(red: 0.33, green: 0.25, blue: 0.18)
+}
+
+private struct CrystalOrbSwirl: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.width * 0.19, y: rect.height * 0.63))
+            path.addCurve(
+                to: CGPoint(x: rect.width * 0.71, y: rect.height * 0.22),
+                control1: CGPoint(x: rect.width * 0.20, y: rect.height * 0.34),
+                control2: CGPoint(x: rect.width * 0.52, y: rect.height * 0.15)
+            )
+            path.addCurve(
+                to: CGPoint(x: rect.width * 0.73, y: rect.height * 0.62),
+                control1: CGPoint(x: rect.width * 0.91, y: rect.height * 0.33),
+                control2: CGPoint(x: rect.width * 0.91, y: rect.height * 0.55)
+            )
+            path.addCurve(
+                to: CGPoint(x: rect.width * 0.38, y: rect.height * 0.76),
+                control1: CGPoint(x: rect.width * 0.57, y: rect.height * 0.76),
+                control2: CGPoint(x: rect.width * 0.47, y: rect.height * 0.84)
+            )
+        }
     }
 }
 
@@ -58,6 +125,7 @@ struct WaifuCrystalOrbView: View {
     @ObservedObject var model: WaifuCrystalOrbModel
     @ObservedObject var session: WaifuSession
     @State private var info = false
+    @AppStorage("crystalOrb.showInspector") private var showInspector = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,7 +141,10 @@ struct WaifuCrystalOrbView: View {
             } else {
                 controls
                 Divider()
-                CrystalOrbComparisonView(model: model)
+                HSplitView {
+                    CrystalOrbComparisonView(model: model).frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
+                    if showInspector { CrystalOrbInspectorView(model: model).frame(minWidth: 260, idealWidth: 310, maxWidth: 420) }
+                }
                 if let error = model.comparisonError { Text(error).font(.caption).foregroundStyle(.secondary).padding(6) }
                 metadata
                 Divider()
@@ -101,33 +172,45 @@ struct WaifuCrystalOrbView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("WaifuCrystalOrb").font(.headline)
-            ProgressView().controlSize(.small).frame(width: 16, height: 16)
-                .opacity(model.searching || model.loading || model.importing ? 1 : 0)
+            CrystalOrbGlyph(active: model.searching || model.loading || model.importing)
             Text(model.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(model.status)
             Spacer()
             Button { model.chooseFile(session: session) } label: { Image(systemName: "photo.badge.plus") }.help("Replace query image")
+            if model.canLoadOriginal {
+                Button("Load original") { if let id = model.selectedID { model.select(id) } }
+                    .help("Load the full-resolution candidate")
+            }
             if model.query != nil { Button("Search again") { model.search() }.disabled(model.searching) }
+            Button { showInspector.toggle() } label: { Image(systemName: "sidebar.right") }.help("Show or hide image inspector")
             Button { model.close() } label: { Image(systemName: "xmark") }.help("Close WaifuCrystalOrb (Escape)")
                 .accessibilityLabel("Close WaifuCrystalOrb")
         }.padding(.horizontal, 14).padding(.vertical, 10)
     }
 
-    private var controls: some View {
+    @ViewBuilder private var controls: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) { modes; overlayControls; Spacer(); zoomControls }
-            VStack(spacing: 7) { HStack { modes; Spacer(); zoomControls }; HStack { overlayControls; Spacer() } }
-        }.padding(10).controlSize(.small)
+            HStack(spacing: 10) { modes; Spacer(); zoomControls }
+            VStack(spacing: 7) { HStack { modes; Spacer() }; HStack { zoomControls; Spacer() } }
+        }
+        HStack(spacing: 10) {
+            overlayControls
+            Button("Auto Align") { model.autoAlign() }.disabled(model.alignmentLocked || model.registering || !model.pairIsCurrent)
+            if model.mode == .inspect { Toggle("Difference pane", isOn: Binding(get: { !model.differenceCollapsed }, set: { model.differenceCollapsed = !$0 })).toggleStyle(.checkbox) }
+            Toggle("Overview", isOn: $model.showOverview).toggleStyle(.checkbox)
+            Spacer(minLength: 0)
+        }.padding(.horizontal, 10).padding(.bottom, 6).controlSize(.small)
+
     }
     private var modes: some View {
         Picker("Comparison mode", selection: $model.mode) {
             ForEach(WaifuCrystalOrbModel.Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.pickerStyle(.segmented).labelsHidden().frame(width: 320)
+        }.pickerStyle(.segmented).labelsHidden().frame(minWidth: 340, idealWidth: 380)
     }
     private var overlayControls: some View {
         HStack(spacing: 10) {
-            Toggle("Red Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox)
+            Toggle("Red Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox).disabled(model.mode == .difference)
             CrystalOrbOpacitySlider(value: $model.opacity, focusChanged: { model.opacityControlFocused = $0 })
-        }.disabled(model.mode == .difference).help("Pixel difference intensity in red; unavailable in Difference mode")
+        }.help("Red difference overlay and compositing opacity")
     }
     private var zoomControls: some View {
         HStack(spacing: 6) {
@@ -135,8 +218,9 @@ struct WaifuCrystalOrbView: View {
                 Button(model.showCandidate ? "Candidate" : "Target") { model.showCandidate.toggle() }.help("Toggle image · Hold Space to compare")
             }
             Button("−") { model.zoom = max(0.1, model.zoom / 1.25) }.help("Zoom out")
-            Button("+") { model.zoom = min(32, model.zoom * 1.25) }.help("Zoom in")
+            Button("+") { model.zoom = min(128, model.zoom * 1.25) }.help("Zoom in")
             Button("Fit") { model.resetZoom() }
+            Button("Fill") { model.fillViewport = true; model.actualPixels = false; model.zoom = 1 }
             Button("1:1") { model.actualPixels = true; model.zoom = 1; model.pan = .zero }.help("One comparison pixel per display pixel · Linked zoom and pan")
         }
     }
@@ -181,18 +265,17 @@ struct WaifuCrystalOrbView: View {
     }
 
     private var candidateDimensions: String {
-        if let pair = model.pair, model.pairIsCurrent { return "\(pair.candidate.width) × \(pair.candidate.height)" }
+        if let pair = model.pair, model.pairIsCurrent { return "\(Int(pair.candidateNativeSize.width)) × \(Int(pair.candidateNativeSize.height))" }
         if let metadata = model.candidateMetadata { return metadata.dimensionsText }
-        return model.loading ? "Loading original…" : "Original unavailable"
+        return "Preview"
     }
 
     private var candidates: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("Similar candidates").font(.caption.weight(.medium))
+                Text("Top 19 candidates").font(.caption.weight(.medium))
                 Spacer()
                 Text("Closest first · Vision distance, lower is closer").font(.caption2).foregroundStyle(.secondary)
-                if model.limit < model.matches.count { Button("Show more") { model.limit += 24 }.controlSize(.mini) }
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {

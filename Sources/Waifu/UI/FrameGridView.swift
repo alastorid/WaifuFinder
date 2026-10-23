@@ -36,6 +36,9 @@ struct FrameGridView: View {
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
     @State private var committedNavigation: FrameID?
+    @State private var verticalScrollPosition = ScrollPosition()
+    @State private var horizontalScrollPositions: [String: ScrollPosition] = [:]
+    @State private var scrollVisibility = FrameGridScrollVisibility()
     @StateObject private var thumbnailPrefetcher = GridThumbnailPrefetcher()
 
     private let spacing: CGFloat = 1
@@ -48,10 +51,11 @@ struct FrameGridView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollViewReader { proxy in
+            Group {
                 ScrollView(.vertical, showsIndicators: true) {
                     stagedLayout
                 }
+                .scrollPosition($verticalScrollPosition)
                 .coordinateSpace(name: "frame-grid-viewport")
                 .focusable()
                 .focusEffectDisabled()
@@ -96,18 +100,19 @@ struct FrameGridView: View {
                 }
                 .onChange(of: squareThumbnails) { _, _ in prepareStage(size: geometry.size) }
                 .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
+                    scrollVisibility.viewport = rect
                     thumbnailStage.updateViewport(rect)
                 }
                 .onChange(of: thumbnailStage.current?.key) { old, _ in
                     if let snapshot = thumbnailStage.current {
                         thumbnailPrefetcher.install(snapshot: snapshot, session: session)
-                        if old?.generation != snapshot.key.generation, let first = snapshot.rows.first {
-                            proxy.scrollTo(first.id, anchor: .top)
+                        if old?.generation != snapshot.key.generation {
+                            verticalScrollPosition.scrollTo(y: 0)
                         }
                     }
                     if let id = session.gridNavigationFrameID, isNavigationTarget(id) {
                         committedNavigation = id
-                        scroll(to: id, proxy: proxy)
+                        scroll(to: id)
                     }
                 }
                 .onPreferenceChange(GridRowViewportPreferenceKey.self) { rowViewports in
@@ -119,7 +124,14 @@ struct FrameGridView: View {
                 .onReceive(session.gridScrollRequests) { id in
                     guard isNavigationTarget(id) else { return }
                     committedNavigation = id
-                    scroll(to: id, proxy: proxy)
+                    scroll(to: id)
+                }
+                .onChange(of: session.focusedFrameID) { _, id in
+                    // A focus publication can redraw the grid before a queued
+                    // scroll event arrives. Reconcile the committed selection too.
+                    guard let id, isNavigationTarget(id) else { return }
+                    committedNavigation = id
+                    scroll(to: id)
                 }
                 // @Published emits before its setter commits. Scrolling here can
                 // force a render; defer it so that render sees the closed preview.
@@ -190,7 +202,7 @@ struct FrameGridView: View {
             .font(.system(size: 10))
             .foregroundStyle(.secondary)
             .frame(height: 12)
-            ScrollViewReader { proxy in
+            Group {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: spacing) {
                         ForEach(row.items) { item in
@@ -202,21 +214,25 @@ struct FrameGridView: View {
                     }
                 }
                 .frame(height: row.contentHeight)
-                .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, offset in
-                    thumbnailStage.updateHorizontalOffset(row: row.id, offset: offset)
-                    thumbnailPrefetcher.setHorizontalOffset(row: row.id, offset: offset)
+                .scrollPosition(Binding(
+                    get: { horizontalScrollPositions[row.id] ?? ScrollPosition() },
+                    set: { horizontalScrollPositions[row.id] = $0 }))
+                .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
+                    scrollVisibility.horizontalViewports[row.id] = rect
+                    thumbnailStage.updateHorizontalOffset(row: row.id, offset: rect.minX)
+                    thumbnailPrefetcher.setHorizontalOffset(row: row.id, offset: rect.minX)
                 }
                 .onAppear {
-                    scrollHorizontally(to: committedNavigation, in: row, proxy: proxy)
+                    scrollHorizontally(to: committedNavigation, in: row)
                 }
                 .onChange(of: committedNavigation) { _, id in
-                    scrollHorizontally(to: id, in: row, proxy: proxy)
+                    scrollHorizontally(to: id, in: row)
                 }
                 .onChange(of: snapshot.key) { _, _ in
-                    scrollHorizontally(to: committedNavigation, in: row, proxy: proxy)
+                    scrollHorizontally(to: committedNavigation, in: row)
                 }
                 .onReceive(session.gridScrollRequests) { id in
-                    scrollHorizontally(to: id, in: row, proxy: proxy)
+                    scrollHorizontally(to: id, in: row)
                 }
             }
         }
@@ -363,20 +379,30 @@ struct FrameGridView: View {
             && id == session.focusedFrameID && id == session.gridNavigationFrameID
     }
 
-    private func scrollHorizontally(to id: FrameID?, in row: GridStageRow, proxy: ScrollViewProxy) {
-        guard let id, isNavigationTarget(id), row.items.contains(where: { $0.id == id }) else { return }
-        proxy.scrollTo(id, anchor: .center)
+    private func scrollHorizontally(to id: FrameID?, in row: GridStageRow) {
+        guard let id, isNavigationTarget(id),
+              let index = row.items.firstIndex(where: { $0.id == id }) else { return }
+        let rect = scrollVisibility.horizontalViewports[row.id] ?? .zero
+        let left = CGFloat(index) * (row.cellWidth + spacing)
+        guard let offset = FrameGridScrollVisibility.revealOffset(lower: left, upper: left + row.cellWidth,
+            visibleLower: rect.minX, visibleUpper: rect.maxX) else { return }
+        var position = horizontalScrollPositions[row.id] ?? ScrollPosition()
+        position.scrollTo(x: offset)
+        horizontalScrollPositions[row.id] = position
     }
 
-    /// Reveal the concrete staged row so lazy offscreen cells can be mounted.
-    /// A horizontal strip then reveals its selected cell when it appears.
-    private func scroll(to id: FrameID?, proxy: ScrollViewProxy) {
+    /// Scroll to the measured row offset, including rows whose lazy cells are not mounted.
+    private func scroll(to id: FrameID?) {
         guard let id, let snapshot = thumbnailStage.current,
-              let target = FrameGridScrollTarget.resolve(frame: id, snapshot: snapshot) else { return }
+              let index = snapshot.rowIndexByFrameID[id] else { return }
+        let row = snapshot.rows[index]
+        let rect = scrollVisibility.viewport
+        guard let offset = FrameGridScrollVisibility.revealOffset(lower: row.originY, upper: row.originY + row.height,
+            visibleLower: rect.minY, visibleUpper: rect.maxY) else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            proxy.scrollTo(target.rowID, anchor: .center)
+            verticalScrollPosition.scrollTo(y: offset)
         }
     }
 

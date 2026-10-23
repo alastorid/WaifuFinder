@@ -46,8 +46,10 @@ while index < arguments.count {
     index += 1
 }
 
+registerVectorSearchTests()
 registerCrystalOrbTests()
 registerCrystalOrbLifecycleTests()
+registerCrystalOrbInspectionTests()
 
 // Model and settings.
 registerFrameArrangementTests()
