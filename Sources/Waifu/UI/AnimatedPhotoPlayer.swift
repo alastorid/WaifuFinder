@@ -103,13 +103,11 @@ struct AnimatedPhotoPlayer<Content: View>: View {
             } label: {
                 Image(systemName: "backward.frame.fill")
             }
-            .help("Previous animation frame")
 
             Button { isPlaying.toggle() } label: {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .frame(width: 16)
             }
-            .help(isPlaying ? "Pause animation" : "Play animation")
 
             Button {
                 isPlaying = false
@@ -117,7 +115,6 @@ struct AnimatedPhotoPlayer<Content: View>: View {
             } label: {
                 Image(systemName: "forward.frame.fill")
             }
-            .help("Next animation frame")
 
             Text(String(format: "%.2f / %.2f sec", animation.elapsed(before: index), animation.duration))
                 .font(.system(size: 11, design: .monospaced))

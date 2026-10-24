@@ -91,7 +91,7 @@ struct CrystalOrbInspectorView: View {
                     Text("Major changed regions").fontWeight(.medium)
                     ForEach(value.hotspots) { hotspot in
                         Button("\(hotspot.count.formatted()) changed · \(Int(hotspot.rect.midX)), \(Int(hotspot.rect.midY))") { model.zoomToRegion(hotspot.rect) }
-                            .buttonStyle(.link).help("Center and zoom all panes on this region")
+                            .buttonStyle(.link)
                     }
                     Text("Connected cells; conservative bounds, exact changed-pixel counts.").font(.caption2).foregroundStyle(.secondary)
                 }

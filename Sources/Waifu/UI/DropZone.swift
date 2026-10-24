@@ -59,7 +59,6 @@ struct DropZone: View {
             .labelsHidden()
             .controlSize(.small)
             .frame(width: 190)
-            .help("Keyframe analyses only the frames the encoder can decode on its own, so its progress loops. Quick analyses one frame a second. Full analyses every frame.")
 
             Button("Or open Photos") { openPhotos?() }
                 .buttonStyle(.link)

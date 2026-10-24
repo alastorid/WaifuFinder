@@ -4,26 +4,6 @@ private extension Notification.Name {
     static let photosFavoriteDidUpdate = Notification.Name("WaifuPhotosFavoriteDidUpdate")
 }
 
-/// Shared order glyph for the toolbar filter and the small synced-photo badge.
-struct PhotosOrderIcon: View {
-    let filter: PhotosOrderFilter
-
-    var body: some View {
-        Text("≡")
-            .font(.system(size: 18, weight: filter == .ordered ? .black : .regular))
-            .frame(width: 20, height: 20)
-            .overlay {
-                if filter == .unordered {
-                    Path { path in
-                        path.move(to: CGPoint(x: 3, y: 18))
-                        path.addLine(to: CGPoint(x: 17, y: 2))
-                    }
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                }
-            }
-    }
-}
-
 /// Favorite writes stay on the thumbnail and don't change grid selection.
 struct PhotosFavoriteButton: View {
     let url: URL
@@ -68,7 +48,6 @@ struct PhotosFavoriteButton: View {
         .opacity(isHovered || isFavorite || isUpdating ? 1 : 0)
         .allowsHitTesting(isHovered || isFavorite)
         .disabled(isUpdating)
-        .help(isFavorite ? "Remove from Favorites" : "Add to Favorites")
         .accessibilityLabel(isFavorite ? "Remove from Favorites" : "Add to Favorites")
         .task(id: "\(url.absoluteString):\(scenePhase)") {
             guard scenePhase == .active,

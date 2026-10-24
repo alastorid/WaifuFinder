@@ -4,21 +4,18 @@ import Combine
 /// Photos keeps its album navigation beside the existing ranking workspace.
 /// Choosing another album replaces only the source; the scoring controls and
 /// result grid continue to use the same session as ordinary video imports.
-struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
+struct PhotosWorkspaceView<RankedContent: View>: View {
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
-    private let trailingControls: () -> TrailingControls
-    private let onBackToWelcome: () -> Void
+    private let onBack: () -> Void
     @State private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: WaifuSession, onBackToWelcome: @escaping () -> Void,
-         @ViewBuilder trailingControls: @escaping () -> TrailingControls,
+    init(session: WaifuSession, onBack: @escaping () -> Void,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
         self.session = session
-        self.onBackToWelcome = onBackToWelcome
+        self.onBack = onBack
         self.rankedContent = rankedContent
-        self.trailingControls = trailingControls
     }
 
     @State private var libraryRevision = 0
@@ -53,25 +50,22 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
         .transaction { if !$0[GridZoomTransactionKey.self] { $0.animation = nil } }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
-                Button(action: onBackToWelcome) {
+                // Back pops a workspace level (orb, then the ranked workspace the
+                // album was opened from, then welcome), not always the main menu.
+                Button(action: onBack) {
                     Image(systemName: "chevron.left")
                 }
-                .help("Back to welcome screen")
-                .accessibilityLabel("Back to welcome screen")
+                .accessibilityLabel("Back")
 
                 Button { sidebarExpanded.toggle() } label: {
                     Image(systemName: "sidebar.left")
                 }
-                .help(sidebarExpanded ? "Collapse albums" : "Expand albums")
                 .accessibilityLabel(sidebarExpanded ? "Collapse albums" : "Expand albums")
                 Label("Photos", systemImage: "photo.on.rectangle.angled")
                     .font(.headline)
                     .labelStyle(.titleAndIcon)
             }
             ToolbarItem(placement: .principal) { albumTitle }
-            ToolbarItem(placement: .primaryAction) {
-                trailingControls()
-            }
         }
         .task(id: libraryRevision) { await refreshLibrary() }
         .onReceive(NotificationCenter.default.publisher(for: PhotosLibraryChanges.notification)
@@ -116,15 +110,6 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
             .lineLimit(1)
         }
         .frame(width: 230, height: 36)
-        .help(opening ? "Opening album…" : session.isSyncingPhotosOrder ? "Syncing order to Photos…" : session.photosOrderSyncMessage ?? statusText)
-    }
-
-    private var statusText: String {
-        switch session.progress.phase {
-        case .cancelled: "Analysis cancelled. Your album and completed results remain available."
-        case .failed: session.progress.message
-        default: session.progress.message == "Complete" ? "Rank, filter, tag, and export with the controls beside your photos." : session.progress.message
-        }
     }
 
     @ViewBuilder
@@ -281,8 +266,6 @@ private struct PhotosAlbumSidebar: View, Equatable {
             }
         }
         .tag(album.id)
-        .help(album.isFolder ? "\(album.title) · \(album.children?.count ?? 0) albums and folders"
-              : "\(album.title) · \(album.count) photos")
     }
 
 }

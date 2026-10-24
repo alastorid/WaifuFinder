@@ -37,7 +37,7 @@ final class PhotosMedia: @unchecked Sendable {
         return error.domain == "Waifu.Photos" && error.code == 2
     }
     static func localUnavailable() -> NSError {
-        NSError(domain: "Waifu.Photos", code: 2, userInfo: [NSLocalizedDescriptionKey: "Not available locally. Enable Download from iCloud to load this item."])
+        NSError(domain: "Waifu.Photos", code: 2, userInfo: [NSLocalizedDescriptionKey: "Not available locally."])
     }
     /// Stable across missing items and sampling modes; microsecond precision is
     /// finer than the timestamps of supported photo/video sources.

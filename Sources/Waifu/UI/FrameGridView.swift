@@ -352,7 +352,6 @@ struct FrameGridView: View {
             }
         }
         .buttonStyle(.plain)
-        .help("Show every frame of this group")
     }
 
     // MARK: - Keyboard
@@ -446,7 +445,6 @@ struct FrameGridView: View {
         if session.offersFocusedRangeAnalysis {
             Button("Analyze ±3 Seconds Range") { session.analyzeFocusedRange(around: frame) }
                 .disabled(!session.canAnalyzeFocusedRange)
-                .help("Analyze every frame from 3 seconds before to 3 seconds after this frame.")
         }
 
         if let photoURL {
@@ -459,11 +457,8 @@ struct FrameGridView: View {
             Divider()
             Button("Set Album Order in Photos.app") { session.syncPhotosOrder(for: frame) }
                 .disabled(session.isSyncingPhotosOrder || session.photosAlbumURL.flatMap { PhotosMedia.shared.album($0) }?.canReorder != true)
-                .help("Write the displayed order to Photos. With multiple photos selected, sync only that selection in its displayed order.")
             Button("Set Keywords from Tags") { session.writePhotosTags(for: frame) }
                 .disabled(session.isWritingPhotosTags || session.tagVocabulary == nil || frame.tagProbabilities == nil || frame.tagRating == nil)
-                .help("Replace this photo’s keywords with its rating and tags above the current threshold. Applies to the selection when multiple photos are selected.")
-            Button("Mark unordered") { session.resetPhotosOrderState() }
         }
 
         Divider()
@@ -487,7 +482,6 @@ private struct GridRowViewportPreferenceKey: PreferenceKey {
 /// A single frame cell: picture, source ordinal, and inward selection border.
 private struct FrameCell: View {
     let session: WaifuSession
-    @ObservedObject private var photosOrderState = PhotosOrderState.shared
     let frame: AnalyzedFrame
     let thumbnailKey: String
     let generation: UUID
@@ -526,13 +520,6 @@ private struct FrameCell: View {
         let visibleThumbnail = thumbnail.image(for: thumbnailIdentity)
         let isSquare = squareThumbnail
         let height = GridThumbnailLayout.size(width: width, sourceAspect: sourceAspect, square: isSquare).height
-        let isOrdered = isPhotosSource
-            ? sourceURL.flatMap { albumURL in
-                guard let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL),
-                      let assetIdentifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds) else { return nil }
-                return photosOrderState.isOrdered(albumIdentifier: albumIdentifier, assetIdentifier: assetIdentifier)
-            } ?? false
-            : false
         GridThumbnailImage(image: visibleThumbnail, identity: thumbnailIdentity,
                            cropToFill: isSquare, isVisible: isThumbnailVisible)
         .frame(width: width, height: height)
@@ -544,18 +531,6 @@ private struct FrameCell: View {
                 .padding(3)
                 .frame(maxWidth: width, maxHeight: height, alignment: .topLeading)
                 .clipped()
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if visibleThumbnail != nil && isOrdered {
-                PhotosOrderIcon(filter: .ordered)
-                    .scaleEffect(0.65)
-                    .frame(width: 14, height: 14)
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.85), radius: 2)
-                    .padding(5)
-                    .help("Order synced")
-                    .accessibilityLabel("Order synced")
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -581,9 +556,6 @@ private struct FrameCell: View {
                     .allowsHitTesting(false)
             }
         }
-        .help(isPhotosSource
-              ? (visibleThumbnail.map { "\($0.width) × \($0.height) pixels · " } ?? "") + "art \(String(format: "%.2f", frame.artScore))"
-              : "\(timecode(frame.timeSeconds)) · art \(String(format: "%.2f", frame.artScore))")
         // Keep the empty slot measurable so late arrivals can detect stage entry.
         .allowsHitTesting(visibleThumbnail != nil)
         .accessibilityElement(children: .contain)
@@ -654,18 +626,11 @@ private struct FrameCell: View {
                 }
             }
             .buttonStyle(.plain)
-            .help(thumbnailLabelHelp)
             .accessibilityLabel(showsFrameNumber ? "Show Top tags" : "Show frame number")
             .accessibilityIdentifier("frame-label-toggle-\(frame.id.sampleIndex)")
         } else if !isPhotosSource {
             frameNumberOverlay
         }
-    }
-
-    private var thumbnailLabelHelp: String {
-        let tags = topTags.joined(separator: ", ")
-        if showsFrameNumber { return "Click to show Top tags: " + tags }
-        return "Top \(session.settings.tagTopCount): " + tags + ". Click to show frame number."
     }
 
     /// Zero-based decoded source ordinal, also used in exports and diagnostics.
@@ -678,7 +643,8 @@ private struct FrameCell: View {
             .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 2))
     }
 
-    /// Keep labels inside small thumbnails; the tooltip lists every winning tag.
+    /// Keep labels inside small thumbnails; the +N badge counts the winners
+    /// that did not fit.
     private func topTagBadges(height: CGFloat) -> some View {
         let rows = max(1, min(3, Int((height - 6) / 16)))
         let shown = Array(topTags.prefix(rows))

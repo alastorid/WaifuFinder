@@ -150,7 +150,6 @@ struct VideoPreviewPanel: View {
             }
             .buttonStyle(.borderless)
             .disabled(preview.player == nil)
-            .help(preview.isPlaying ? "Pause" : "Play from here")
 
             Text("\(timecode(preview.currentTime)) / \(timecode(preview.duration))")
                 .font(.system(size: 11, design: .monospaced))
@@ -166,7 +165,6 @@ struct VideoPreviewPanel: View {
             }
             .buttonStyle(.borderless)
             .disabled(focusedFrame == nil)
-            .help("Snap back to the selected frame")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

@@ -191,21 +191,28 @@ func registerCrystalOrbInspectionTests() {
             withExtendedLifetime((shell,navigation)) {}
         }.value
     })
-    Registry.shared.add(suite: suite, TestCase(name: "candidate gallery follows the likeness range up to the cap", knownBug: nil) {
-        await Task { @MainActor in
-            func probe(_ index: Int, _ distance: Double) -> CrystalOrbMatch {
-                CrystalOrbMatch(frame: AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: 0,
-                    faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: nil), distance: distance)
-            }
-            checkEqual(WaifuCrystalOrbModel.alikeMatches([]), [], "empty search yields no gallery")
-            // A best distance of 0.30 cuts the band at 0.30 × 1.35 + 0.02 = 0.425.
-            let close = (0...4).map { probe($0, 0.30 + Double($0) * 0.03) }
-            let banded = WaifuCrystalOrbModel.alikeMatches(close + [probe(9, 0.90)])
-            checkEqual(banded.map(\.id.sampleIndex), [0, 1, 2, 3, 4], "matches past the likeness band are dropped")
-            let dense = (0..<40).map { probe($0, 0.30 + Double($0) * 0.001) }
-            checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).count, WaifuCrystalOrbModel.candidateLimit, "a wide band still stops at the cap")
-            checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).last?.id.sampleIndex, 32, "the cap keeps the closest matches")
-        }.value
+    Registry.shared.add(suite: suite, TestCase(name: "candidate gallery keeps thirteen visible and trims by likeness up to the cap", knownBug: nil) {
+        func probe(_ index: Int, _ distance: Double) -> CrystalOrbMatch {
+            CrystalOrbMatch(frame: AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: 0,
+                faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: nil), distance: distance)
+        }
+        checkEqual(WaifuCrystalOrbModel.alikeMatches([]), [], "empty search yields no gallery")
+        let six = (0..<6).map { probe($0, 0.30 + Double($0) * 0.001) }
+        checkEqual(WaifuCrystalOrbModel.alikeMatches(six).count, 6, "short searches show every match found")
+        // A best distance of 0.30 cuts the band at 0.30 × 1.35 + 0.02 = 0.425;
+        // below the floor the strip still fills thirteen tiles.
+        var mixed = (0..<5).map { probe($0, 0.30 + Double($0) * 0.03) }
+        mixed += (5..<20).map { probe($0, 0.90) }
+        let floored = WaifuCrystalOrbModel.alikeMatches(mixed)
+        checkEqual(floored.count, WaifuCrystalOrbModel.minimumCandidates, "the floor keeps thirteen thumbnails visible")
+        checkEqual(Array(floored.prefix(5)).map(\.id.sampleIndex), [0, 1, 2, 3, 4], "banded matches stay closest-first")
+        // Beyond the floor only the likeness band trims; the distant ones drop.
+        var banded = (0..<15).map { probe($0, 0.30 + Double($0) * 0.001) }
+        banded += (15..<20).map { probe($0, 0.90) }
+        checkEqual(WaifuCrystalOrbModel.alikeMatches(banded).count, 15, "beyond the floor only the likeness band trims")
+        let dense = (0..<40).map { probe($0, 0.30 + Double($0) * 0.001) }
+        checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).count, WaifuCrystalOrbModel.candidateLimit, "a wide band still stops at the cap")
+        checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).last?.id.sampleIndex, 32, "the cap keeps the closest matches")
     })
     Registry.shared.add(suite: suite, TestCase(name: "four comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
         try await Task { @MainActor in

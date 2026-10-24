@@ -29,12 +29,10 @@ private struct GeneralSettingsView: View {
 
             Section("Tagging memory") {
                 Toggle("Remember tagging results", isOn: $tagMemory.rememberTaggingResults)
-                    .help("Reuse completed tagger results the next time the same video is analyzed.")
 
                 Stepper("Delete results older than \(tagMemory.retentionDays) days",
                         value: $tagMemory.retentionDays,
                         in: 1...36_500)
-                    .help("Expired results are removed when the cache is checked. The minimum is one day.")
 
                 Text("Scores are saved in compressed binary form using vocabulary indices. Tag names are reconstructed when the results are loaded.")
                     .font(.caption)
@@ -118,10 +116,8 @@ struct ModelSettingsView: View {
                     Image(systemName: library.isDownloadingAll ? "hand.raised.fill" : "arrow.down.circle")
                 }
                 .accessibilityLabel(library.isDownloadingAll ? "Stop downloading all models" : "Download all models")
-                .help(library.isDownloadingAll ? "Stop downloading and configuring models" : "Download and configure all models")
                 .disabled(!library.isDownloadingAll && (library.active != nil || !library.canDownloadAll))
                 Button { library.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                    .help("Refresh model status")
                     .disabled(library.active != nil || library.isDownloadingAll)
             }
             GroupBox {

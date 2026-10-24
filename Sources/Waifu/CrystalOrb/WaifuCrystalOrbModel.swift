@@ -99,6 +99,9 @@ final class WaifuCrystalOrbModel: ObservableObject {
     }
     /// Hard ceiling on offered candidates; the likeness band usually cuts earlier.
     nonisolated static let candidateLimit = 33
+    /// The strip always shows at least this many thumbnails when the search
+    /// found them; the likeness band only trims the tail beyond this floor.
+    nonisolated static let minimumCandidates = 13
     /// Keeps matches whose Vision distance stays within this multiple of the
     /// best match (plus absolute slack for near-duplicate searches).
     nonisolated static let likenessRelativeBand = 1.35
@@ -157,19 +160,23 @@ final class WaifuCrystalOrbModel: ObservableObject {
 
     private weak var session: WaifuSession?
 
-    /// The gallery offers every match close enough to the best one — a ranked
-    /// list is sorted, so a single prefix-while cut is exact.
+    /// A ranked list is sorted, so prefix cuts are exact: never more than
+    /// `candidateLimit`, always at least `minimumCandidates` when available,
+    /// and past that floor only matches within likeness of the best one.
     nonisolated static func alikeMatches(_ ranked: [CrystalOrbMatch]) -> [CrystalOrbMatch] {
-        guard let best = ranked.first else { return [] }
+        let pool = Array(ranked.prefix(candidateLimit))
+        guard let best = pool.first else { return [] }
         let cutoff = best.distance * likenessRelativeBand + likenessAbsoluteBand
-        return Array(ranked.prefix(candidateLimit).prefix { $0.distance <= cutoff })
+        let banded = pool.prefix { $0.distance <= cutoff }.count
+        return Array(pool.prefix(max(banded, min(minimumCandidates, pool.count))))
     }
     var visibleMatches: [CrystalOrbMatch] { Self.alikeMatches(matches) }
     var selected: CrystalOrbMatch? { matches.first { $0.id == selectedID } ?? selectedMatch }
-    var candidateIsPhoto: Bool {
-        guard let source = session?.video?.url, let frame = selected?.frame else { return false }
-        return PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) != nil
+    func photoURL(for match: CrystalOrbMatch) -> URL? {
+        guard let source = session?.video?.url else { return nil }
+        return PhotosMedia.shared.photoItemURL(for: source, seconds: match.frame.timeSeconds)
     }
+    var candidateIsPhoto: Bool { selected.map { photoURL(for: $0) != nil } ?? false }
     var pairIsCurrent: Bool { pair?.queryID == query?.id && pair?.frame.id == selectedID }
 
     func open(session: WaifuSession) {
@@ -479,9 +486,9 @@ final class WaifuCrystalOrbModel: ObservableObject {
         originalRequested = false
         select(id)
     }
-    func revealCandidateInPhotos() {
-        guard let source = session?.video?.url, let frame = selected?.frame,
-              let photo = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) else { return }
+    /// Reveals the given match's photo (default: the selected candidate).
+    func revealCandidateInPhotos(_ match: CrystalOrbMatch? = nil) {
+        guard let target = match ?? selected, let photo = photoURL(for: target) else { return }
         PhotosAppIntegration.reveal(photo)
     }
     func loadDetailedMetadata() {

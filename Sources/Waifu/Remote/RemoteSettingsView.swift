@@ -220,7 +220,6 @@ private struct RemoteClientSettingsView: View {
                 Spacer()
                 Button { client.refreshServers() } label: { Image(systemName: "arrow.clockwise") }
                     .controlSize(.small)
-                    .help("Refresh the list")
             }
             if client.servers.isEmpty {
                 Text("No WaifuFinder servers are advertising on this network.")
@@ -254,7 +253,7 @@ private struct RemoteClientSettingsView: View {
                 Button { client.forget(address: server.address) } label: {
                     Image(systemName: "trash")
                 }
-                .controlSize(.small).help("Forget this server")
+                .controlSize(.small)
             }
         }
     }

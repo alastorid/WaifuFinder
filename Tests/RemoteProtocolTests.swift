@@ -1159,7 +1159,7 @@ private func labelCase(capabilities: RemoteCapabilities) throws {
     check(connected.offersRemoteUncover, "Uncover Waifu is marked when the server has any algorithm")
     check(connected.runsRemotely(.seedVR2), "Reconstruct is marked for an available algorithm")
     check(!connected.runsRemotely(.realESRGAN), "Reconstruct is unmarked for one the server lacks")
-    checkEqual(connected.serverDescription, "Studio", "the tooltip names the server")
+    checkEqual(connected.serverDescription, "Studio", "the description names the server")
 
     // A server with no algorithms offers no Uncover workspace, so the opener is
     // unmarked even though tagging still works.
@@ -1175,7 +1175,7 @@ private func labelCase(capabilities: RemoteCapabilities) throws {
     check(!disconnected.tagsRemotely, "a disconnected client marks nothing")
     check(!disconnected.runsRemotely(.seedVR2), "and runs nothing remotely")
     checkEqual(disconnected.serverDescription, "a remote server",
-               "an unnamed server reads generically rather than showing a blank tooltip")
+               "an unnamed server reads generically rather than blank")
 }
 
 private final class CancellationProbe: @unchecked Sendable {

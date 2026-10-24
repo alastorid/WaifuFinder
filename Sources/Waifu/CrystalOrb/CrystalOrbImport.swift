@@ -62,22 +62,29 @@ enum CrystalOrbImport {
             guard model.dropTicket == ticket else { return }
             if let image = values.first(where: CrystalOrbImageSource.isImage) {
                 model.importImage(url: image, session: session)
-            } else if values.contains(where: { $0.isFileURL }) {
-                if model.isOpen { model.close() }
-                session.loadVideos(at: values)
             } else if let imageProvider {
-                // Data first; providers that cannot coerce data still go through
-                // the file-promise machinery, which is the reliable cross-process path.
+                // An image-declaring drag goes to the orb even when no URL
+                // resolves as an image: promised files can arrive before their
+                // type is derivable from the path, and handing them to the video
+                // importer loses the drop. Data first; providers that cannot
+                // coerce data still go through the file-promise machinery.
                 let payload = try? await imageData(from: imageProvider)
                 if let payload, isDecodable(payload) {
                     guard model.dropTicket == ticket else { return }
-                    model.importImage(data: payload, session: session)
+                    // Prefer the drag's own file when exactly one is present:
+                    // metadata and security scope survive; otherwise use bytes.
+                    let files = values.filter { $0.isFileURL && FileManager.default.fileExists(atPath: $0.path) }
+                    if files.count == 1 { model.importImage(url: files[0], session: session) }
+                    else { model.importImage(data: payload, session: session) }
                 } else if let staged = await stageImageFile(from: imageProvider) {
                     guard model.dropTicket == ticket else { return }
                     model.importImage(url: staged, session: session)
                 } else {
                     model.failImageDrop(ticket: ticket, message: "The dropped image could not be read.")
                 }
+            } else if values.contains(where: { $0.isFileURL }) {
+                if model.isOpen { model.close() }
+                session.loadVideos(at: values)
             } else if !values.isEmpty {
                 if model.isOpen { model.close() }
                 session.loadVideos(at: values)

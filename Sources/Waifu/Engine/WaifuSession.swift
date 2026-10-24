@@ -501,11 +501,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
-    /// Filters Photos items by the app's private "Sync order" marker.
-    @Published var photosOrderFilter: PhotosOrderFilter = .all {
-        didSet { recomputeDisplayedFrames() }
-    }
-
     /// All frames, frames with significant faces, or frames without them.
     @Published var faceFilter: FrameFaceFilter = .all {
         didSet { recomputeDisplayedFrames() }
@@ -550,11 +545,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     try await PhotosMedia.shared.syncOrder(collectionIdentifier: albumIdentifier,
                                                            assetIdentifiers: identifiers)
                 }.value
-                PhotosOrderState.shared.markOrdered(albumIdentifier: albumIdentifier,
-                                                     assetIdentifiers: identifiers)
                 if photosAlbumURL == albumURL {
                     photosOrderSyncMessage = "Order synced to Photos · \(identifiers.count) photos"
-                    recomputeDisplayedFrames()
                 }
             } catch {
                 errorMessage = "Couldn’t sync order to Photos: \(error.localizedDescription)"
@@ -670,13 +662,6 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard isWritingPhotosTags else { return }
         photosKeywordJob.progress?.phase = .stopping
         photosKeywordTask?.cancel()
-    }
-
-    func resetPhotosOrderState() {
-        guard let albumURL = photosAlbumURL,
-              let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
-        PhotosOrderState.shared.reset(albumIdentifier: albumIdentifier)
-        recomputeDisplayedFrames()
     }
 
     /// A global visual path must stay continuous across group boundaries.
@@ -2367,18 +2352,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         // Cache-based filters can outlive a live refresh. Resolve any repeated
         // IDs before ranking and group caps so one frame contributes once.
-        var displayCandidates = uniqueFramesByID(filteredDisplayCandidates(grouping: grouping))
-        if photosOrderFilter != .all,
-           let albumURL = photosAlbumURL,
-           let albumIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) {
-            displayCandidates = displayCandidates.filter { frame in
-                let assetIdentifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds)
-                let isOrdered = assetIdentifier.map {
-                    PhotosOrderState.shared.isOrdered(albumIdentifier: albumIdentifier, assetIdentifier: $0)
-                } ?? false
-                return photosOrderFilter.includes(isOrdered: isOrdered)
-            }
-        }
+        let displayCandidates = uniqueFramesByID(filteredDisplayCandidates(grouping: grouping))
 
         let arrangement = FrameArrangement.arrange(
             frames,

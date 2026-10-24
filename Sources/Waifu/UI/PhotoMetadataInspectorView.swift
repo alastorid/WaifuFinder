@@ -51,10 +51,10 @@ struct PhotoMetadataInspectorView: View {
                                     row(metadata.captureDateSource?.rawValue ?? "Capture date", PhotoMetadataFormatter.dateTime(date))
                                 }
                                 if let date = metadata.photosCreationDate {
-                                    row("Photos asset date", PhotoMetadataFormatter.dateTime(date), tooltip: "The creation date Photos assigns to this library asset; it may differ from the embedded capture date.")
+                                    row("Photos asset date", PhotoMetadataFormatter.dateTime(date))
                                 }
                                 if let date = metadata.photosModificationDate {
-                                    row("Photos asset modified", PhotoMetadataFormatter.dateTime(date), tooltip: "Photos asset modification date, not a filesystem timestamp.")
+                                    row("Photos asset modified", PhotoMetadataFormatter.dateTime(date))
                                 }
                                 if let value = metadata.colorProfile { row("Color profile", value) }
                                 if let value = metadata.orientation { row("Embedded orientation", value) }
@@ -140,7 +140,6 @@ struct PhotoMetadataInspectorView: View {
                         Label("Copy Photo Info", systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.borderless)
-                    .help("Copy the available photo information as text")
                 }
                 .font(.system(size: 12))
             } else if isLoading {
@@ -171,7 +170,6 @@ struct PhotoMetadataInspectorView: View {
                 Text(metadata.filename)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
-                    .help(metadata.filename)
                 Spacer(minLength: 6)
                 Text(metadata.fileType)
                     .font(.system(size: 10, weight: .medium))
@@ -212,7 +210,7 @@ struct PhotoMetadataInspectorView: View {
         .textSelection(.enabled)
     }
 
-    private func row(_ label: String, _ value: String, tooltip: String? = nil) -> some View {
+    private func row(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label)
                 .foregroundStyle(.secondary)
@@ -222,7 +220,6 @@ struct PhotoMetadataInspectorView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .help(tooltip ?? label)
         .fixedSize(horizontal: false, vertical: true)
     }
 

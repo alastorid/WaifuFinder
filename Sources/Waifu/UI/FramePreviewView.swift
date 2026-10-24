@@ -53,6 +53,10 @@ struct FramePreviewView: View {
     @State private var metadataFrameID: FrameID?
     @State private var metadataTags: [String] = []
     @State private var metadataRating: String?
+    /// The metadata sidebar answers to the title bar's panel toggle. It shares
+    /// the workspace's key so one expand/collapse icon rules every right panel,
+    /// including the Crystal Orb's inspector.
+    @AppStorage("rightPanelExpanded") private var inspectorExpanded = true
 
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
@@ -81,7 +85,7 @@ struct FramePreviewView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
 
-                    if photoInfoURL != nil {
+                    if inspectorExpanded, photoInfoURL != nil {
                         Divider()
                             .frame(maxHeight: .infinity)
                         PhotoMetadataInspectorView(metadata: photoMetadata,
@@ -253,27 +257,20 @@ struct FramePreviewView: View {
                 // server can do something here. `Reconstruct` marks per
                 // algorithm, so the two together say which is which.
                 Text("Uncover Waifu")
-                    .remoteMark(RemoteClient.shared.offersAnyRemoteUncover,
-                                serverName: RemoteClient.shared.capabilities?.serverName)
+                    .remoteMark(RemoteClient.shared.offersAnyRemoteUncover)
             }
                 .disabled(displayedFrameID != frame.id || reading)
-                .help(RemoteClient.shared.offersAnyRemoteUncover
-                      ? "Open Uncover — reconstruction can run on \(RemoteClient.shared.capabilities?.serverName ?? "the server")"
-                      : "Open Uncover")
             Text(showReadingStatus ? "preview · loading original" : (note == nil ? "original frame" : "preview"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Divider().frame(height: 16)
             Button { zoom = max(0.25, zoom / 1.5) } label: { Image(systemName: "minus.magnifyingglass") }
-                .help("Zoom out")
             Text(String(format: "%.0f%%", zoom * 100))
                 .font(.system(size: 11, design: .monospaced))
                 .frame(width: 46)
             Button { zoom = min(16, zoom * 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
-                .help("Zoom in")
             Button("Fit") { zoom = 1; zoomCenter = CGPoint(x: 0.5, y: 0.5) }
             Button("Close") { session.previewFrame = nil }
-                .help("Close the preview — Space or Escape also close it")
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.primary)

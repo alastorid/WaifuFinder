@@ -25,7 +25,6 @@ struct RemoteServerCard: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
-                .help("Disconnect and remove this server")
                 .accessibilityLabel("Disconnect and remove server")
             }
             GroupBox {
@@ -43,7 +42,6 @@ struct RemoteServerCard: View {
                         }))
                         .labelsHidden()
                         .toggleStyle(.switch)
-                        .help(client.isEnabled ? "Turn off this server" : "Swipe left to disconnect")
                     }
                     HStack(spacing: 6) {
                         Circle().fill(client.status.isConnected ? Color.green : Color.secondary)

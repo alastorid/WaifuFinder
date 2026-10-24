@@ -190,7 +190,6 @@ private struct ExportResultRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Show in Finder")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

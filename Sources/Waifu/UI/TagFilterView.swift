@@ -132,7 +132,6 @@ struct TagFilterView: View {
                                 .textFieldStyle(.plain)
                                 .font(.caption)
                                 .accessibilityLabel("Quick filter tags")
-                                .help("Search available tags. Wanted and unwanted tags stay visible.")
                             if !quickFilterText.isEmpty {
                                 Button {
                                     quickFilterText = ""
@@ -142,7 +141,6 @@ struct TagFilterView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.plain)
-                                .help("Clear quick filter")
                                 .accessibilityLabel("Clear quick filter")
                             }
                         }
@@ -227,7 +225,6 @@ struct TagFilterView: View {
                     .accessibilityLabel("Top frames per tag")
                     .accessibilityValue(topCountText)
             }
-            .help("Keep the top N frames for every tag, or for each selected tag. Set to all to remove the limit. Double-click to restore the default.")
             HStack(spacing: 8) {
                 Text("Threshold").frame(width: 58, alignment: .leading)
                 ValueSlider(bounds: 0.35...1, value: Double(session.settings.taggerThreshold), step: 0.01,
@@ -237,7 +234,6 @@ struct TagFilterView: View {
                     .accessibilityLabel("Tag threshold")
                     .accessibilityValue(String(format: "%.2f", session.settings.taggerThreshold))
             }
-            .help("Filter using stored UInt8 tag scores. Lowering the threshold restores matches without retagging. Double-click to restore the default.")
         }
         .font(.caption)
         .monospacedDigit()
@@ -283,9 +279,6 @@ struct TagFilterView: View {
             .tagChipBody(isSelected: false, isExcluded: false)
         }
         .buttonStyle(.plain)
-        .help(commonExpanded
-            ? "Collapse the common tags"
-            : "Show the \(commonTags.count) tags every frame shown carries")
         .accessibilityLabel("Common tags")
         .accessibilityValue(commonExpanded ? "Expanded" : "Collapsed")
     }
@@ -346,7 +339,6 @@ struct TagFilterView: View {
         }
         .accessibilityLabel(tag)
         .accessibilityValue(accessibilityValue(isSelected: isSelected, isExcluded: isExcluded, sortsByTag: sortsByTag))
-        .help(helpText(isSelected: isSelected, isExcluded: isExcluded))
     }
 
     private func highlightedTagText(_ tag: String) -> Text {
@@ -368,14 +360,8 @@ struct TagFilterView: View {
             : "Selected, lowest score first"
     }
 
-    /// Only the right-click effect is worth a tooltip: the click behaviour is
-    /// visible in the chip's own styling and its sort arrow. Right-click clears a
-    /// selected or unwanted tag, and marks an unselected one unwanted.
-    private func helpText(isSelected: Bool, isExcluded: Bool) -> String {
-        if isSelected || isExcluded { return "Right-click to remove this tag" }
-        return "Right-click to exclude frames with this tag"
-    }
-
+    /// Right-click clears a selected or unwanted tag, and marks an unselected
+    /// one unwanted.
     private func rightClickTag(_ tag: String) {
         guard enabled else { return }
         var filter = session.tagFilter

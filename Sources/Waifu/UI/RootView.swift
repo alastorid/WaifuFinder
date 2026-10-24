@@ -22,6 +22,9 @@ struct RootView: View {
     @StateObject private var link = ChiaroscuroLink()
     @State private var showPhotosWorkspace = false
     @State private var showWelcomeScreen = false
+    /// Whether Photos was opened from the ranked workspace (Back returns there)
+    /// or straight from the welcome screen (Back returns to welcome).
+    @State private var photosOpenedFromRanked = false
     /// Whether a drag currently hovers the window. The single drop registration
     /// below owns routing; the DropZone highlight binds to this.
     @State private var isDropTargeted = false
@@ -49,8 +52,7 @@ struct RootView: View {
             if showWelcomeScreen {
                 DropZone(session: session, isPrimary: true, isTargeted: isDropTargeted, openPhotos: openPhotosWorkspace)
             } else if showPhotosWorkspace {
-                PhotosWorkspaceView(session: session, onBackToWelcome: returnToWelcome,
-                                    trailingControls: { panelToggleButton }) {
+                PhotosWorkspaceView(session: session, onBack: navigateBack) {
                     mainContent
                 }
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
@@ -111,6 +113,7 @@ struct RootView: View {
             } else if let source = FirefoxIntegration.incomingURL(url) {
                 showWelcomeScreen = false
                 showPhotosWorkspace = false
+                photosOpenedFromRanked = false
                 session.loadVideo(at: source)
             }
             else { session.errorMessage = "Unsupported media URL. Use an HTTP or HTTPS link." }
@@ -145,27 +148,25 @@ struct RootView: View {
             }
         }
         .toolbar {
-            // The title bar carries window-level controls only: workspace status
-            // and actions live at the top of the right panel (see rightPanelHeader).
+            // The title bar carries the window-level controls and the workspace's
+            // icon actions, top right; status text lives at the top of the right panel.
             if showWelcomeScreen && !showPhotosWorkspace && session.isWritingPhotosTags {
                 ToolbarItem(placement: .primaryAction) {
                     PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
                 }
             }
-            if !showWelcomeScreen && !showPhotosWorkspace && (session.video != nil || session.progress.isRunning) {
+            // Back pops one workspace level: the orb, then Photos, then ranked, then welcome.
+            if !showPhotosWorkspace && (orb.isOpen || (!showWelcomeScreen && (session.video != nil || session.progress.isRunning))) {
                 ToolbarItem(placement: .navigation) {
-                    Button(action: returnToWelcome) {
-                        Label("Back to welcome screen", systemImage: "chevron.left")
+                    Button(action: navigateBack) {
+                        Label("Back", systemImage: "chevron.left")
                     }
                     .labelStyle(.iconOnly)
-                    .help("Back to welcome screen")
-                    .accessibilityLabel("Back to welcome screen")
+                    .accessibilityLabel(backAccessibilityLabel)
                 }
             }
-            // The panel toggle stays in the title bar so a collapsed panel can be
-            // brought back; it also toggles the Crystal Orb's inspector.
-            if !showPhotosWorkspace && ((orb.isOpen && session.video == nil) || (!showWelcomeScreen && session.video != nil)) {
-                ToolbarItem(placement: .primaryAction) { panelToggleButton }
+            if showPhotosWorkspace || orb.isOpen || (!showWelcomeScreen && session.video != nil) {
+                ToolbarItem(placement: .primaryAction) { workspaceToolbarControls }
             }
         }
         .alert("Error", isPresented: .constant(session.errorMessage != nil)) {
@@ -182,8 +183,39 @@ struct RootView: View {
     }
 
     private func openPhotosWorkspace() {
+        // Reached from the welcome screen: Back from Photos returns to welcome.
+        photosOpenedFromRanked = false
         showWelcomeScreen = false
         showPhotosWorkspace = true
+    }
+
+    private func openPhotosFromRanked() {
+        photosOpenedFromRanked = true
+        showPhotosWorkspace = true
+    }
+
+    private var backAccessibilityLabel: String {
+        if orb.isOpen { return "Close Crystal Orb and go back" }
+        return "Back to welcome screen"
+    }
+
+    /// Back pops one workspace level: the orb closes onto the workspace beneath
+    /// it, Photos returns to the ranked workspace it was opened from, and the
+    /// ranked workspace returns to welcome.
+    private func navigateBack() {
+        if orb.isOpen {
+            orb.close()
+            return
+        }
+        if showPhotosWorkspace {
+            if photosOpenedFromRanked, session.video != nil {
+                showPhotosWorkspace = false
+            } else {
+                returnToWelcome()
+            }
+            return
+        }
+        returnToWelcome()
     }
 
     private func returnToWelcome() {
@@ -193,11 +225,12 @@ struct RootView: View {
         session.closeUncover()
         session.previewFrame = nil
         showPhotosWorkspace = false
+        photosOpenedFromRanked = false
         showWelcomeScreen = true
     }
 
-    /// The one title-bar action: it must stay reachable while the panel it
-    /// toggles is collapsed. Also toggles the Crystal Orb's inspector.
+    /// The panel toggle stays in the title bar so a collapsed panel can be
+    /// brought back; it also toggles the Crystal Orb's inspector.
     private var panelToggleButton: some View {
         Button {
             if rightPanelExpanded { preview.pause() }
@@ -206,42 +239,33 @@ struct RootView: View {
             Label(orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
         }
         .labelStyle(.iconOnly)
-        .help(rightPanelExpanded ? "Hide right panel" : "Show right panel")
         .accessibilityLabel(rightPanelExpanded ? "Hide right panel" : "Show right panel")
     }
 
-    /// Status and per-workspace actions, at the top of the right panel they act
-    /// on. The status row collapses to nothing when there is nothing to report.
-    private var rightPanelHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                if orb.isOpen, !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: orb) }
-                else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 8) {
+    /// The workspace's icon actions, top right of the title bar. Status text is
+    /// the right panel's business; the back button owns leaving a workspace, so
+    /// the orb button only appears while the orb is closed.
+    private var workspaceToolbarControls: some View {
+        HStack(spacing: 8) {
+            if !orb.isOpen {
                 orbButton
-                if showPhotosWorkspace { photosPanelActions } else { videoPanelActions }
-                thumbnailZoomControls
-                Spacer(minLength: 0)
-                exportButton
+                if showPhotosWorkspace { photosPanelActions }
+                else if session.video != nil { videoPanelActions }
             }
+            panelToggleButton
+            exportButton
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private var videoPanelActions: some View {
         if session.uncover == nil {
             if photosAlbum != nil {
-                Button { showPhotosWorkspace = true } label: {
+                Button { openPhotosFromRanked() } label: {
                     Label("Open Photos", systemImage: "photo.on.rectangle.angled")
                 }
                 .labelStyle(.iconOnly)
                 .frame(width: 30)
-                .help("Open Photos")
             } else {
                 Button {
                     if isAnalyzing { session.cancel() } else { session.analyze() }
@@ -251,7 +275,6 @@ struct RootView: View {
                 }
                 .labelStyle(.iconOnly)
                 .frame(width: 30)
-                .help(isAnalyzing ? "Cancel analysis" : "Re-run analysis")
             }
         }
         thumbnailShapeButton
@@ -260,15 +283,6 @@ struct RootView: View {
     private var photosPanelActions: some View {
         HStack(spacing: 8) {
             thumbnailShapeButton
-            Button { session.photosOrderFilter = session.photosOrderFilter.next } label: {
-                PhotosOrderIcon(filter: session.photosOrderFilter)
-                    .foregroundStyle(session.photosOrderFilter == .all ? Color.secondary : Color.accentColor)
-            }
-            .frame(width: 30)
-            .disabled(photosAlbum == nil)
-            .accessibilityLabel("Order filter")
-            .accessibilityValue(session.photosOrderFilter.title)
-            .help("Order filter: \(session.photosOrderFilter.title). Click for \(session.photosOrderFilter.next.title.lowercased()) photos.")
 
             Button { downloadFromICloud.toggle() } label: {
                 Label("iCloud downloads", systemImage: downloadFromICloud ? "icloud.and.arrow.down.fill" : "icloud.slash")
@@ -279,7 +293,6 @@ struct RootView: View {
             // is the icon the fraction in the Sort and Filter panel is linked to.
             .chiaroscuroDestination(link, isEligible: !downloadFromICloud)
             .accessibilityValue(downloadFromICloud ? "On" : "Off")
-            .help(downloadFromICloud ? "Disable iCloud downloads" : "Enable iCloud downloads; currently using only media on this Mac")
 
             Button {
                 if session.progress.isRunning { session.cancel() } else { session.analyze() }
@@ -290,7 +303,6 @@ struct RootView: View {
             .labelStyle(.iconOnly)
             .frame(width: 30)
             .disabled(session.video == nil)
-            .help(session.progress.isRunning ? "Cancel analysis" : "Analyze album")
         }
     }
 
@@ -301,31 +313,6 @@ struct RootView: View {
         .labelStyle(.iconOnly)
         .frame(width: 30)
         .accessibilityValue(squareThumbnails ? "Square" : "Full aspect ratio")
-        .help(squareThumbnails ? "Show full aspect ratio" : "Crop thumbnails to squares")
-    }
-
-    private var thumbnailZoomControls: some View {
-        HStack(spacing: 8) {
-            Button(action: zoomThumbnailsOut) {
-                Label("Zoom out", systemImage: "minus.magnifyingglass")
-            }
-            .labelStyle(.iconOnly)
-            .frame(width: 30)
-            .disabled(GridZoom.zoomOut(from: CGFloat(gridZoomWidth)) == CGFloat(gridZoomWidth))
-            .accessibilityLabel("Zoom thumbnails out")
-            .accessibilityValue("Smaller thumbnails, more per row")
-            .help("Zoom out: more, smaller thumbnails per row (⌘−)")
-
-            Button(action: zoomThumbnailsIn) {
-                Label("Zoom in", systemImage: "plus.magnifyingglass")
-            }
-            .labelStyle(.iconOnly)
-            .frame(width: 30)
-            .disabled(GridZoom.zoomIn(from: CGFloat(gridZoomWidth)) == CGFloat(gridZoomWidth))
-            .accessibilityLabel("Zoom thumbnails in")
-            .accessibilityValue("Larger thumbnails, fewer per row")
-            .help("Zoom in: fewer, larger thumbnails per row (⌘+)")
-        }
     }
 
     /// Title-bar buttons go away with the panel they live in, so the shortcuts
@@ -366,7 +353,6 @@ struct RootView: View {
         .frame(width: 30)
         .disabled(session.selectedFrameIDs.isEmpty || session.uncover != nil)
         .keyboardShortcut("e", modifiers: .command)
-        .help("Export \(session.selectedFrameIDs.count) selected frames")
     }
 
     @ViewBuilder
@@ -394,8 +380,16 @@ struct RootView: View {
             if rightPanelExpanded {
                 Divider()
                 VStack(spacing: 0) {
-                    rightPanelHeader
-                    Divider()
+                    // The right panel's own header is status only: the keyword job
+                    // while one runs, nothing otherwise. Icon actions are in the
+                    // title bar; grid zoom is gesture and keyboard shortcut only.
+                    if session.isWritingPhotosTags {
+                        PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Divider()
+                    }
                     VideoPreviewPanel(session: session, preview: preview)
                     Divider()
                     FrameOrderPanel(session: session, link: link)

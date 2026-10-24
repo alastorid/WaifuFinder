@@ -3,6 +3,7 @@ import CoreImage
 import ImageIO
 import Vision
 import Combine
+import UniformTypeIdentifiers
 
 private func orbFrame(_ index: Int, feature: Data? = nil) -> AnalyzedFrame {
     AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index), faceScore: nil,
@@ -225,6 +226,24 @@ func registerCrystalOrbLifecycleTests() {
             let staged = await CrystalOrbImport.stageImageFile(from: fileBacked)
             if let staged { check(CrystalOrbImport.isDecodable(try Data(contentsOf: staged)), "file representation is copied out decodable") }
             else { check(false, "file representation is copied out decodable") }
+            model.close()
+
+            // A promised file can arrive before its type is derivable from the
+            // path (no extension): the drag declared an image, so the orb — not
+            // the video importer — must receive it.
+            let untyped = directory.appendingPathComponent("promised-image")
+            try payload.write(to: untyped)
+            let promised = NSItemProvider()
+            promised.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier, visibility: .all) { completion in
+                completion(untyped.dataRepresentation, nil); return nil
+            }
+            promised.registerDataRepresentation(forTypeIdentifier: "public.png", visibility: .all) { completion in
+                completion(payload, nil); return nil
+            }
+            check(CrystalOrbImport.accept([promised], model: model, session: session), "untyped promised image drop accepted")
+            try await orbWait { model.query != nil && !model.importing }
+            check(model.query != nil, "untyped image drop reaches the orb")
+            check(session.video == nil && !session.progress.isRunning, "untyped image drop is never handed to the video importer")
             model.close(); session.cancel()
         }.value
     })

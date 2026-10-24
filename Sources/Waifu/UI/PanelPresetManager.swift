@@ -38,22 +38,17 @@ struct PanelPresetManager: View {
                     .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 1)
             }
             .disabled(!session.canLoadPanelPreset)
-            .help("Select a number to load its saved settings")
 
             Button("Memory") {
                 if let selectedSlot { session.savePanelPreset(at: selectedSlot) }
             }
             .disabled(selectedSlot == nil)
-            .help(selectedSlot.map { "Save current right-panel settings to preset \($0 + 1)" }
-                  ?? "Select a preset number first")
             .fixedSize()
 
             Button("Clear") {
                 session.clearPanelSettings(selectedSlot: selectedSlot)
             }
             .disabled(!session.canLoadPanelPreset)
-            .help(selectedSlot.map { "Reset preset \($0 + 1) and the current settings to defaults" }
-                  ?? "Reset current filtering and ordering settings to defaults")
             .fixedSize()
         }
         .controlSize(.small)

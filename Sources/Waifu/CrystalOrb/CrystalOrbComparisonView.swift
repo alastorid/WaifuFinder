@@ -74,7 +74,7 @@ private struct CrystalOrbInspectionPane: View {
                     })
                 HStack(spacing: 6) {
                     if model.mode == .toggle {
-                        Button(title) { model.showCandidate.toggle() }.buttonStyle(.plain).font(.caption.weight(.medium)).help("Click to switch Target and Candidate · Hold Space to compare")
+                        Button(title) { model.showCandidate.toggle() }.buttonStyle(.plain).font(.caption.weight(.medium))
                     } else { Text(title).font(.caption.weight(.medium)).lineLimit(1) }
                     if !(kind == "Δ" ? pair.differenceIsOriginal : (kind == "A" ? pair.targetIsOriginal : pair.isOriginal)) { Text("Preview").font(.caption2).foregroundStyle(.yellow) }
                     if !model.pairIsCurrent { Text("Previous pair").font(.caption2) }
@@ -85,7 +85,7 @@ private struct CrystalOrbInspectionPane: View {
                     Spacer(minLength: 0)
                     Button { model.maximizedPane = model.maximizedPane == kind ? nil : kind } label: {
                         Image(systemName: model.maximizedPane == kind ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    }.buttonStyle(.plain).help("Maximize or restore this pane").accessibilityLabel("Maximize or restore " + title)
+                    }.buttonStyle(.plain).accessibilityLabel("Maximize or restore " + title)
                 }.padding(7).background(.regularMaterial)
                 if kind == "Mixed", model.mode == .swipe { divider(geometry.size) }
                 if model.showOverview { overview(viewport).frame(width: 120, height: 85).padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing) }

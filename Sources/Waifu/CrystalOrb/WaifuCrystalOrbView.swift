@@ -7,89 +7,60 @@ struct CrystalOrbToolbarButton: View {
     var body: some View {
         Button(action: action) {
             CrystalOrbGlyph(active: model.isOpen && (model.searching || model.importing || model.loading))
-            .frame(width: 24, height: 24)
-            .background((model.isOpen || hovering ? Color.accentColor.opacity(0.2) : .clear), in: RoundedRectangle(cornerRadius: 5))
+                .frame(width: 28, height: 20)
+                .background((model.isOpen || hovering ? Color.accentColor.opacity(0.2) : .clear), in: RoundedRectangle(cornerRadius: 5))
         }
         .frame(width: 30).onHover { hovering = $0 }
-        .help("WaifuCrystalOrb — Find Visually Similar Images")
         .accessibilityLabel("WaifuCrystalOrb — Find Visually Similar Images")
         .accessibilityValue(model.isOpen ? "Open" : "Closed")
     }
 }
 
-/// The same small orb signals ongoing search/quality refinement without a splash.
+/// A small glass sphere at SF Symbol scale: bright anime-style glass with a
+/// crisp specular highlight and a lower rim light, plus a sparkle that pulses
+/// while the orb works.
 struct CrystalOrbGlyph: View {
     let active: Bool
 
     var body: some View {
         ZStack {
-            // A little antique stand makes this read as a crystal ball rather
-            // than a generic glowing dot at toolbar size.
-            Ellipse().fill(CrystalOrbPalette.bronze)
-                .frame(width: 15, height: 3).offset(y: 8.5)
-            RoundedRectangle(cornerRadius: 1)
-                .fill(CrystalOrbPalette.brass)
-                .frame(width: 6, height: 2).offset(y: 7)
-
             Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: CrystalOrbPalette.lilac, location: 0),
-                    .init(color: CrystalOrbPalette.amethyst, location: 0.43),
-                    .init(color: CrystalOrbPalette.plum, location: 0.78),
-                    .init(color: CrystalOrbPalette.deepViolet, location: 1)
-                ], center: UnitPoint(x: 0.28, y: 0.22), startRadius: 0, endRadius: 16))
-                .overlay(Circle().stroke(CrystalOrbPalette.brass.opacity(0.8), lineWidth: 0.8))
-                .overlay {
-                    CrystalOrbSwirl()
-                        .stroke(CrystalOrbPalette.mist.opacity(0.7),
-                                style: StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
-                        .padding(1.5)
-                }
-                .frame(width: 16, height: 16)
-                .offset(y: -1)
-                .shadow(color: CrystalOrbPalette.mist.opacity(active ? 0.42 : 0), radius: 3)
-
+                .fill(LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.93, green: 0.98, blue: 1.00), location: 0.0),
+                        .init(color: Color(red: 0.63, green: 0.87, blue: 0.99), location: 0.40),
+                        .init(color: Color(red: 0.30, green: 0.61, blue: 0.96), location: 0.78),
+                        .init(color: Color(red: 0.09, green: 0.27, blue: 0.60), location: 1.0)
+                    ],
+                    startPoint: UnitPoint(x: 0.25, y: 0), endPoint: UnitPoint(x: 0.75, y: 1)))
+            // The rim light along the lower curve is what makes a sphere read as glass.
+            Ellipse()
+                .fill(Color.white.opacity(0.55))
+                .blur(radius: 1.2)
+                .frame(width: 12, height: 4.5)
+                .offset(y: -0.8)
+            Ellipse()
+                .fill(Color.white)
+                .frame(width: 4.6, height: 3.2)
+                .rotationEffect(.degrees(15))
+                .offset(x: -3.0, y: -4.3)
+        }
+        .frame(width: 17, height: 17)
+        .clipShape(Circle())
+        .overlay(
+            Circle().stroke(
+                LinearGradient(colors: [Color.white.opacity(0.9), Color.white.opacity(0.05)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 0.8))
+        .shadow(color: Color(red: 0.55, green: 0.80, blue: 1.0).opacity(active ? 0.55 : 0), radius: 2.5)
+        .overlay(alignment: .topTrailing) {
             Image(systemName: "sparkle")
                 .font(.system(size: 4.5, weight: .medium))
-                .foregroundStyle(CrystalOrbPalette.brassHighlight)
+                .foregroundStyle(Color(red: 1.0, green: 0.98, blue: 0.88))
                 .symbolEffect(.pulse, options: .repeating, isActive: active)
-                .offset(x: 4, y: -5)
-        }.frame(width: 24, height: 24)
-        .accessibilityLabel(active ? "Crystal Orb is working" : "Crystal Orb")
-    }
-}
-
-private enum CrystalOrbPalette {
-    static let lilac = Color(red: 0.70, green: 0.61, blue: 0.78)
-    static let amethyst = Color(red: 0.43, green: 0.32, blue: 0.61)
-    static let plum = Color(red: 0.25, green: 0.20, blue: 0.40)
-    static let deepViolet = Color(red: 0.12, green: 0.13, blue: 0.26)
-    static let mist = Color(red: 0.72, green: 0.72, blue: 0.86)
-    static let brass = Color(red: 0.56, green: 0.40, blue: 0.22)
-    static let brassHighlight = Color(red: 0.78, green: 0.63, blue: 0.37)
-    static let bronze = Color(red: 0.33, green: 0.25, blue: 0.18)
-}
-
-private struct CrystalOrbSwirl: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.width * 0.19, y: rect.height * 0.63))
-            path.addCurve(
-                to: CGPoint(x: rect.width * 0.71, y: rect.height * 0.22),
-                control1: CGPoint(x: rect.width * 0.20, y: rect.height * 0.34),
-                control2: CGPoint(x: rect.width * 0.52, y: rect.height * 0.15)
-            )
-            path.addCurve(
-                to: CGPoint(x: rect.width * 0.73, y: rect.height * 0.62),
-                control1: CGPoint(x: rect.width * 0.91, y: rect.height * 0.33),
-                control2: CGPoint(x: rect.width * 0.91, y: rect.height * 0.55)
-            )
-            path.addCurve(
-                to: CGPoint(x: rect.width * 0.38, y: rect.height * 0.76),
-                control1: CGPoint(x: rect.width * 0.57, y: rect.height * 0.76),
-                control2: CGPoint(x: rect.width * 0.47, y: rect.height * 0.84)
-            )
+                .offset(x: 3.4, y: -2.6)
         }
+        .accessibilityLabel(active ? "Crystal Orb is working" : "Crystal Orb")
     }
 }
 
@@ -117,7 +88,7 @@ struct CrystalOrbOpacitySlider: View {
                 .accessibilityValue("\(Int(value * 100)) percent")
                 .accessibilityAdjustableAction { direction in value = min(1, max(0, value + (direction == .increment ? 0.01 : -0.01))) }
             Text("\(Int(value * 100))%").monospacedDigit().frame(width: 32, alignment: .trailing)
-        }.font(.caption).help("Red overlay opacity · Double-click to reset to 65%")
+        }.font(.caption)
     }
 }
 
@@ -126,6 +97,11 @@ struct WaifuCrystalOrbView: View {
     @ObservedObject var session: WaifuSession
     @AppStorage("rightPanelExpanded") private var showInspector = true
     @State private var candidatesExpanded = false
+    @State private var candidateStripWidth: CGFloat = 720
+    /// Thirteen tiles plus twelve 1px gaps and 1px content padding.
+    private var tileSide: CGFloat {
+        min(96, max(20, ((candidateStripWidth - 14) / 13).rounded(.down)))
+    }
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
 
     var body: some View {
@@ -137,13 +113,13 @@ struct WaifuCrystalOrbView: View {
                     Text("Drop or paste an image with ⌘V.").foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                controls
-                Divider()
                 HSplitView {
                     CrystalOrbComparisonView(model: model).frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                     if showInspector {
                         VStack(spacing: 0) {
                             inspectorHeader
+                            Divider()
+                            orbControls
                             Divider()
                             CrystalOrbInspectorView(model: model)
                         }
@@ -171,49 +147,44 @@ struct WaifuCrystalOrbView: View {
         }
     }
 
-    private var controls: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { modes; Spacer(minLength: 4); compactActions }
-            VStack(spacing: 4) { HStack { modes; Spacer() }; HStack { compactActions; Spacer() } }
-        }.padding(.horizontal, 8).padding(.vertical, 5).controlSize(.small)
-    }
-
-    /// Search and keyword-job status, plus the orb's own close control, at the
-    /// top of the inspector; the title bar keeps only the panel toggle.
+    /// Status at the top of the panel. The title bar's back button owns leaving
+    /// the orb, so the panel carries no close control of its own.
     private var inspectorHeader: some View {
         HStack(spacing: 8) {
             if !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: model) }
             else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
             Spacer(minLength: 0)
-            if session.video != nil { exportButton }
-            CrystalOrbToolbarButton(model: model) { model.close() }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var exportButton: some View {
-        Button { session.showExportSheet = true } label: {
-            Label("Export selected frames", systemImage: "square.and.arrow.up")
+    /// The comparison controls that used to sit above the image, merged into
+    /// the panel: the four modes, then the view actions beneath them.
+    private var orbControls: some View {
+        VStack(spacing: 8) {
+            modes
+            compactActions
         }
-        .labelStyle(.iconOnly)
-        .frame(width: 30)
-        .disabled(session.selectedFrameIDs.isEmpty || session.uncover != nil)
-        .keyboardShortcut("e", modifiers: .command)
-        .help("Export \(session.selectedFrameIDs.count) selected frames")
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .controlSize(.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
     private var compactActions: some View {
         HStack(spacing: 6) {
             Button("Fit") { model.resetZoom() }
             Button("1:1") { model.actualPixels = true; model.zoom = 1 }
             if model.mode != .difference { Toggle("Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox) }
             Button { candidatesExpanded.toggle() } label: { Label("Candidates", systemImage: candidatesExpanded ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset.filled") }
-                .labelStyle(.iconOnly).help(candidatesExpanded ? "Hide candidates" : "Show candidates · every match within likeness of the best, up to \(WaifuCrystalOrbModel.candidateLimit)")
+                .labelStyle(.iconOnly)
                 .accessibilityLabel(candidatesExpanded ? "Hide candidates" : "Show candidates")
         }
     }
     private var modes: some View {
-        HStack(spacing: 2) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)], spacing: 4) {
             ForEach(WaifuCrystalOrbModel.Mode.allCases, id: \.self) { mode in
                 Button {
                     if mode == .toggle, model.mode == .toggle { model.showCandidate.toggle() }
@@ -221,65 +192,64 @@ struct WaifuCrystalOrbView: View {
                     model.maximizedPane = nil
                 } label: {
                     Text(mode == .toggle && model.mode == .toggle ? "Toggle · " + (model.showCandidate ? "Candidate" : "Target") : mode.rawValue)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                         .background(model.mode == mode ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 4))
                 }.buttonStyle(.plain)
                     .accessibilityAddTraits(model.mode == mode ? .isSelected : [])
-                    .help(mode == .toggle ? "Click Toggle again to switch images · Hold Space to compare" : mode.rawValue)
             }
         }
     }
     private var candidates: some View {
-        let shown = model.visibleMatches
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(shown.count == model.matches.count ? "\(shown.count) candidates" : "\(shown.count) of \(model.matches.count) candidates · likeness range")
-                    .font(.caption.weight(.medium))
-                Spacer()
-                Text("Closest first · Vision distance, lower is closer").font(.caption2).foregroundStyle(.secondary)
-            }
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 8) {
-                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, match in
-                            CrystalOrbCandidateCell(session: session, match: match, rank: index + 1, selected: model.selectedID == match.id) { model.select(match.id) }
-                                .id(match.id)
-                        }
-                    }.padding(3)
-                }.frame(height: 108).disabled(model.importing)
-                .onChange(of: model.selectedID) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
-            }
-        }.padding(.horizontal, 12).padding(.vertical, 8)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 1) {
+                    ForEach(Array(model.visibleMatches.enumerated()), id: \.element.id) { index, match in
+                        CrystalOrbCandidateCell(model: model, session: session, match: match, rank: index + 1, side: tileSide,
+                            selected: model.selectedID == match.id) { model.select(match.id) }
+                            .id(match.id)
+                    }
+                }.padding(1)
+            }.disabled(model.importing)
+            .onChange(of: model.selectedID) { _, id in if let id { proxy.scrollTo(id, anchor: .center) } }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { candidateStripWidth = $0 }
+        }
+        .frame(height: tileSide + 2)
+        .padding(.horizontal, 8).padding(.vertical, 5)
     }
 }
 
 private struct CrystalOrbCandidateCell: View {
+    let model: WaifuCrystalOrbModel
     let session: WaifuSession
     let match: CrystalOrbMatch
     let rank: Int
+    let side: CGFloat
     let selected: Bool
     let action: () -> Void
     @StateObject private var presentation: GridThumbnailPresentation
     private var identity: String { session.thumbnailGeneration.uuidString + ":" + match.frame.thumbnailKey }
-    init(session: WaifuSession, match: CrystalOrbMatch, rank: Int, selected: Bool, action: @escaping () -> Void) {
-        self.session = session; self.match = match; self.rank = rank; self.selected = selected; self.action = action
+    init(model: WaifuCrystalOrbModel, session: WaifuSession, match: CrystalOrbMatch, rank: Int, side: CGFloat, selected: Bool, action: @escaping () -> Void) {
+        self.model = model; self.session = session; self.match = match; self.rank = rank; self.side = side; self.selected = selected; self.action = action
         _presentation = StateObject(wrappedValue: GridThumbnailPresentation(identity: session.thumbnailGeneration.uuidString + ":" + match.frame.thumbnailKey))
     }
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 4) {
-                ZStack {
-                    Color(nsColor: .controlBackgroundColor)
-                    if let image = presentation.image(for: identity) {
-                        Image(decorative: image, scale: 1).resizable().scaledToFit()
-                    }
-                }.frame(width: 100, height: 68).allowsHitTesting(false)
-                Text("#\(rank) · \(String(format: "%.3f", match.distance))").font(.system(size: 10, design: .monospaced))
-                Text(match.id.raw).font(.system(size: 9)).foregroundStyle(.secondary)
-            }.padding(3).background(selected ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(selected ? Color.accentColor : .clear, lineWidth: 2).allowsHitTesting(false))
+            ZStack {
+                Color(nsColor: .controlBackgroundColor)
+                if let image = presentation.image(for: identity) {
+                    Image(decorative: image, scale: 1).resizable().scaledToFit()
+                }
+            }.frame(width: side, height: side)
+                .overlay(Rectangle().inset(by: 1).stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
                 .contentShape(Rectangle())
-        }.buttonStyle(.plain).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .contextMenu {
+                Button("Open in Photos.app") { model.revealCandidateInPhotos(match) }
+                    .disabled(model.photoURL(for: match) == nil)
+            }
+            .help(String(format: "#%d · %.3f", rank, match.distance))
             .accessibilityLabel("Candidate \(rank), \(match.id.raw), visual distance \(match.distance)")
             .accessibilityAddTraits(selected ? .isSelected : [])
             .task(id: identity) {

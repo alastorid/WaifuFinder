@@ -30,8 +30,7 @@ struct FrameGridStatusView: View {
             displayedCount: session.displayOrderFrames.count,
             analyzedCount: session.frames.count,
             filtersActive: !session.frameLimits.isEmpty || session.faceFilter != .all
-                || !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty
-                || (session.photosAlbumURL != nil && session.photosOrderFilter != .all))
+                || !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty)
     }
 
     var body: some View {
@@ -82,9 +81,6 @@ struct FrameGridStatusView: View {
     }
 
     private var filterHint: String {
-        if session.photosAlbumURL != nil && session.photosOrderFilter != .all {
-            return "Click the order filter to show all photos."
-        }
         if !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty {
             return "Review wanted and unwanted tags in the Tags panel."
         }

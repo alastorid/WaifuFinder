@@ -205,6 +205,49 @@ func registerTagSummaryTests() {
         checkEqual(await probe.counts, [1], "the sibling that finished in flight is still counted")
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "a timed-out Photos write pauses the pipeline, retries once and completes", knownBug: nil) {
+        let probe = KeywordWriteProbe(timeoutOnce: ["photo 0"])
+        let updates = (0..<2).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
+        try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
+                                          stallCooldown: .milliseconds(10),
+                                          write: { try await probe.write($0) },
+                                          progress: { await probe.report($0) })
+        checkEqual(await probe.identifiers, ["photo 0", "photo 0", "photo 1"], "the stalled batch is retried once, then the job continues")
+        checkEqual(await probe.counts, [1, 2], "the retry confirms the batch")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "a Photos write that times out twice fails with guidance", knownBug: nil) {
+        let probe = KeywordWriteProbe(timeoutAlways: ["photo 0"])
+        let updates = (0..<2).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
+        do {
+            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
+                                              stallCooldown: .milliseconds(10),
+                                              write: { try await probe.write($0) },
+                                              progress: { await probe.report($0) })
+            check(false, "a second timeout must surface an error")
+        } catch {}
+        checkEqual(await probe.identifiers, ["photo 0", "photo 0"], "two attempts, then the job stops")
+        checkEqual(await probe.counts, [], "nothing is confirmed while Photos never replies")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "a stalled Photos write parks other workers until the retry lands", knownBug: nil) {
+        let probe = KeywordWriteProbe(holdWrites: 1, timeoutOnce: ["photo 0"], releaseHoldsOnTimeout: true)
+        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
+        let task = Task {
+            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 2,
+                                              stallCooldown: .seconds(1),
+                                              write: { try await probe.write($0) },
+                                              progress: { await probe.report($0) })
+        }
+        try await task.value
+        let recorded = await probe.identifiers
+        checkEqual(recorded.count, 4, "every batch is attempted exactly once except the retried stall")
+        checkEqual(recorded.filter { $0 == "photo 0" }.count, 2, "the stalled batch is attempted exactly twice")
+        check(recorded.lastIndex(of: "photo 0")! < recorded.firstIndex(of: "photo 2")!,
+              "no new batch starts before the retry lands")
+        checkEqual(await probe.counts.sorted(), [1, 2, 3], "all three batches confirm")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail Top reasons follow rankings, group caps and partial reveals", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let group = FrameGroupID(raw: "top-badges")
@@ -595,25 +638,45 @@ private actor KeywordWriteProbe {
     private(set) var counts: [Int] = []
     private(set) var maxInFlight = 0
     private(set) var failed: [String] = []
+    private(set) var timeouts: [String] = []
+    private var attempts: [String: Int] = [:]
     private var inFlight = 0
     private var heldCount = 0
     private var released = false
     private let holdWrites: Int
     private let failIdentifiers: Set<String>
     private let waitForFailureBeforeCompleting: Bool
+    private let timeoutOnce: Set<String>
+    private let timeoutAlways: Set<String>
+    private let releaseHoldsOnTimeout: Bool
     private var heldWaiters: [CheckedContinuation<Void, Never>] = []
     private var failureWaiters: [CheckedContinuation<Void, Never>] = []
     private var inFlightWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
 
     init(holdWrites: Int = 0, failIdentifiers: Set<String> = [],
-         waitForFailureBeforeCompleting: Bool = false) {
+         waitForFailureBeforeCompleting: Bool = false,
+         timeoutOnce: Set<String> = [], timeoutAlways: Set<String> = [],
+         releaseHoldsOnTimeout: Bool = false) {
         self.holdWrites = holdWrites
         self.failIdentifiers = failIdentifiers
         self.waitForFailureBeforeCompleting = waitForFailureBeforeCompleting
+        self.timeoutOnce = timeoutOnce
+        self.timeoutAlways = timeoutAlways
+        self.releaseHoldsOnTimeout = releaseHoldsOnTimeout
     }
 
     func write(_ batch: [PhotosKeywords.Update]) async throws {
-        identifiers.append(contentsOf: batch.map(\.assetIdentifier))
+        let batchIds = batch.map(\.assetIdentifier)
+        identifiers.append(contentsOf: batchIds)
+        // A reply timeout precedes any holding: the retried attempt must never park.
+        if let timingOut = batchIds.first(where: { timeoutOnce.contains($0) || timeoutAlways.contains($0) }) {
+            attempts[timingOut, default: 0] += 1
+            if timeoutAlways.contains(timingOut) || attempts[timingOut] == 1 {
+                timeouts.append(timingOut)
+                if releaseHoldsOnTimeout { release() }
+                throw NSError(domain: NSOSStatusErrorDomain, code: Int(errAETimeout))
+            }
+        }
         inFlight += 1
         maxInFlight = max(maxInFlight, inFlight)
         let ready = inFlightWaiters.filter { $0.0 <= maxInFlight }
@@ -625,7 +688,7 @@ private actor KeywordWriteProbe {
             heldCount -= 1
         }
         inFlight -= 1
-        if let failedIdentifier = batch.map(\.assetIdentifier).first(where: { failIdentifiers.contains($0) }) {
+        if let failedIdentifier = batchIds.first(where: { failIdentifiers.contains($0) }) {
             failed.append(failedIdentifier)
             let waiters = failureWaiters
             failureWaiters = []

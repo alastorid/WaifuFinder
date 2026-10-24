@@ -24,19 +24,16 @@ struct UncoverView: View {
                 Button("+") { session.zoom = min(16, session.zoom * 1.5) }
                 HStack(spacing: 2) {
                     Button { session.setViewScaleMode(.original) } label: { Text("Orig") }
-                        .help("Show at original pixel size")
                         .accessibilityLabel("Original pixel size")
                         .padding(.horizontal, 6).padding(.vertical, 4)
                         .background(session.viewScaleMode == .original ? Color.accentColor.opacity(0.2) : .clear,
                                     in: RoundedRectangle(cornerRadius: 4))
                     Button { session.setViewScaleMode(.fitWidth) } label: { Image(systemName: "arrow.left.and.right") }
-                        .help("Fit video to width")
                         .accessibilityLabel("Fit video to width")
                         .padding(.horizontal, 6).padding(.vertical, 4)
                         .background(session.viewScaleMode == .fitWidth ? Color.accentColor.opacity(0.2) : .clear,
                                     in: RoundedRectangle(cornerRadius: 4))
                     Button { session.setViewScaleMode(.fitHeight) } label: { Image(systemName: "arrow.up.and.down") }
-                        .help("Fit video to height")
                         .accessibilityLabel("Fit video to height")
                         .padding(.horizontal, 6).padding(.vertical, 4)
                         .background(session.viewScaleMode == .fitHeight ? Color.accentColor.opacity(0.2) : .clear,
@@ -71,13 +68,11 @@ struct UncoverView: View {
                     HStack(spacing: 10) {
                         Text("Source").font(.caption).foregroundStyle(.secondary)
                         Button { session.step(-1) } label: { Image(systemName: "backward.end.fill") }
-                            .help("Previous source frame")
                         Slider(value: Binding(get: { Double(session.sourceRequestedIndex) },
                                               set: { session.seekSource(index: Int($0.rounded())) }),
                                in: 0...Double(max(1, session.sourceFrameCount - 1)))
                             .accessibilityLabel("Source frame")
                         Button { session.step(1) } label: { Image(systemName: "forward.end.fill") }
-                            .help("Next source frame")
                         Text("\(timecode(session.sourceTime)) · \(session.sourceDisplayedIndex + 1)/\(session.sourceFrameCount)")
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }.disabled(session.busy || session.sourceFrameCount == 0)
@@ -128,7 +123,6 @@ struct UncoverView: View {
                             Text(scale == .one ? "1× Original" : scale.label).tag(scale).disabled(session.capabilities?.scales.contains(scale) != true)
                         }
                     }.labelsHidden().pickerStyle(.segmented).frame(width: 380)
-                        .help("Sets source downsampling before reconstruction. 1× keeps the original pixels.")
                     Text("Start").font(.caption)
                     TextField("Seconds", value: $session.start, format: .number.precision(.fractionLength(3)))
                         .frame(width: 85).textFieldStyle(.roundedBorder)
@@ -159,8 +153,7 @@ struct UncoverView: View {
                         // and needs no second label.
                         Button { session.reconstruct() } label: {
                             Text("Reconstruct")
-                                .remoteMark(remote.offersRemote(session.algorithm, scale: session.scale),
-                                            serverName: remote.capabilities?.serverName)
+                                .remoteMark(remote.offersRemote(session.algorithm, scale: session.scale))
                         }
                         .disabled(!session.canReconstruct)
                         Button("Export…") { save() }.disabled(!session.hasCurrentResult)

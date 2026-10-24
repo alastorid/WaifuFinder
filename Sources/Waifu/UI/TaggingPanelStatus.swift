@@ -139,11 +139,6 @@ struct TaggingStartButton: View {
                                            serverNames: remote.serverNames)
                     }
                     .buttonStyle(.borderless)
-                    .help(session.tagVocabulary == nil && remote.remoteVocabulary == nil
-                          ? "Open Settings to download and set up WD Tagger, or connect to a server that has it."
-                          : session.photosAlbumURL == nil
-                            ? "Tag the additional frames admitted by the current filters."
-                            : "Tag every untagged photo in this album using thumbnails.")
                     Spacer(minLength: 0)
                 }
                 .padding(.top, 4)
@@ -169,8 +164,5 @@ private struct TaggingActionLabel: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .help(remote ? (includeLocal
-            ? "Tag using this Mac and \(serverNames)"
-            : "Tag using \(serverNames). Hold Option to include this Mac.") : "Tag using this Mac")
     }
 }

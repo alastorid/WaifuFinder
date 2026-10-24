@@ -14,7 +14,6 @@ private struct VisualSortSpinner: View {
         }
         .frame(width: 14, height: 14)
         .accessibilityLabel("Sorting by visual distance")
-        .help("Sorting by visual distance")
         .onAppear { rotating = true }
     }
 }
@@ -34,7 +33,6 @@ private struct RegroupProgressRing: View {
         .accessibilityElement()
         .accessibilityLabel("Updating groups")
         .accessibilityValue("\(Int(progress.fraction * 100)) percent")
-        .help("Updating groups · \(Int(progress.fraction * 100))%")
     }
 }
 
@@ -177,7 +175,6 @@ struct FrameOrderPanel: View {
             .toggleStyle(.checkbox)
             .fixedSize()
             .disabled(lockedOn)
-            .help(key.detail)
 
             if key.supportsFiltering {
                 signalRange(key, limit: limit)
@@ -200,11 +197,6 @@ struct FrameOrderPanel: View {
             .buttonStyle(.borderless)
             .fixedSize()
             .disabled(!term.enabled)
-            .help(isVisualOrder
-                  ? "\(key.label): \(direction). Click to reverse the sequence."
-                  : (term.ascending
-                     ? "\(key.label) ascending — click for descending"
-                     : "\(key.label) descending — click for ascending"))
         }
     }
 
@@ -220,7 +212,6 @@ struct FrameOrderPanel: View {
                 session.frameLimits.setLimit(.unlimited, for: key)
             }
             .padding(.horizontal, 2)
-            .help("\(key.label) — \(valueText(key, low)) to \(valueText(key, high)). Drag either end of the bar; double-click to clear this range.")
         } else {
             Text("no \(key.label.lowercased()) values on screen")
                 .font(.caption)
@@ -273,7 +264,6 @@ struct FrameOrderPanel: View {
                     .labelsHidden()
                     .toggleStyle(.checkbox)
                     .accessibilityLabel("Enable grouping")
-                    .help("Enable or pause grouping similar frames.")
             }
         } content: {
             VStack(alignment: .leading, spacing: 10) {
@@ -298,7 +288,6 @@ struct FrameOrderPanel: View {
                         )
                         .accessibilityLabel("Similarity")
                         .accessibilityValue(String(format: "%.2f", session.groupingThreshold))
-                        .help("Lower values make more, smaller groups; higher values make fewer, larger groups. Double-click to restore the default. ←/→ step by \(String(format: "%.2f", groupingStep)).")
                     }
                 } else {
                     Text("Frames are shown together. Per-group limits and group rows are paused.")
@@ -317,11 +306,6 @@ struct FrameOrderPanel: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .disabled(!session.groupingEnabled || session.frameOrder.minimalVisualDistance.enabled)
-                    .help(!session.groupingEnabled
-                          ? "Turn grouping on to lay out one group per line."
-                          : session.frameOrder.minimalVisualDistance.enabled
-                          ? "Turn off Minimal Visual Distance to lay out one group per line."
-                          : "Keep each group together, either on its own line or in one continuous flow grid.")
 
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -336,7 +320,6 @@ struct FrameOrderPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
-                .help("Turn off all tag filters")
             }
         } content: {
             TagFilterView(session: session)
@@ -426,7 +409,6 @@ struct FrameOrderPanel: View {
             .disabled(!session.groupingEnabled)
             .accessibilityLabel("Top items per group")
             .accessibilityValue(session.settings.revealAllGroups ? "all" : "\(session.settings.perGroupFrameCount)")
-            .help("Keep the top 1–33 items in each group. Move fully right to reveal all. Double-click to restore the default. Use +N more in the grid to reveal an individual group.")
         }
     }
 
@@ -458,7 +440,6 @@ struct FrameOrderPanel: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.small)
-                .help("Filter by significant faces, including small faces scored in Face definition mode.")
             }
         }
     }

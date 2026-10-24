@@ -5,12 +5,11 @@ import SwiftUI
 ///
 /// The mark appears only when the connection is live *and* the server advertises
 /// the specific capability the request needs — so it is a statement about where
-/// the work will happen, not a generic "connected" badge. Each marked control
-/// also carries a `.help()` naming the server, so the glyph is self-explaining
-/// rather than something the user has to decode.
+/// the work will happen, not a generic "connected" badge. Its accessibility
+/// label reads the glyph aloud as remote work, so it is self-explaining rather
+/// than something the user has to decode.
 struct RemoteMark: ViewModifier {
     let available: Bool
-    var serverName: String?
 
     func body(content: Content) -> some View {
         HStack(spacing: 1) {
@@ -23,18 +22,15 @@ struct RemoteMark: ViewModifier {
                     .accessibilityLabel("runs on the connected server")
             }
         }
-        .help(available ? "Runs on \(serverName ?? "the connected server")" : "")
     }
 }
 
 extension View {
-    /// Marks an inference control as remote-executable.
-    ///
-    /// `serverName` only affects the tooltip; the mark's presence is decided by
-    /// `available` alone, so a caller cannot accidentally show a glyph for a
-    /// server it has no name for.
-    func remoteMark(_ available: Bool, serverName: String? = nil) -> some View {
-        modifier(RemoteMark(available: available, serverName: serverName))
+    /// Marks an inference control as remote-executable. The mark's presence is
+    /// decided by `available` alone, so a caller cannot accidentally show a
+    /// glyph for a capability the server does not have.
+    func remoteMark(_ available: Bool) -> some View {
+        modifier(RemoteMark(available: available))
     }
 }
 
