@@ -141,7 +141,14 @@ struct WaifuCrystalOrbView: View {
                 Divider()
                 HSplitView {
                     CrystalOrbComparisonView(model: model).frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
-                    if showInspector { CrystalOrbInspectorView(model: model).frame(minWidth: 260, idealWidth: 310, maxWidth: 420) }
+                    if showInspector {
+                        VStack(spacing: 0) {
+                            inspectorHeader
+                            Divider()
+                            CrystalOrbInspectorView(model: model)
+                        }
+                        .frame(minWidth: 260, idealWidth: 310, maxWidth: 420)
+                    }
                 }
                 if let error = model.comparisonError { Text(error).font(.caption).foregroundStyle(.secondary).padding(6) }
                 if candidatesExpanded { Divider(); candidates }
@@ -170,14 +177,39 @@ struct WaifuCrystalOrbView: View {
             VStack(spacing: 4) { HStack { modes; Spacer() }; HStack { compactActions; Spacer() } }
         }.padding(.horizontal, 8).padding(.vertical, 5).controlSize(.small)
     }
+
+    /// Search and keyword-job status, plus the orb's own close control, at the
+    /// top of the inspector; the title bar keeps only the panel toggle.
+    private var inspectorHeader: some View {
+        HStack(spacing: 8) {
+            if !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: model) }
+            else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
+            Spacer(minLength: 0)
+            if session.video != nil { exportButton }
+            CrystalOrbToolbarButton(model: model) { model.close() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private var exportButton: some View {
+        Button { session.showExportSheet = true } label: {
+            Label("Export selected frames", systemImage: "square.and.arrow.up")
+        }
+        .labelStyle(.iconOnly)
+        .frame(width: 30)
+        .disabled(session.selectedFrameIDs.isEmpty || session.uncover != nil)
+        .keyboardShortcut("e", modifiers: .command)
+        .help("Export \(session.selectedFrameIDs.count) selected frames")
+    }
     private var compactActions: some View {
         HStack(spacing: 6) {
             Button("Fit") { model.resetZoom() }
             Button("1:1") { model.actualPixels = true; model.zoom = 1 }
             if model.mode != .difference { Toggle("Δ Overlay", isOn: $model.redOverlay).toggleStyle(.checkbox) }
             Button { candidatesExpanded.toggle() } label: { Label("Candidates", systemImage: candidatesExpanded ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset.filled") }
-                .labelStyle(.iconOnly).help(candidatesExpanded ? "Hide candidates" : "Show top 7 candidates")
-                .accessibilityLabel(candidatesExpanded ? "Hide candidates" : "Show top 7 candidates")
+                .labelStyle(.iconOnly).help(candidatesExpanded ? "Hide candidates" : "Show candidates · every match within likeness of the best, up to \(WaifuCrystalOrbModel.candidateLimit)")
+                .accessibilityLabel(candidatesExpanded ? "Hide candidates" : "Show candidates")
         }
     }
     private var modes: some View {
@@ -198,16 +230,18 @@ struct WaifuCrystalOrbView: View {
         }
     }
     private var candidates: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let shown = model.visibleMatches
+        return VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("Top 7 candidates").font(.caption.weight(.medium))
+                Text(shown.count == model.matches.count ? "\(shown.count) candidates" : "\(shown.count) of \(model.matches.count) candidates · likeness range")
+                    .font(.caption.weight(.medium))
                 Spacer()
                 Text("Closest first · Vision distance, lower is closer").font(.caption2).foregroundStyle(.secondary)
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 8) {
-                        ForEach(Array(model.visibleMatches.enumerated()), id: \.element.id) { index, match in
+                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, match in
                             CrystalOrbCandidateCell(session: session, match: match, rank: index + 1, selected: model.selectedID == match.id) { model.select(match.id) }
                                 .id(match.id)
                         }
@@ -260,13 +294,21 @@ private struct CrystalOrbCandidateCell: View {
 }
 
 /// Reuses the title-bar keyword-job slot; no second header takes image space.
+/// Occupies the slot only while work is running or a message needs attention.
 struct CrystalOrbSearchBadge: View {
     @ObservedObject var model: WaifuCrystalOrbModel
     var body: some View {
-        Text(model.searching || model.importing ? "Finding matches…" : (model.loading ? "Refining photo…" : model.status))
-            .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
-            .padding(.horizontal, 9).padding(.vertical, 5)
-            .background(.quaternary, in: Capsule()).frame(maxWidth: 260)
-            .help(model.status)
+        if let text = badgeText {
+            Text(text)
+                .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
+                .padding(.horizontal, 9).padding(.vertical, 5)
+                .background(.quaternary, in: Capsule()).frame(maxWidth: 260)
+        }
+    }
+
+    private var badgeText: String? {
+        if model.searching || model.importing { return "Finding matches…" }
+        if model.loading { return "Refining photo…" }
+        return model.status
     }
 }

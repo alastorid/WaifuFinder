@@ -229,6 +229,37 @@ func registerGridThumbnailStageTests() {
         checkEqual(snapshot.navigation.neighbour(of: frames[3].id, by: -1)?.id, frames[2].id, "ungrouped Photos chunks retain their original row")
         checkNil(snapshot.navigation.neighbour(of: frames[2].id, by: -1), "stop at the ungrouped row's start")
     })
+    Registry.shared.add(suite: suite, TestCase(name: "zoom walks the cell-width ladder and commits the zoomed layout animated", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 16, height: 16)
+        await Task { @MainActor in
+            checkEqual(GridZoom.zoomIn(from: 130), 160, "zoom in steps up to the next larger thumbnails")
+            checkEqual(GridZoom.zoomOut(from: 130), 110, "zoom out steps down to more, smaller thumbnails")
+            checkEqual(GridZoom.zoomIn(from: GridZoom.steps.last ?? 0), GridZoom.steps.last ?? 0, "zoom in stops at the top rung")
+            checkEqual(GridZoom.zoomOut(from: GridZoom.steps.first ?? 0), GridZoom.steps.first ?? 0, "zoom out stops at the bottom rung")
+            checkEqual(GridZoom.snapped(155), 160, "pinch magnification snaps to the nearest rung")
+
+            let generation = UUID()
+            let zoomedKey = GridStageKey(revision: 2, generation: generation, width: 263,
+                columns: 1, groupColumns: 2, grouped: false, photosSource: true, square: true,
+                targetWidth: 250)
+            let zoomed = GridStageSnapshot.make(GridStageInput(key: zoomedKey, sourceURL: nil,
+                rows: [], frames: (0..<4).map(stageFrame), beyondCap: [:], revealed: []))
+            checkEqual(zoomed.rows.count, 4, "a zoomed-in target puts one thumbnail on each row")
+            checkEqual(zoomed.rows[0].cellWidth, 250, "the flat cell width follows the zoom target")
+
+            let stage = GridThumbnailStage(preparationLimit: .seconds(2))
+            defer { stage.stop() }
+            let frames = (0..<4).map(stageFrame)
+            let size = CGSize(width: 263, height: 130)
+            stage.submit(stageInput(1, frames, generation: generation), viewportSize: size) { _ in pixels }
+            await stageWait { stage.current != nil }
+            stage.submit(GridStageInput(key: zoomedKey, sourceURL: nil, rows: [], frames: frames,
+                beyondCap: [:], revealed: []), viewportSize: size, animated: true) { _ in pixels }
+            await stageWait { stage.current?.key == zoomedKey }
+            checkEqual(stage.current?.rows.first?.cellWidth ?? 0, 250,
+                       "the animated commit delivers the zoomed layout like any other")
+        }.value
+    })
 }
 
 @MainActor

@@ -58,8 +58,12 @@ private struct CrystalOrbInspectionPane: View {
                 pixels(viewport)
                     .allowsHitTesting(false)
                 annotation(viewport).allowsHitTesting(false)
-                CrystalOrbPointerSurface(onMove: { _ in },
-                    onDrag: { start, current, ended in drag(start, current, ended, viewport: viewport) },
+                CrystalOrbPointerSurface(onMove: { model.hover(at: viewport.comparison($0)) },
+                    onExit: { model.hover(at: nil) },
+                    onDrag: { start, current, ended in
+                        model.hover(at: viewport.comparison(current))
+                        drag(start, current, ended, viewport: viewport)
+                    },
                     onPan: { delta in model.center(on: CGPoint(x: center.x - delta.width / scale, y: center.y + delta.height / scale)) },
                     onZoom: { factor, location in
                         let anchor = viewport.comparison(location)
@@ -195,6 +199,7 @@ private struct CrystalOrbInspectionPane: View {
 /// Local NSView owns pointer events only inside a pane, without global monitors.
 struct CrystalOrbPointerSurface: NSViewRepresentable {
     var onMove: (CGPoint) -> Void
+    var onExit: () -> Void = {}
     var onDrag: (CGPoint, CGPoint, Bool) -> Void
     var onPan: (CGSize) -> Void
     var onZoom: (CGFloat, CGPoint) -> Void
@@ -207,10 +212,12 @@ struct CrystalOrbPointerSurface: NSViewRepresentable {
         override var acceptsFirstResponder: Bool { false }
         override func updateTrackingAreas() {
             super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
+            addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
         }
         private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
         override func mouseMoved(with event: NSEvent) { actions?.onMove(point(event)) }
+        override func mouseEntered(with event: NSEvent) { actions?.onMove(point(event)) }
+        override func mouseExited(with event: NSEvent) { actions?.onExit() }
         override func mouseDown(with event: NSEvent) { start = point(event); actions?.onMove(point(event)) }
         override func mouseDragged(with event: NSEvent) { if let start { actions?.onDrag(start, point(event), false) } }
         override func mouseUp(with event: NSEvent) { if let start { actions?.onDrag(start, point(event), true) }; start = nil }

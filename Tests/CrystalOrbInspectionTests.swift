@@ -187,8 +187,24 @@ func registerCrystalOrbInspectionTests() {
             for i in 0..<120 { model.center(on:CGPoint(x:i,y:i)); model.zoom=1+CGFloat(i)/120 }
             checkEqual(shellUpdates,0,"pan and zoom do not rebuild search or metadata")
             check(navigationUpdates>0,"image panes still receive responsive navigation updates")
-            checkEqual(WaifuCrystalOrbModel.matchLimit,7,"gallery is limited to seven candidates")
+            checkEqual(WaifuCrystalOrbModel.candidateLimit, 33, "gallery never exceeds thirty-three candidates")
             withExtendedLifetime((shell,navigation)) {}
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "candidate gallery follows the likeness range up to the cap", knownBug: nil) {
+        await Task { @MainActor in
+            func probe(_ index: Int, _ distance: Double) -> CrystalOrbMatch {
+                CrystalOrbMatch(frame: AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: 0,
+                    faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: nil), distance: distance)
+            }
+            checkEqual(WaifuCrystalOrbModel.alikeMatches([]), [], "empty search yields no gallery")
+            // A best distance of 0.30 cuts the band at 0.30 × 1.35 + 0.02 = 0.425.
+            let close = (0...4).map { probe($0, 0.30 + Double($0) * 0.03) }
+            let banded = WaifuCrystalOrbModel.alikeMatches(close + [probe(9, 0.90)])
+            checkEqual(banded.map(\.id.sampleIndex), [0, 1, 2, 3, 4], "matches past the likeness band are dropped")
+            let dense = (0..<40).map { probe($0, 0.30 + Double($0) * 0.001) }
+            checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).count, WaifuCrystalOrbModel.candidateLimit, "a wide band still stops at the cap")
+            checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).last?.id.sampleIndex, 32, "the cap keeps the closest matches")
         }.value
     })
     Registry.shared.add(suite: suite, TestCase(name: "four comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {

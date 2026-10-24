@@ -17,14 +17,12 @@ struct PhotosKeywordJobView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(job.phase == .stopping)
-                .help("Cancel setting keywords. Completed photos keep their keywords; the current photo may finish before stopping.")
                 .accessibilityLabel("Cancel setting keywords from tags")
             }
             .font(.system(size: 12))
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(.quaternary, in: Capsule())
-            .help("Setting photo keywords from tags. Use × to cancel; completed photos keep their keywords.")
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Keyword job")
         }

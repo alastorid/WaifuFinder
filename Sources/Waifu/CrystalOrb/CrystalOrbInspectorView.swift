@@ -19,6 +19,7 @@ struct CrystalOrbInspectorView: View {
                         CrystalOrbOpacitySlider(value: $model.opacity, focusChanged: { model.opacityControlFocused = $0 })
                         alignmentControls
                         Toggle("Overview", isOn: $model.showOverview)
+                        Toggle("Crosshair on hover", isOn: $model.showCrosshair)
                         statistics
                     }.padding(.top, 8)
                 }

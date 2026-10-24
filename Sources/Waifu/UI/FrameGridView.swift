@@ -20,6 +20,11 @@ import SwiftUI
 /// opens the zoomable preview** (it no longer toggles selection — selecting has its
 /// own click, and the preview is what a frame deserves when you stop on it), Home and
 /// ⌘←/↑ focus the first frame, End and ⌘→/↓ focus the last, and Return selects.
+///
+/// Zoom (⌘+/⌘−/⌘0, pinch, or the panel buttons) walks `GridZoom`'s ladder of target
+/// cell widths: zooming in means fewer, larger thumbnails per row; zooming out packs
+/// more, smaller ones. The reflow is committed animated, unlike scroll and filter
+/// layouts, which must swap without animation.
 struct FrameGridView: View {
     /// The asynchronous thumbnail stage must be allowed to redraw independently
     /// of the session revision. An equality gate here can retain an empty tree
@@ -27,6 +32,9 @@ struct FrameGridView: View {
     let session: WaifuSession
     let gridRevision: UInt64
     let squareThumbnails: Bool
+
+    /// The zoom rung the flat grid builds its column count from.
+    @Binding var zoomTarget: CGFloat
 
     /// Called when the user clicks a frame (single-click replaces selection,
     /// modifier clicks toggle or extend selection; Return also selects).
@@ -40,10 +48,11 @@ struct FrameGridView: View {
     @State private var horizontalScrollPositions: [String: ScrollPosition] = [:]
     @State private var scrollVisibility = FrameGridScrollVisibility()
     @StateObject private var thumbnailPrefetcher = GridThumbnailPrefetcher()
+    /// The rung a pinch started from, so cumulative magnification scales one base.
+    @State private var pinchBaseWidth: CGFloat?
 
     private let spacing: CGFloat = 1
     private let padding: CGFloat = 1
-    private let minCellWidth: CGFloat = 130
 
     private var usesSquareThumbnails: Bool {
         squareThumbnails
@@ -99,6 +108,21 @@ struct FrameGridView: View {
                     prepareStage(size: geometry.size)
                 }
                 .onChange(of: squareThumbnails) { _, _ in prepareStage(size: geometry.size) }
+                .onChange(of: zoomTarget) { _, _ in
+                    prepareStage(size: geometry.size, animated: true)
+                }
+                // A pinch snaps its scaled base to the zoom ladder; each rung the
+                // gesture crosses commits an animated reflow like Photos.app.
+                .simultaneousGesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            let base = pinchBaseWidth ?? zoomTarget
+                            pinchBaseWidth = base
+                            let candidate = GridZoom.snapped(base * value.magnification)
+                            if candidate != zoomTarget { zoomTarget = candidate }
+                        }
+                        .onEnded { _ in pinchBaseWidth = nil }
+                )
                 .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
                     scrollVisibility.viewport = rect
                     thumbnailStage.updateViewport(rect)
@@ -245,19 +269,19 @@ struct FrameGridView: View {
     }
 
     private func columnCount(in width: CGFloat) -> Int {
-        max(1, Int((width - padding * 2) / (minCellWidth + spacing)))
+        max(1, Int((width - padding * 2) / (zoomTarget + spacing)))
     }
 
-    private func prepareStage(size: CGSize) {
+    private func prepareStage(size: CGSize, animated: Bool = false) {
         let generation = session.thumbnailGeneration
         let key = GridStageKey(revision: session.gridRevision, generation: generation, width: size.width,
             columns: columnCount(in: size.width), groupColumns: rowColumnCount,
             grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
-            square: usesSquareThumbnails)
+            square: usesSquareThumbnails, targetWidth: zoomTarget)
         let input = GridStageInput(key: key, sourceURL: session.photosAlbumURL ?? session.video?.url,
             rows: session.displayedRows, frames: session.displayOrderFrames,
             beyondCap: session.beyondCapByGroup, revealed: session.revealedGroups)
-        thumbnailStage.submit(input, viewportSize: size) { [weak session] frame in
+        thumbnailStage.submit(input, viewportSize: size, animated: animated) { [weak session] frame in
             await GridThumbnailWorkPriority.shared.withVisibleWork {
                 guard let session, session.thumbnailGeneration == generation,
                       let data = await session.thumbnailData(for: frame, retainRegeneratedThumbnail: false),

@@ -184,6 +184,50 @@ private func orbWait(_ predicate: () -> Bool) async throws {
 
 func registerCrystalOrbLifecycleTests() {
     let suite = "Crystal Orb lifecycle"
+    Registry.shared.add(suite: suite, TestCase(name: "image drops load the provider's registered image type and stage a file when data is unusable", knownBug: nil) {
+        let directory = try Temporary.directory("orb-drop")
+        let payload = orbPNG(try orbImage(2, width: 200, height: 150))
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+
+            // Drag sources register the concrete type they can deliver; the import
+            // must request that identifier, not the abstract public.image.
+            let heicLike = NSItemProvider(item: payload as NSData, typeIdentifier: "public.jpeg")
+            checkEqual(CrystalOrbImport.imageType(of: heicLike), "public.jpeg", "concrete registered type is requested")
+            let abstract = NSItemProvider(item: payload as NSData, typeIdentifier: "public.image")
+            checkEqual(CrystalOrbImport.imageType(of: abstract), "public.image", "abstract-only registration falls back to the supertype")
+            let mixed = NSItemProvider()
+            mixed.registerDataRepresentation(forTypeIdentifier: "public.url", visibility: .all) { completion in
+                completion(Data("https://example.test/a.png".utf8), nil); return nil
+            }
+            mixed.registerDataRepresentation(forTypeIdentifier: "public.tiff", visibility: .all) { completion in
+                completion(payload, nil); return nil
+            }
+            checkEqual(CrystalOrbImport.imageType(of: mixed), "public.tiff", "first registered image type wins over non-image types")
+            checkEqual(CrystalOrbImport.imageType(of: NSItemProvider()), "public.image", "empty provider falls back to the supertype")
+
+            check(CrystalOrbImport.isDecodable(payload), "image payload recognised")
+            check(!CrystalOrbImport.isDecodable(Data("not an image".utf8)), "non-image payload rejected before import")
+
+            // A drop that only offers a bitmap representation opens the orb and
+            // imports through the concrete type on the first attempt.
+            check(CrystalOrbImport.accept([heicLike], model: model, session: session), "bitmap drop accepted")
+            try await orbWait { model.query != nil && !model.importing }
+            check(model.query != nil, "first drop imports instead of failing")
+            model.close()
+
+            // When data coercion cannot serve the image, the file representation
+            // is staged and imported through the same pipeline.
+            let file = directory.appendingPathComponent("staged.png")
+            try payload.write(to: file)
+            let fileBacked = NSItemProvider(contentsOf: file)!
+            let staged = await CrystalOrbImport.stageImageFile(from: fileBacked)
+            if let staged { check(CrystalOrbImport.isDecodable(try Data(contentsOf: staged)), "file representation is copied out decodable") }
+            else { check(false, "file representation is copied out decodable") }
+            model.close(); session.cancel()
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "replacing imports and closing cannot publish late query pixels", knownBug: nil) {
         let directory = try Temporary.directory("orb-lifecycle")
         let first = orbPNG(try orbImage(0, width: 1024, height: 768))

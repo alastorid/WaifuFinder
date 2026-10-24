@@ -4,28 +4,18 @@ import Combine
 /// Photos keeps its album navigation beside the existing ranking workspace.
 /// Choosing another album replaces only the source; the scoring controls and
 /// result grid continue to use the same session as ordinary video imports.
-struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbControl: View>: View {
+struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View>: View {
     @ObservedObject var session: WaifuSession
     private let rankedContent: () -> RankedContent
-    private let orbControl: () -> OrbControl
-    @ObservedObject private var orb: WaifuCrystalOrbModel
     private let trailingControls: () -> TrailingControls
     private let onBackToWelcome: () -> Void
-    /// Shared with the Sort and Filter fraction; see `ChiaroscuroLink`.
-    private let link: ChiaroscuroLink
-    @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
-    @AppStorage("photosSquareThumbnails") private var squareThumbnails = false
     @State private var sidebarExpanded = true
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: WaifuSession, link: ChiaroscuroLink, onBackToWelcome: @escaping () -> Void, orb: WaifuCrystalOrbModel,
-         @ViewBuilder orbControl: @escaping () -> OrbControl,
+    init(session: WaifuSession, onBackToWelcome: @escaping () -> Void,
          @ViewBuilder trailingControls: @escaping () -> TrailingControls,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
-        self.orb = orb
-        self.orbControl = orbControl
         self.session = session
-        self.link = link
         self.onBackToWelcome = onBackToWelcome
         self.rankedContent = rankedContent
         self.trailingControls = trailingControls
@@ -58,7 +48,9 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .transaction { $0.animation = nil }
+        // Strip stray animations from the workspace, but let the grid's zoom
+        // reflow commit ride its own marked transaction through.
+        .transaction { if !$0[GridZoomTransactionKey.self] { $0.animation = nil } }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: onBackToWelcome) {
@@ -78,13 +70,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
             }
             ToolbarItem(placement: .principal) { albumTitle }
             ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 8) {
-                    if orb.isOpen, !session.isWritingPhotosTags { CrystalOrbSearchBadge(model: orb) }
-                    else { PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob) }
-                    orbControl()
-                    albumControls
-                    trailingControls()
-                }
+                trailingControls()
             }
         }
         .task(id: libraryRevision) { await refreshLibrary() }
@@ -107,9 +93,6 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
                 if session.isWritingPhotosTags { keywordRefreshPending = true }
                 else { libraryRevision += 1 }
             }
-        }
-        .onChange(of: downloadFromICloud) { _, enabled in
-            session.photosDownloadPolicyChanged(allowNetwork: enabled)
         }
         .onChange(of: selectedAlbum) { _, selection in openAlbum(selection) }
         .onDisappear { selectionTask?.cancel(); selectionGeneration = UUID() }
@@ -136,49 +119,6 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
         .help(opening ? "Opening album…" : session.isSyncingPhotosOrder ? "Syncing order to Photos…" : session.photosOrderSyncMessage ?? statusText)
     }
 
-    @ViewBuilder
-    private var albumControls: some View {
-        Button { squareThumbnails.toggle() } label: {
-            Label("Thumbnail shape", systemImage: squareThumbnails ? "square.grid.2x2" : "rectangle.ratio.16.to.9")
-        }
-        .labelStyle(.iconOnly)
-        .frame(width: 30)
-        .accessibilityValue(squareThumbnails ? "Square" : "Full aspect ratio")
-        .help(squareThumbnails ? "Show full aspect ratio" : "Crop thumbnails to squares")
-
-        Button { session.photosOrderFilter = session.photosOrderFilter.next } label: {
-            PhotosOrderIcon(filter: session.photosOrderFilter)
-                .foregroundStyle(session.photosOrderFilter == .all ? Color.secondary : Color.accentColor)
-        }
-        .frame(width: 30)
-        .disabled(album == nil)
-        .accessibilityLabel("Order filter")
-        .accessibilityValue(session.photosOrderFilter.title)
-        .help("Order filter: \(session.photosOrderFilter.title). Click for \(session.photosOrderFilter.next.title.lowercased()) photos.")
-
-        Button { downloadFromICloud.toggle() } label: {
-            Label("iCloud downloads", systemImage: downloadFromICloud ? "icloud.and.arrow.down.fill" : "icloud.slash")
-        }
-        .labelStyle(.iconOnly)
-        .frame(width: 30)
-        // The light's destination, but only while the cloud is switched off: that
-        // is the icon the fraction in the Sort and Filter panel is linked to.
-        .chiaroscuroDestination(link, isEligible: !downloadFromICloud)
-        .accessibilityValue(downloadFromICloud ? "On" : "Off")
-        .help(downloadFromICloud ? "Disable iCloud downloads" : "Enable iCloud downloads; currently using only media on this Mac")
-
-        Button {
-            if session.progress.isRunning { session.cancel() } else { session.analyze() }
-        } label: {
-            Label(session.progress.isRunning ? "Cancel analysis" : "Analyze album",
-                  systemImage: session.progress.isRunning ? "stop.circle" : "arrow.clockwise")
-        }
-        .labelStyle(.iconOnly)
-        .frame(width: 30)
-        .disabled(opening || session.video == nil)
-        .help(session.progress.isRunning ? "Cancel analysis" : "Analyze album")
-    }
-
     private var statusText: String {
         switch session.progress.phase {
         case .cancelled: "Analysis cancelled. Your album and completed results remain available."
@@ -192,7 +132,7 @@ struct PhotosWorkspaceView<RankedContent: View, TrailingControls: View, OrbContr
         if let album {
             rankedContent()
                 .id(album.url)
-                .transaction { $0.animation = nil }
+                .transaction { if !$0[GridZoomTransactionKey.self] { $0.animation = nil } }
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "photo.stack").font(.system(size: 42)).foregroundStyle(.secondary)

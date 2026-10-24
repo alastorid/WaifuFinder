@@ -635,13 +635,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     return identifier
                 }
                 try Task.checkCancellation()
+                let groups = PhotosKeywordWriter.groups(for: updates)
                 try await PhotosKeywordWriter.openPhotosIfNeeded()
                 try Task.checkCancellation()
                 await MainActor.run {
-                    if status.progress?.phase != .stopping { status.progress?.phase = .writing }
+                    if status.progress?.phase != .stopping {
+                        status.progress?.total = groups.reduce(0) { $0 + $1.count }
+                        status.progress?.phase = .writing
+                    }
                 }
-                try await PhotosKeywordWriter.run(updates) { count in
-                    await MainActor.run { status.progress?.completed = count }
+                try await PhotosKeywordWriter.run(groups) { count in
+                    await MainActor.run {
+                        status.progress?.completed = max(status.progress?.completed ?? 0, count)
+                    }
                 }
             }
             do {
@@ -654,7 +660,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 // Already-written keywords are retained; the next photo is never started.
             } catch {
                 let completed = status.progress?.completed ?? 0
-                errorMessage = "Couldn’t write tags to Photos (\(completed)/\(targets.count) photos updated): \(error.localizedDescription)"
+                let total = status.progress?.total ?? targets.count
+                errorMessage = "Couldn’t write tags to Photos (\(completed)/\(total) photos updated): \(error.localizedDescription)"
             }
         }
     }

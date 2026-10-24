@@ -41,6 +41,9 @@ actor CrystalOrbSearchService {
                 progress: @Sendable (Int, Int) async -> Void) async throws -> [CrystalOrbMatch] {
         try Task.checkCancellation()
         let request = UUID(); ticket = request; rankingCache = nil
+        // Live rankings follow the requested result limit; callers without one
+        // keep the compact nineteen-item publication.
+        let window = max(19, resultLimit ?? 0)
         if source != generation {
             source = generation; features.removeAll(); payloads.removeAll()
             index = nil; indexedIDs = []; completedFrames = []; completedFrameMap = [:]; computations = 0
@@ -58,7 +61,7 @@ actor CrystalOrbSearchService {
         if !completedFrames.isEmpty, frames == completedFrames, index?.observations.count == frames.count {
             let result = try await ranked(queryObservation, frames: completedFrameMap, k: resultLimit ?? frames.count, ticket: request)
             try check(request)
-            await partial(Array(result.prefix(19)),frames.count,frames.count)
+            await partial(Array(result.prefix(window)),frames.count,frames.count)
             await progress(frames.count,frames.count)
             return result
         }
@@ -89,13 +92,13 @@ actor CrystalOrbSearchService {
             }
             prepared = position + 1
             if position == 0 || (position % 256 == 0 && lastPublication.duration(to: .now) >= .milliseconds(500)) {
-                let top = try await ranked(queryObservation, frames: frameMap, k: 19, ticket: request)
+                let top = try await ranked(queryObservation, frames: frameMap, k: window, ticket: request)
                 try check(request)
                 await partial(top, prepared, frames.count); lastPublication = .now
             }
         }
         // Search available persisted features before doing any missing-image work.
-        var top = try await ranked(queryObservation, frames: frameMap, k: 19, ticket: request)
+        var top = try await ranked(queryObservation, frames: frameMap, k: window, ticket: request)
         try check(request)
         if !top.isEmpty { await partial(top, prepared, frames.count) }
         for (position, frame) in frames.enumerated() where features[frame.id] == nil {
@@ -110,7 +113,7 @@ actor CrystalOrbSearchService {
             catch { /* Unavailable thumbnails remain counted in the summary. */ }
             try check(request)
             if lastPublication.duration(to: .now) >= .milliseconds(500) || position == frames.count-1 {
-                top = try await ranked(queryObservation, frames: frameMap, k: 19, ticket: request)
+                top = try await ranked(queryObservation, frames: frameMap, k: window, ticket: request)
                 try check(request)
                 await partial(top, position+1, frames.count); lastPublication = .now
             }
@@ -119,7 +122,7 @@ actor CrystalOrbSearchService {
         top = try await ranked(queryObservation, frames: frameMap, k: resultLimit ?? frames.count, ticket: request)
         try check(request)
         if index?.observations.count == frames.count { completedFrames = frames; completedFrameMap = frameMap }
-        await partial(Array(top.prefix(19)), frames.count, frames.count)
+        await partial(Array(top.prefix(window)), frames.count, frames.count)
         await progress(frames.count,frames.count)
         return top
     }

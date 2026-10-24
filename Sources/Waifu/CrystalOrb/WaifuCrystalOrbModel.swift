@@ -31,7 +31,8 @@ final class WaifuCrystalOrbModel: ObservableObject {
     @Published private(set) var matches: [CrystalOrbMatch] = []
     @Published private(set) var selectedID: FrameID?
     @Published private(set) var pair: Pair?
-    @Published private(set) var status = "Drop an image to find visually similar frames or photos."
+    /// Nil while there is nothing worth occupying the title-bar status slot.
+    @Published private(set) var status: String?
     @Published private(set) var searching = false
     @Published private(set) var loading = false
     @Published private(set) var importing = false
@@ -82,7 +83,7 @@ final class WaifuCrystalOrbModel: ObservableObject {
     @Published private(set) var alignmentMessage = "Centered · No registration"
     @Published var maximizedPane: String?
     @Published var differenceCollapsed = false
-    @Published var showCrosshair = false
+    @Published var showCrosshair = true
     @Published var showPixelGrid = false
     @Published var showOverview = false
     private var registrationTask: Task<Void, Never>?
@@ -96,7 +97,12 @@ final class WaifuCrystalOrbModel: ObservableObject {
         measurementTask?.cancel(); pixelTask?.cancel(); pixelTask = nil; pixelTicket = UUID()
         measurements = nil; pixel = nil
     }
-    static let matchLimit = 7
+    /// Hard ceiling on offered candidates; the likeness band usually cuts earlier.
+    nonisolated static let candidateLimit = 33
+    /// Keeps matches whose Vision distance stays within this multiple of the
+    /// best match (plus absolute slack for near-duplicate searches).
+    nonisolated static let likenessRelativeBand = 1.35
+    nonisolated static let likenessAbsoluteBand = 0.02
     private var followsBestMatch = true
     private var queryOriginalUnavailable = false
     private var candidateOriginalUnavailable = false
@@ -151,7 +157,14 @@ final class WaifuCrystalOrbModel: ObservableObject {
 
     private weak var session: WaifuSession?
 
-    var visibleMatches: [CrystalOrbMatch] { Array(matches.prefix(Self.matchLimit)) }
+    /// The gallery offers every match close enough to the best one — a ranked
+    /// list is sorted, so a single prefix-while cut is exact.
+    nonisolated static func alikeMatches(_ ranked: [CrystalOrbMatch]) -> [CrystalOrbMatch] {
+        guard let best = ranked.first else { return [] }
+        let cutoff = best.distance * likenessRelativeBand + likenessAbsoluteBand
+        return Array(ranked.prefix(candidateLimit).prefix { $0.distance <= cutoff })
+    }
+    var visibleMatches: [CrystalOrbMatch] { Self.alikeMatches(matches) }
     var selected: CrystalOrbMatch? { matches.first { $0.id == selectedID } ?? selectedMatch }
     var candidateIsPhoto: Bool {
         guard let source = session?.video?.url, let frame = selected?.frame else { return false }
@@ -184,7 +197,7 @@ final class WaifuCrystalOrbModel: ObservableObject {
         session?.finishCrystalOrbNavigation()
         // Release the potentially large external bitmap; reusable features remain in the engine.
         query = nil; matches = []; selectedID = nil; selectedMatch = nil; candidateMetadata = nil
-        status = "Drop an image to find visually similar frames or photos."
+        status = nil
     }
 
     func sourceChanged(session: WaifuSession) {
@@ -276,22 +289,18 @@ final class WaifuCrystalOrbModel: ObservableObject {
         searching = true; followsBestMatch = true; status = "Searching for similar images"
         searchTask = Task {
             do {
-                let result = try await engine.search(query: query.image, queryID: query.id, frames: frames, sourceURL: source, generation: generation, resultLimit: Self.matchLimit,
+                let result = try await engine.search(query: query.image, queryID: query.id, frames: frames, sourceURL: source, generation: generation, resultLimit: Self.candidateLimit,
                     partial: { [weak self] ranked, done, total in
                         await self?.publishMatches(ranked, done: done, total: total, ticket: ticket)
                     }) { _, _ in }
                 guard !Task.isCancelled, searchTicket == ticket, session.thumbnailGeneration == generation else { return }
-                publishMatches(Array(result.prefix(Self.matchLimit)), done: frames.count, total: frames.count, ticket: ticket)
+                publishMatches(Array(result.prefix(Self.candidateLimit)), done: frames.count, total: frames.count, ticket: ticket)
                 await rankingTask?.value
                 guard !Task.isCancelled, searchTicket == ticket, session.thumbnailGeneration == generation else { return }
                 searching = false
-                let readable = await engine.readableCount
-                guard !Task.isCancelled, searchTicket == ticket else { return }
-                let unavailable = frames.count - readable
-                let unindexed = PhotosMedia.shared.album(source).map { max(0, $0.items.count - frames.count) } ?? 0
-                status = "\(readable) candidates · Search complete" + (unavailable > 0 ? " · \(unavailable) unavailable" : "")
-                    + (unindexed > 0 ? " · \(unindexed) not analyzed" : "")
-                if result.isEmpty { status = "No readable candidates in this source." }
+                // A finished search needs no title-bar text: the orb itself shows
+                // the matches. Only an unreadable source stays as a status.
+                status = result.isEmpty ? "No readable candidates in this source." : nil
             } catch {
                 guard !Task.isCancelled, searchTicket == ticket else { return }
                 searching = false; status = error.localizedDescription
@@ -301,7 +310,7 @@ final class WaifuCrystalOrbModel: ObservableObject {
 
     private func publishMatches(_ ranked: [CrystalOrbMatch], done: Int, total: Int, ticket: UUID) {
         guard searchTicket == ticket, isOpen, session?.thumbnailGeneration == generation else { return }
-        let top = Array(ranked.prefix(Self.matchLimit))
+        let top = Array(ranked.prefix(Self.candidateLimit))
         guard top != matches else {
             pendingRanking = nil; rankingTask?.cancel(); rankingTask = nil
             return
@@ -493,10 +502,11 @@ final class WaifuCrystalOrbModel: ObservableObject {
     }
 
     func step(_ delta: Int) {
-        guard !matches.isEmpty else { return }
-        let index = selectedID.flatMap { id in matches.firstIndex { $0.id == id } } ?? 0
-        let next = min(max(0, index + delta), matches.count - 1)
-        select(matches[next].id)
+        let ladder = visibleMatches
+        guard !ladder.isEmpty else { return }
+        let index = selectedID.flatMap { id in ladder.firstIndex { $0.id == id } } ?? 0
+        let next = min(max(0, index + delta), ladder.count - 1)
+        select(ladder[next].id)
     }
 
     func resetZoom() { zoom = 1; actualPixels = false; fillViewport = false; pan = .zero; navigationCenter = nil }
@@ -555,6 +565,19 @@ final class WaifuCrystalOrbModel: ObservableObject {
                 measurements = result
             } catch { /* Cancelled measurements are never published. */ }
         }
+    }
+    /// Hover probe in comparison coordinates. Both the target and candidate
+    /// panes draw the crosshair from this shared cursor; nil or a point outside
+    /// the shared canvas clears it. Snapping to pixel centers keeps mouse-move
+    /// publications bounded by comparison pixels, not screen points.
+    func hover(at point: CGPoint?) {
+        guard showCrosshair, let point, let extent = pair?.alignment.extent,
+              extent.insetBy(dx: -0.5, dy: -0.5).contains(point) else {
+            if cursor != nil { cursor = nil }
+            return
+        }
+        let snapped = CGPoint(x: floor(point.x) + 0.5, y: floor(point.y) + 0.5)
+        if cursor != snapped { sample(at: snapped) }
     }
     func sample(at point: CGPoint) {
         cursor = point

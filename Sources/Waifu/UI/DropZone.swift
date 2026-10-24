@@ -1,20 +1,20 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// Accepts local files and web links. Explicit buttons keep file browsing and URL
-/// entry independent of the drop target. Finder uses public.file-url providers;
-/// browsers use public.url, so both representations are requested.
+/// The drop zone's visuals and buttons: prompt, highlight and explicit openers.
+/// The drop itself is handled by the one window-level registration in `RootView`,
+/// which routes to `CrystalOrbImport` — this view only reflects whether a drag is
+/// currently over the window.
 struct DropZone: View {
     /// The session to receive the dropped file.
     @ObservedObject var session: WaifuSession
 
     /// Whether the drop zone should be visually prominent (no video loaded).
     let isPrimary: Bool
+
+    /// Whether a drag currently hovers the window; drives the highlight only.
+    var isTargeted: Bool = false
     var openPhotos: (() -> Void)? = nil
 
-    var imageDrop: (([NSItemProvider]) -> Bool)? = nil
-
-    @State private var isTargeted = false
     @State private var showURL = false
 
     var body: some View {
@@ -26,9 +26,6 @@ struct DropZone: View {
             }
         }
         .sheet(isPresented: $showURL) { MediaURLSheet(session: session) }
-        .onDrop(of: [.fileURL, .url, .image], isTargeted: $isTargeted) { providers in
-            acceptDrop(providers)
-        }
         .animation(.easeInOut(duration: 0.15), value: isTargeted)
     }
 
@@ -116,28 +113,6 @@ struct DropZone: View {
         // the window is already full of one.
         .contentShape(Capsule())
 
-    }
-
-    /// Routes a drop to the session.
-    ///
-    /// Returns `true` when an item provider *can* supply a file URL, which is what
-    /// tells AppKit to animate acceptance; the URL itself arrives asynchronously,
-    /// because a file dragged from a remote volume may still be being copied. The
-    /// decision is therefore returned immediately and one analysis starts after all candidate URLs
-    /// have arrived.
-    private func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
-        if let imageDrop { return imageDrop(providers) }
-        let session = session
-        let candidates = providers.filter {
-            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) ||
-            $0.hasItemConformingToTypeIdentifier(UTType.url.identifier)
-        }
-        guard !candidates.isEmpty else { return false }
-        Task { @MainActor in
-            let urls = await VideoDrop.urls(from: candidates)
-            session.loadVideos(at: urls)
-        }
-        return true
     }
 
     /// Opens a file panel for selecting a video when the user clicks the drop zone.

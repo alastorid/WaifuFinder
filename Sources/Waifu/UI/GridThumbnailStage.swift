@@ -2,6 +2,36 @@ import CoreGraphics
 import Foundation
 import SwiftUI
 
+/// Zoom works like Photos.app: a ladder of target cell widths. Zooming picks the
+/// next rung; the column count falls out of the target and the viewport width.
+enum GridZoom {
+    static let steps: [CGFloat] = [70, 90, 110, 130, 160, 200, 250, 310]
+    static let defaultValue: CGFloat = 130
+
+    static func clamped(_ width: CGFloat) -> CGFloat {
+        min(max(width, steps.first ?? defaultValue), steps.last ?? defaultValue)
+    }
+
+    /// The nearest rung, so pinches and restored preferences land on the ladder.
+    static func snapped(_ width: CGFloat) -> CGFloat {
+        clamped(steps.min(by: { abs($0 - width) < abs($1 - width) }) ?? defaultValue)
+    }
+
+    static func zoomIn(from width: CGFloat) -> CGFloat {
+        clamped(steps.first(where: { $0 > width + 0.5 }) ?? steps.last ?? defaultValue)
+    }
+
+    static func zoomOut(from width: CGFloat) -> CGFloat {
+        clamped(steps.last(where: { $0 < width - 0.5 }) ?? steps.first ?? defaultValue)
+    }
+}
+
+/// Marks the transaction that carries a zoom commit, so containers that strip
+/// animations from the grid let exactly this one through.
+struct GridZoomTransactionKey: TransactionKey {
+    static let defaultValue = false
+}
+
 struct GridStageKey: Hashable, Sendable {
     let revision: UInt64
     let generation: UUID
@@ -11,6 +41,7 @@ struct GridStageKey: Hashable, Sendable {
     let grouped: Bool
     let photosSource: Bool
     let square: Bool
+    var targetWidth: CGFloat = GridZoom.defaultValue
 
     var tokenPrefix: String {
         "\(revision):\(generation):\(width):\(grouped):\(square):"
@@ -59,7 +90,10 @@ struct GridStageSnapshot: Sendable {
 
     static func make(_ input: GridStageInput) -> Self {
         let key = input.key
-        let flatWidth = min(max((key.width - 2 - CGFloat(key.columns - 1)) / CGFloat(key.columns), 130), 220)
+        // Flat cells fill their row; the zoom target is the floor, and the cap
+        // keeps a single column from growing past one large thumbnail.
+        let flatWidth = min(max((key.width - 2 - CGFloat(key.columns - 1)) / CGFloat(key.columns), key.targetWidth),
+                            max(220, key.targetWidth))
         let groupWidth = min(max((key.width - 2 - CGFloat(key.groupColumns - 1)) / CGFloat(key.groupColumns), 80), 220)
         var result: [GridStageRow] = []
         var top: CGFloat = 1
@@ -185,6 +219,8 @@ final class GridThumbnailStage: ObservableObject {
         let ticket = UUID()
         let key: GridStageKey
         let deadline: ContinuousClock.Instant
+        /// Zoom commits animate the reflow; scroll and filter commits must not.
+        let animated: Bool
         let load: @MainActor (AnalyzedFrame) async -> CGImage?
         let pixels = GridPreparedImages()
         var snapshot: GridStageSnapshot?
@@ -195,9 +231,9 @@ final class GridThumbnailStage: ObservableObject {
         var install: Task<Void, Never>?
         var timeout: Task<Void, Never>?
 
-        init(key: GridStageKey, deadline: ContinuousClock.Instant,
+        init(key: GridStageKey, deadline: ContinuousClock.Instant, animated: Bool,
              load: @escaping @MainActor (AnalyzedFrame) async -> CGImage?) {
-            self.key = key; self.deadline = deadline; self.load = load
+            self.key = key; self.deadline = deadline; self.animated = animated; self.load = load
         }
         func cancel() {
             build?.cancel(); install?.cancel(); timeout?.cancel()
@@ -214,19 +250,20 @@ final class GridThumbnailStage: ObservableObject {
 
     init(preparationLimit: Duration = .milliseconds(300)) { self.preparationLimit = preparationLimit }
 
-    func submit(_ input: GridStageInput, viewportSize: CGSize,
+    func submit(_ input: GridStageInput, viewportSize: CGSize, animated: Bool = false,
                 load: @escaping @MainActor (AnalyzedFrame) async -> CGImage?) {
         guard request?.key != input.key else { return }
         request?.cancel()
         request = nil
         guard current?.key != input.key else { return }
-        Diag.trace(.grid, message: "stage submit revision=\(input.key.revision) frames=\(input.frames.count) viewport=\(viewportSize)")
+        Diag.trace(.grid, message: "stage submit revision=\(input.key.revision) frames=\(input.frames.count) viewport=\(viewportSize) animated=\(animated)")
         if viewport.height <= 0 { viewport = CGRect(origin: .zero, size: viewportSize) }
         if let current, current.key.generation != input.key.generation {
             viewport = CGRect(origin: .zero, size: viewportSize)
             horizontalOffsets.removeAll()
         }
-        let next = Request(key: input.key, deadline: ContinuousClock.now.advanced(by: preparationLimit), load: load)
+        let next = Request(key: input.key, deadline: ContinuousClock.now.advanced(by: preparationLimit),
+                           animated: animated, load: load)
         request = next
         let ticket = next.ticket
         let work = Task.detached(priority: .userInitiated) { GridStageSnapshot.make(input) }
@@ -305,11 +342,22 @@ final class GridThumbnailStage: ObservableObject {
         self.request = nil
         previous = current
         request.pixels.settle()
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            onCommit?(snapshot)
-            current = snapshot
+        if request.animated {
+            // The reflow rides a normal animation; the transaction key lets the
+            // containers that strip grid animations wave it through.
+            var transaction = Transaction(animation: .snappy(duration: 0.28))
+            transaction[GridZoomTransactionKey.self] = true
+            withTransaction(transaction) {
+                onCommit?(snapshot)
+                current = snapshot
+            }
+        } else {
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                onCommit?(snapshot)
+                current = snapshot
+            }
         }
         // Keep prepared pixels leased until the newly mounted cells acquire
         // their own leases; NSCache eviction cannot tear the atomic handoff.
