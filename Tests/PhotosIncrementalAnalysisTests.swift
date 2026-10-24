@@ -3,6 +3,43 @@ import Foundation
 
 func registerPhotosIncrementalAnalysisTests() {
     let suite = "Photos incremental analysis"
+    Registry.shared.add(suite: suite, TestCase(name: "manual refresh reuses moved photos and requests only new edited or unfinished photos", knownBug: nil) {
+        func revision(_ id: String, _ modified: Double = 10) -> PhotosMedia.Revision {
+            PhotosMedia.Revision(identifier: id, modified: modified, width: 100, height: 80, duration: 1)
+        }
+        let before = [revision("A"), revision("B"), revision("C"), revision("deleted"), revision("unfinished")]
+        let after = [revision("new"), revision("C"), revision("B", 12), revision("A", 11), revision("unfinished")]
+        var completed = (0..<4).map(photosAnalysisTestFrame)
+        completed[0].topTags = ["keep tags"]
+        let retained = PhotosAnalysisCheckpoint.reusableFrames(completed,
+            before: before, offsetsBefore: [0, 1, 2, 3, 4], after: after, offsetsAfter: [0, 1, 2, 3, 4],
+            keywordBaselines: ["A": 11, "B": 11])
+        checkEqual(retained.map(\.timeSeconds), [1, 3], "moves and our keyword writes reuse scores; edits and deleted photos do not")
+        checkEqual(retained.map(\.artScore), [2, 0], "scores follow asset identity rather than its old position")
+        checkEqual(retained.last?.topTags, ["keep tags"], "tagging metadata survives a move")
+        checkEqual(retained.last?.thumbnailKey, completed[0].thumbnailKey, "existing thumbnails remain reusable")
+        let log = PhotosAnalysisTestLog()
+        let image = try ImageFixture.cgImage(width: 16, height: 16)
+        let items = after.indices.map { PhotosAlbumSampler.Item(url: URL(string: "waifu-photos://asset/\($0)")!, offset: Double($0), isStill: true) }
+        let sampler = PhotosAlbumSampler(items: items, width: 512, mode: .full,
+            completedIndices: Set(retained.map { $0.id.sampleIndex }), allowNetwork: false,
+            photoRendition: { url, _, network in
+                log.read(Int(url.lastPathComponent)!, network: network)
+                return image
+            })
+        var requested: [Double] = []
+        while let frame = try await sampler.next() { requested.append(frame.timeSeconds) }
+        checkEqual(requested, [0, 2, 4], "only new, edited, and unfinished photos request pixels")
+        let allCompleted = PhotosAnalysisCheckpoint.reusableFrames(completed,
+            before: before, offsetsBefore: [0, 1, 2, 3, 4], after: before, offsetsAfter: [0, 1, 2, 3, 4], keywordBaselines: [:])
+        checkEqual(allCompleted.count, completed.count, "an unchanged refresh retains every completed photo")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "real edits after a recorded keyword baseline invalidate completed scores", knownBug: nil) {
+        let before = PhotosMedia.Revision(identifier: "A", modified: 11, width: 100, height: 80, duration: 1)
+        let after = PhotosMedia.Revision(identifier: "A", modified: 12, width: 100, height: 80, duration: 1)
+        check(!PhotosMedia.revisionsMatch([before], [after], keywordBaselines: ["A": 11]),
+              "an old snapshot equal to the keyword baseline must not hide a newer real edit")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "enabling downloads reads and scores only unfinished photos", knownBug: nil) {
         let image = try ImageFixture.cgImage(width: 16, height: 16)
         let log = PhotosAnalysisTestLog()

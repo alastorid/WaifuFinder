@@ -211,6 +211,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
     case face
     case definition
     case art
+    case trufor
     case ratingGeneral
     case ratingSensitive
     case ratingQuestionable
@@ -225,6 +226,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
         case .time: return "Time"
         case .definition: return "Face definition"
         case .face: return "Face"
+        case .trufor: return "TruFor"
         case .art: return "Art"
         case .ratingGeneral: return "General"
         case .ratingSensitive: return "Sensitive"
@@ -240,6 +242,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
         case .time: return "Position in the video. Ties fall through the other enabled signals."
         case .definition: return "Detail in native-resolution face crops, without size or position weighting."
         case .face: return "Vision face capture quality. Frames with no significant face sort last."
+        case .trufor: return "TruFor’s official forgery detection score. Lower values suggest less manipulation; unscored photos remain visible and sort last."
         case .art: return "Apple's image aesthetics score."
         case .ratingGeneral: return "WD Tagger's probability for the general rating class."
         case .ratingSensitive: return "WD Tagger's probability for the sensitive rating class."
@@ -302,6 +305,7 @@ struct FrameOrder: Equatable, Sendable, Codable {
     var ratingQuestionable: OrderTerm
     var ratingExplicit: OrderTerm
     var tagGeneralScore: OrderTerm
+    var trufor: OrderTerm
 
     /// By default, only visual distance is enabled. Other signals remain available
     /// as independent options; rating probabilities are opt-in in all presets.
@@ -310,7 +314,7 @@ struct FrameOrder: Equatable, Sendable, Codable {
          art: OrderTerm = .off(ascending: false), definition: OrderTerm = .off(ascending: false),
          ratingGeneral: OrderTerm = .off(ascending: false), ratingSensitive: OrderTerm = .off(ascending: false),
          ratingQuestionable: OrderTerm = .off(ascending: false), ratingExplicit: OrderTerm = .off(ascending: false),
-         tagGeneralScore: OrderTerm = .off(ascending: false)) {
+         tagGeneralScore: OrderTerm = .off(ascending: false), trufor: OrderTerm = .off(ascending:true)) {
         self.minimalVisualDistance = minimalVisualDistance
         self.time = time
         self.face = face
@@ -321,6 +325,30 @@ struct FrameOrder: Equatable, Sendable, Codable {
         self.ratingQuestionable = ratingQuestionable
         self.ratingExplicit = ratingExplicit
         self.tagGeneralScore = tagGeneralScore
+        self.trufor=trufor
+    }
+
+    private enum CodingKeys:String,CodingKey { case minimalVisualDistance, time, face, art, definition, ratingGeneral, ratingSensitive, ratingQuestionable, ratingExplicit, tagGeneralScore, trufor }
+    init(from decoder:Decoder) throws {
+        self.init()
+        let values=try decoder.container(keyedBy:CodingKeys.self)
+        minimalVisualDistance=try values.decodeIfPresent(OrderTerm.self,forKey:.minimalVisualDistance) ?? minimalVisualDistance
+        time=try values.decodeIfPresent(OrderTerm.self,forKey:.time) ?? time
+        face=try values.decodeIfPresent(OrderTerm.self,forKey:.face) ?? face
+        art=try values.decodeIfPresent(OrderTerm.self,forKey:.art) ?? art
+        definition=try values.decodeIfPresent(OrderTerm.self,forKey:.definition) ?? definition
+        ratingGeneral=try values.decodeIfPresent(OrderTerm.self,forKey:.ratingGeneral) ?? ratingGeneral
+        ratingSensitive=try values.decodeIfPresent(OrderTerm.self,forKey:.ratingSensitive) ?? ratingSensitive
+        ratingQuestionable=try values.decodeIfPresent(OrderTerm.self,forKey:.ratingQuestionable) ?? ratingQuestionable
+        ratingExplicit=try values.decodeIfPresent(OrderTerm.self,forKey:.ratingExplicit) ?? ratingExplicit
+        tagGeneralScore=try values.decodeIfPresent(OrderTerm.self,forKey:.tagGeneralScore) ?? tagGeneralScore
+        trufor=try values.decodeIfPresent(OrderTerm.self,forKey:.trufor) ?? trufor
+    }
+
+    var withoutForensic:FrameOrder {
+        var value=self;value.trufor.enabled=false
+        if value.enabledCount==0 { value.time = .chronological }
+        return value
     }
 
     // MARK: - The terms in force
@@ -337,13 +365,14 @@ struct FrameOrder: Equatable, Sendable, Codable {
         if ratingSensitive.enabled { terms.append(SortTerm(key: .ratingSensitive, ascending: ratingSensitive.ascending)) }
         if ratingQuestionable.enabled { terms.append(SortTerm(key: .ratingQuestionable, ascending: ratingQuestionable.ascending)) }
         if ratingExplicit.enabled { terms.append(SortTerm(key: .ratingExplicit, ascending: ratingExplicit.ascending)) }
+        if trufor.enabled { terms.append(SortTerm(key:.trufor,ascending:trufor.ascending)) }
         if tagGeneralScore.enabled { terms.append(SortTerm(key: .tagGeneralScore, ascending: tagGeneralScore.ascending)) }
         return terms
     }
 
     var enabledCount: Int {
         [minimalVisualDistance.enabled, time.enabled, definition.enabled, face.enabled, art.enabled, ratingGeneral.enabled, ratingSensitive.enabled,
-         ratingQuestionable.enabled, ratingExplicit.enabled, tagGeneralScore.enabled].filter { $0 }.count
+         ratingQuestionable.enabled, ratingExplicit.enabled, tagGeneralScore.enabled, trufor.enabled].filter { $0 }.count
     }
 
     /// The term for `key`, always present (a switched-off signal is a term with
@@ -358,6 +387,7 @@ struct FrameOrder: Equatable, Sendable, Codable {
         case .ratingSensitive: return ratingSensitive
         case .ratingQuestionable: return ratingQuestionable
         case .ratingExplicit: return ratingExplicit
+        case .trufor: return trufor
         case .tagGeneralScore: return tagGeneralScore
         case .art: return art
         }
@@ -384,6 +414,7 @@ struct FrameOrder: Equatable, Sendable, Codable {
         case .ratingSensitive: ratingSensitive.enabled = enabled
         case .ratingQuestionable: ratingQuestionable.enabled = enabled
         case .ratingExplicit: ratingExplicit.enabled = enabled
+        case .trufor: trufor.enabled = enabled
         case .tagGeneralScore: tagGeneralScore.enabled = enabled
         case .art: art.enabled = enabled
         }
@@ -401,6 +432,7 @@ struct FrameOrder: Equatable, Sendable, Codable {
         case .ratingSensitive: ratingSensitive.ascending = ascending
         case .ratingQuestionable: ratingQuestionable.ascending = ascending
         case .ratingExplicit: ratingExplicit.ascending = ascending
+        case .trufor: trufor.ascending = ascending
         case .tagGeneralScore: tagGeneralScore.ascending = ascending
         case .art: art.ascending = ascending
         }
@@ -425,7 +457,8 @@ struct FrameOrder: Equatable, Sendable, Codable {
             ratingSensitive: OrderTerm(enabled: keys.contains(.ratingSensitive), ascending: false),
             ratingQuestionable: OrderTerm(enabled: keys.contains(.ratingQuestionable), ascending: false),
             ratingExplicit: OrderTerm(enabled: keys.contains(.ratingExplicit), ascending: false),
-            tagGeneralScore: OrderTerm(enabled: keys.contains(.tagGeneralScore), ascending: false)
+            tagGeneralScore: OrderTerm(enabled: keys.contains(.tagGeneralScore), ascending: false),
+            trufor: OrderTerm(enabled:keys.contains(.trufor),ascending:true)
         )
     }
 
@@ -504,6 +537,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
     var ratingQuestionable: FrameLimit = .unlimited
     var ratingExplicit: FrameLimit = .unlimited
     var tagGeneralScore: FrameLimit = .unlimited
+    var trufor: FrameLimit = .unlimited
 
     static let none = FrameLimits()
 
@@ -511,7 +545,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
         time.isUnlimited && face.isUnlimited && art.isUnlimited && definition.isUnlimited
             && ratingGeneral.isUnlimited && ratingSensitive.isUnlimited
             && ratingQuestionable.isUnlimited && ratingExplicit.isUnlimited
-            && tagGeneralScore.isUnlimited
+            && tagGeneralScore.isUnlimited && trufor.isUnlimited
     }
 
     private var hasRatingLimits: Bool {
@@ -529,6 +563,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
         case .ratingSensitive: return ratingSensitive
         case .ratingQuestionable: return ratingQuestionable
         case .ratingExplicit: return ratingExplicit
+        case .trufor: return trufor
         case .tagGeneralScore: return tagGeneralScore
         case .art: return art
         }
@@ -544,6 +579,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
         case .ratingSensitive: ratingSensitive = limit
         case .ratingQuestionable: ratingQuestionable = limit
         case .ratingExplicit: ratingExplicit = limit
+        case .trufor: trufor = limit
         case .tagGeneralScore: tagGeneralScore = limit
         case .art: art = limit
         }
@@ -564,6 +600,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
             && art.contains(Double(frame.artScore))
             && face.contains(faceScore)
             && definition.contains(frame.faceDefinitionScore.map(Double.init))
+            && (frame.validTruForScore == nil || trufor.contains(frame.validTruForScore.map(Double.init)))
             && tagGeneralScore.contains(frame.tagGeneralScore.map(Double.init)) else { return false }
         guard hasRatingLimits else { return true }
         let ratings = RatingProbabilityScores(frame: frame)
@@ -583,6 +620,7 @@ struct FrameLimits: Hashable, Sendable, Codable {
             && art.contains(Double(frame.artScore))
             && face.contains(faceScore)
             && definition.contains(frame.faceDefinitionScore.map(Double.init))
+            && (frame.validTruForScore == nil || trufor.contains(frame.validTruForScore.map(Double.init)))
     }
 }
 
@@ -606,6 +644,7 @@ struct FrameLimitBounds: Equatable, Sendable {
     var ratingQuestionable: ClosedRange<Double>? = nil
     var ratingExplicit: ClosedRange<Double>? = nil
     var tagGeneralScore: ClosedRange<Double>? = nil
+    var trufor: ClosedRange<Double>? = nil
 
     func range(for key: FrameSortKey) -> ClosedRange<Double>? {
         switch key {
@@ -617,6 +656,7 @@ struct FrameLimitBounds: Equatable, Sendable {
         case .ratingSensitive: return ratingSensitive
         case .ratingQuestionable: return ratingQuestionable
         case .ratingExplicit: return ratingExplicit
+        case .trufor: return trufor
         case .tagGeneralScore: return tagGeneralScore
         case .art: return art
         }
@@ -638,7 +678,8 @@ struct FrameLimitBounds: Equatable, Sendable {
             ratingSensitive: hasRatingScores ? 0...1 : nil,
             ratingQuestionable: hasRatingScores ? 0...1 : nil,
             ratingExplicit: hasRatingScores ? 0...1 : nil,
-            tagGeneralScore: span(frames.compactMap { $0.tagGeneralScore.map(Double.init) })
+            tagGeneralScore: span(frames.compactMap { $0.tagGeneralScore.map(Double.init) }),
+            trufor: span(frames.compactMap { $0.validTruForScore.map(Double.init) }).map { max(0,$0.lowerBound)...min(1,$0.upperBound) }
         )
     }
 
@@ -840,6 +881,7 @@ enum FrameArrangement {
         let ratingQuestionable: Float?
         let ratingExplicit: Float?
         let tagGeneralScore: Float?
+        let trufor: Float?
         let tagScore: Float?
         let time: Double
         let identifier: String
@@ -859,6 +901,7 @@ enum FrameArrangement {
             self.ratingSensitive = ratings?.value(for: .sensitive).map(Float.init)
             self.ratingQuestionable = ratings?.value(for: .questionable).map(Float.init)
             self.ratingExplicit = ratings?.value(for: .explicit).map(Float.init)
+            self.trufor=frame.validTruForScore
             self.tagGeneralScore = frame.tagGeneralScore
             self.tagScore = tagScoreIndex == nil ? nil : probabilities?.last
             self.face = FrameRanker.faceIsSignificant(frame, settings: grouping) ? frame.faceScore : nil
@@ -886,7 +929,7 @@ enum FrameArrangement {
                 return Self.oriented(Self.compare(art, other.art), ascending: term.ascending)
             case .time:
                 return Self.oriented(Self.compare(time, other.time), ascending: term.ascending)
-            case .face, .definition, .ratingGeneral, .ratingSensitive, .ratingQuestionable, .ratingExplicit, .tagGeneralScore:
+            case .face, .definition, .ratingGeneral, .ratingSensitive, .ratingQuestionable, .ratingExplicit, .tagGeneralScore, .trufor:
                 // A missing face is not a low score — `nil` means no significant face
                 // was found — and a missing rating head has no probability — so it
                 // sorts after every frame with a value whichever way the term points.
@@ -899,6 +942,7 @@ enum FrameArrangement {
                 case .ratingSensitive: (leftValue, rightValue) = (ratingSensitive, other.ratingSensitive)
                 case .ratingQuestionable: (leftValue, rightValue) = (ratingQuestionable, other.ratingQuestionable)
                 case .ratingExplicit: (leftValue, rightValue) = (ratingExplicit, other.ratingExplicit)
+                case .trufor: (leftValue,rightValue)=(trufor,other.trufor)
                 case .tagGeneralScore: (leftValue, rightValue) = (tagGeneralScore, other.tagGeneralScore)
                 case .minimalVisualDistance, .time, .art: return .orderedSame
                 }
@@ -950,4 +994,23 @@ enum FrameArrangement {
         // Total order: the identifier decides, so the list cannot reshuffle.
         return lhs.identifier < rhs.identifier
     }
+}
+
+extension FrameLimits {
+    private enum CodingKeys:String,CodingKey { case time,face,art,definition,ratingGeneral,ratingSensitive,ratingQuestionable,ratingExplicit,tagGeneralScore,trufor }
+    init(from decoder:Decoder) throws {
+        self.init()
+        let values=try decoder.container(keyedBy:CodingKeys.self)
+        time=try values.decodeIfPresent(FrameLimit.self,forKey:.time) ?? .unlimited
+        face=try values.decodeIfPresent(FrameLimit.self,forKey:.face) ?? .unlimited
+        art=try values.decodeIfPresent(FrameLimit.self,forKey:.art) ?? .unlimited
+        definition=try values.decodeIfPresent(FrameLimit.self,forKey:.definition) ?? .unlimited
+        ratingGeneral=try values.decodeIfPresent(FrameLimit.self,forKey:.ratingGeneral) ?? .unlimited
+        ratingSensitive=try values.decodeIfPresent(FrameLimit.self,forKey:.ratingSensitive) ?? .unlimited
+        ratingQuestionable=try values.decodeIfPresent(FrameLimit.self,forKey:.ratingQuestionable) ?? .unlimited
+        ratingExplicit=try values.decodeIfPresent(FrameLimit.self,forKey:.ratingExplicit) ?? .unlimited
+        tagGeneralScore=try values.decodeIfPresent(FrameLimit.self,forKey:.tagGeneralScore) ?? .unlimited
+        trufor=try values.decodeIfPresent(FrameLimit.self,forKey:.trufor) ?? .unlimited
+    }
+    var withoutForensic:FrameLimits { var value=self;value.trufor = .unlimited;return value }
 }

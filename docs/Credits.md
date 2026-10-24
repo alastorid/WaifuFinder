@@ -94,4 +94,28 @@ are additional recognition and do not replace them. No GPL/LGPL project is inclu
 in the credit inventory or approved as a dependency.
 
 #OpenSource #NVIDIA #cuOpt #Metal #AppleSilicon #Swift #MLX #SeedVR2 #FlashVSR
-#RealESRGAN #BasicSR #WDTagger #InferKit #PyTorch #HuggingFace
+#RealESRGAN #BasicSR #WDTagger #InferKit #PyTorch #HuggingFace #TruFor
+
+## SAFIRE for Photos
+
+Native spatial forensics adapts [SAFIRE](https://github.com/mjkwon2021/SAFIRE)
+(Kwon et al., AAAI 2025) and its Meta SAM/ViT components under Apache-2.0.
+The official pretrained weights and their lossless Swift/MLX conversion retain
+CC BY 4.0 attribution. Native fixed-point resampling retains the OpenCV BSD
+notice; cosine clustering retains the kmeans_pytorch MIT notice. Full terms,
+source revision, checkpoint hashes and the audited offline-reference inventory
+are bundled in the `Runtime/SAFIRE-*` files. WaifuFinder's independently authored
+source remains MIT. See [SAFIRE for Photos](ImageLineage.md) for measured native
+validation and the separate NASA fixture credits.
+
+## TruFor for Photos
+
+Photos forensic scoring adapts [TruFor](https://github.com/grip-unina/TruFor)
+(Guillaro, Cozzolino, Sud, Dufour, Verdoliva — CVPR 2023), copyright GRIP-UNINA,
+whose licence permits informational and nonprofit use only and requires crediting
+the original authors whenever results are made public. The CMX fusion components
+are Huayao Liu's MIT-licensed work. The converted weights carry the original
+licence and notices rather than a relicense; the full terms travel in
+`Runtime/TRUFOR-LICENSE.txt` and `Runtime/TRUFOR-CMX-LICENSE.txt`.
+WaifuFinder's independently authored source remains MIT. See
+[TruFor for Photos](TruFor.md) for conversion, validation and measurements.

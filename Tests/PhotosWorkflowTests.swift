@@ -214,6 +214,101 @@ func registerPhotosWorkflowTests() {
             check(rendition.width <= width && rendition.height <= height, "renditions never upscale")
         }
     })
+
+    Registry.shared.add(suite: suite, TestCase(name: "album comparison ignores only the modification bumps our keyword writes made", knownBug: nil) {
+        func revision(_ id: String, _ modified: Double, width: Int = 100, height: Int = 80) -> PhotosMedia.Revision {
+            PhotosMedia.Revision(identifier: id, modified: modified, width: width, height: height, duration: 1)
+        }
+        let before = [revision("A", 10), revision("B", 20), revision("C", 30)]
+        let baselines = ["A": 11.0, "B": 21.0]  // keyword writes bumped A and B
+        let after = [revision("A", 11), revision("B", 21), revision("C", 30)]
+        check(PhotosMedia.revisionsMatch(before, after, keywordBaselines: baselines),
+              "keyword-only bumps compare as unchanged, so nothing is reloaded or re-analyzed")
+        check(PhotosMedia.revisionsMatch(after, before, keywordBaselines: baselines),
+              "the comparison is direction-independent")
+        check(!PhotosMedia.revisionsMatch(before, after, keywordBaselines: [:]),
+              "without a baseline the bump reads as a real change")
+        let edited = [revision("A", 11), revision("B", 25), revision("C", 30)]
+        check(!PhotosMedia.revisionsMatch(before, edited, keywordBaselines: baselines),
+              "a later real edit moves past the baseline and is detected")
+        check(!PhotosMedia.revisionsMatch([revision("A", 10)],
+                                          [revision("A", 10), revision("B", 20)],
+                                          keywordBaselines: baselines),
+              "a membership change never compares as unchanged")
+        check(!PhotosMedia.revisionsMatch([revision("A", 10, width: 200)],
+                                          [revision("A", 11, width: 100)],
+                                          keywordBaselines: ["A": 11.0]),
+              "geometry changes are not absorbed by a baseline")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "deletion-only snapshots preserve survivors and reject other content changes", knownBug: nil) {
+        func revision(_ id: String, _ modified: Double = 10) -> PhotosMedia.Revision {
+            PhotosMedia.Revision(identifier: id, modified: modified, width: 100, height: 80, duration: 1)
+        }
+        let before = [revision("A"), revision("B"), revision("C"), revision("D")]
+        checkEqual(PhotosMedia.removedAssetIDs(from: before, to: [revision("B"), revision("D")], keywordBaselines: [:]),
+                   Set(["A", "C"]), "removals at the beginning and middle are incremental")
+        checkEqual(PhotosMedia.removedAssetIDs(from: before, to: [], keywordBaselines: [:]),
+                   Set(["A", "B", "C", "D"]), "deleting the last photos preserves an empty workspace")
+        checkEqual(PhotosMedia.removedAssetIDs(from: before, to: [revision("B", 11)], keywordBaselines: ["B": 11]),
+                   Set(["A", "C", "D"]), "keyword echoes do not force reanalysis of survivors")
+        for after in [[revision("D"), revision("B")], [revision("B", 12)], [revision("X")], before] {
+            checkNil(PhotosMedia.removedAssetIDs(from: before, to: after, keywordBaselines: [:]),
+                     "moves, edits, additions and unchanged snapshots do not take the deletion path")
+        }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "removing analyzed photos preserves surviving results and workspace state", knownBug: nil) {
+        let directory = try Temporary.directory("photos-incremental-deletion")
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let photos = (0..<4).map { index in
+                var frame = AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index),
+                              faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: Data())
+                frame.topTags = ["photo-\(index)"]
+                return frame
+            }
+            session.updateAnalyzedFrames(photos)
+            session.selectFrame(photos[1].id)
+            session.selectFrame(photos[2].id, command: true)
+            session.previewFrame = photos[2]
+            let generation = session.thumbnailGeneration
+            let progress = session.progress
+            session.removeAnalyzedFrames([photos[0].id, photos[1].id])
+            checkEqual(session.frames, Array(photos.suffix(2)), "survivors retain IDs, timestamps, scores and metadata")
+            checkEqual(session.selectedFrameIDs, Set([photos[2].id]), "only deleted selections disappear")
+            checkEqual(session.previewFrame, photos[2], "a surviving preview stays open")
+            checkEqual(session.focusedFrameID, photos[2].id, "surviving focus stays put")
+            checkEqual(session.thumbnailGeneration, generation, "thumbnail identity is unchanged")
+            checkEqual(session.progress.phase, progress.phase, "no new analysis starts")
+            session.removeAnalyzedFrames(Set(photos.map(\.id)))
+            check(session.frames.isEmpty && session.selectedFrameIDs.isEmpty, "all-deleted results clear")
+            checkNil(session.previewFrame, "a deleted preview closes")
+            checkNil(session.focusedFrameID, "deleted focus clears")
+        }.value
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "library change digests recognize keyword-write echoes precisely", knownBug: nil) {
+        let written: Set<String> = ["A", "B"]
+        var echo = PhotosLibraryChanges.Digest()
+        echo.albumAffected = true
+        echo.changedAssetIDs = ["A", "B"]
+        check(echo.isEcho(ofWritten: written), "changed-only notifications confined to written photos are our echoes")
+        var structural = echo
+        structural.structural = true
+        check(!structural.isEcho(ofWritten: written), "insertions, deletions and moves are never keyword echoes")
+        var foreign = echo
+        foreign.changedAssetIDs = ["A", "X"]
+        check(!foreign.isEcho(ofWritten: written), "a photo we never wrote needs a real refresh")
+        var untouched = PhotosLibraryChanges.Digest()
+        untouched.changedAssetIDs = ["A"]
+        check(!untouched.isEcho(ofWritten: written), "changes outside the observed albums are not keyword echoes")
+        var empty = echo
+        empty.changedAssetIDs = []
+        check(!empty.isEcho(ofWritten: written), "an empty digest never claims to be an echo")
+        checkEqual(PhotosLibraryChanges.shared.consumeDigest(), PhotosLibraryChanges.Digest(),
+                   "consumption clears the accumulated digest")
+    })
 }
 
 private actor PhotosOrderSyncProbe {

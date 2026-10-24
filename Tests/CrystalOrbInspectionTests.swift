@@ -214,11 +214,11 @@ func registerCrystalOrbInspectionTests() {
         checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).count, WaifuCrystalOrbModel.candidateLimit, "a wide band still stops at the cap")
         checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).last?.id.sampleIndex, 32, "the cap keeps the closest matches")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "four comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
         try await Task { @MainActor in
             let model = WaifuCrystalOrbModel()
             checkEqual(model.mode,.sideBySide,"Side by Side is the default")
-            checkEqual(WaifuCrystalOrbModel.Mode.allCases.count,4,"all original modes remain")
+            checkEqual(Set(WaifuCrystalOrbModel.Mode.allCases),Set([.sideBySide,.swipe,.toggle,.difference,.alpha,.blink]),"original and forensic comparison modes remain available")
             let session = WaifuSession(settingsURL: try Temporary.directory("orb-inspection-keys").appendingPathComponent("settings.json"))
             model.open(session: session)
             func key(_ characters: String,_ code: UInt16,_ type: NSEvent.EventType = .keyDown) -> NSEvent {

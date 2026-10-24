@@ -22,6 +22,21 @@ struct RemoteModelCatalog: Sendable {
     /// A cancelled native worker cannot be reused on the next connection.
     var releaseTagger: @Sendable () async -> Void = {}
 
+    /// The same native backend is used by Photos and serving workers. Keeping
+    /// this seam in the catalog allows real-model loopback tests without touching
+    /// the user's configured model directory.
+    var safire: @Sendable (RemoteSafireRequest) async throws -> SafireSpatialResult = { request in
+        guard let config=SafireConfiguration.load(),config.fingerprint==request.modelFingerprint else {
+            throw RemoteError.modelUnavailable("SAFIRE checkpoint fingerprint differs from the requested revision.")
+        }
+        return try await SafireBackend.shared.infer(png:request.png,photo:request.photo)
+    }
+
+    var trufor:@Sendable (RemoteTruForRequest) async throws -> TruForJobResult = { request in
+        guard TruForConfiguration.load()?.fingerprint==request.fingerprint else { throw RemoteError.modelUnavailable("Install matching local TruFor weights on the server") }
+        return try await TruForBackend.shared.submit(images:request.images,evidence:request.evidence)
+    }
+
     static let local = RemoteModelCatalog(
         tagger: { try await RemoteServerResources.shared.tagger() },
         backend: { $0.makeBackend() },

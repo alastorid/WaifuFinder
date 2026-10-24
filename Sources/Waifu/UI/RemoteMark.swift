@@ -10,16 +10,17 @@ import SwiftUI
 /// than something the user has to decode.
 struct RemoteMark: ViewModifier {
     let available: Bool
+    var includeLocal = false
 
     func body(content: Content) -> some View {
         HStack(spacing: 1) {
             content
             if available {
-                Text("R")
+                Text(includeLocal ? "R+L" : "R")
                     .font(.system(size: 9, weight: .semibold))
                     .baselineOffset(5)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("runs on the connected server")
+                    .accessibilityLabel(includeLocal ? "runs locally and on the connected server" : "runs on the connected server")
             }
         }
     }
@@ -29,8 +30,8 @@ extension View {
     /// Marks an inference control as remote-executable. The mark's presence is
     /// decided by `available` alone, so a caller cannot accidentally show a
     /// glyph for a capability the server does not have.
-    func remoteMark(_ available: Bool) -> some View {
-        modifier(RemoteMark(available: available))
+    func remoteMark(_ available: Bool, includeLocal: Bool = false) -> some View {
+        modifier(RemoteMark(available: available, includeLocal: includeLocal))
     }
 }
 

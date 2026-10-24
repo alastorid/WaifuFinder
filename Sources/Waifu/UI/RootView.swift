@@ -15,6 +15,7 @@ import UniformTypeIdentifiers
 struct RootView: View {
     @StateObject private var session = WaifuSession()
     @StateObject private var orb = WaifuCrystalOrbModel()
+    @StateObject private var lineage = ImageLineageModel()
     // Only the player panel observes its clock; playback must not refresh the grid.
     @State private var preview = PreviewController()
     // One per window, shared by the Sort and Filter fraction and the cloud in the
@@ -47,13 +48,17 @@ struct RootView: View {
         return PhotosMedia.shared.album(url)
     }
 
-    var body: some View {
+    private var workspaceLayers: some View {
         ZStack {
             if showWelcomeScreen {
                 DropZone(session: session, isPrimary: true, isTargeted: isDropTargeted, openPhotos: openPhotosWorkspace)
             } else if showPhotosWorkspace {
                 PhotosWorkspaceView(session: session, onBack: navigateBack) {
-                    mainContent
+                    ZStack {
+                        mainContent.opacity(lineage.isOpen ? 0 : 1).allowsHitTesting(!lineage.isOpen)
+                            .accessibilityHidden(lineage.isOpen)
+                        if lineage.isOpen { ImageLineageView(model:lineage,session:session) }
+                    }
                 }
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
                 .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
@@ -98,14 +103,21 @@ struct RootView: View {
             ChiaroscuroWindowLayer(link: link)
                 .frame(width: 0, height: 0)
         }
+    }
+
+    private var routedWorkspace: some View {
+        workspaceLayers
         // The one drop registration for the whole window. A second nested
         // registration over the same pixels races two loads on the same drag
         // providers; one drop must be handled exactly once.
         .onDrop(of: [.fileURL, .url, .image], isTargeted: $isDropTargeted) { providers in
             CrystalOrbImport.accept(providers, model: orb, session: session)
         }
-        .onDisappear { if orb.isOpen { orb.close() } }
-        .onChange(of: session.thumbnailGeneration) { _, _ in orb.sourceChanged(session: session) }
+        .onDisappear { lineage.close(); if orb.isOpen { orb.close() } }
+        .onChange(of: session.thumbnailGeneration) { _, _ in
+            orb.sourceChanged(session: session)
+            if lineage.isOpen { lineage.refresh(session:session) }
+        }
         .onChange(of: orb.isOpen) { _, active in if active { preview.pause() } }
         .onOpenURL { url in
             if CrystalOrbImageSource.isImage(url) {
@@ -118,8 +130,12 @@ struct RootView: View {
             }
             else { session.errorMessage = "Unsupported media URL. Use an HTTP or HTTPS link." }
         }
+    }
+
+    var body: some View {
+        routedWorkspace
         .background {
-            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb)
+            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb, lineage:lineage)
                 .frame(width: 0, height: 0)
         }
         .background {
@@ -130,6 +146,7 @@ struct RootView: View {
                 .frame(width: 0, height: 0)
         }
         .onChange(of: session.photosAlbumURL) { old, new in
+            if old != new && lineage.isOpen { lineage.close() }
             if old != nil && new == nil { showPhotosWorkspace = false }
         }
         .onChange(of: downloadFromICloud) { _, enabled in
@@ -149,8 +166,9 @@ struct RootView: View {
         }
         .toolbar {
             // The title bar carries the window-level controls and the workspace's
-            // icon actions, top right; status text lives at the top of the right panel.
-            if showWelcomeScreen && !showPhotosWorkspace && session.isWritingPhotosTags {
+            // icon actions, top right; status text rides in the same right edge,
+            // just before those icons, inside its tag-like capsule.
+            if session.isWritingPhotosTags {
                 ToolbarItem(placement: .primaryAction) {
                     PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
                 }
@@ -207,6 +225,7 @@ struct RootView: View {
             orb.close()
             return
         }
+        if lineage.isOpen { lineage.close(); return }
         if showPhotosWorkspace {
             if photosOpenedFromRanked, session.video != nil {
                 showPhotosWorkspace = false
@@ -219,6 +238,7 @@ struct RootView: View {
     }
 
     private func returnToWelcome() {
+        lineage.close()
         if orb.isOpen { orb.close() }
         preview.pause()
         if session.progress.isRunning { session.cancel() }
@@ -236,15 +256,15 @@ struct RootView: View {
             if rightPanelExpanded { preview.pause() }
             rightPanelExpanded.toggle()
         } label: {
-            Label(orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
+            Label(lineage.isOpen ? "Photo information and evidence" : orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
         }
         .labelStyle(.iconOnly)
         .accessibilityLabel(rightPanelExpanded ? "Hide right panel" : "Show right panel")
     }
 
-    /// The workspace's icon actions, top right of the title bar. Status text is
-    /// the right panel's business; the back button owns leaving a workspace, so
-    /// the orb button only appears while the orb is closed.
+    /// The workspace's icon actions, top right of the title bar, with status
+    /// capsules to their left. The back button owns leaving a workspace, so the
+    /// orb button only appears while the orb is closed.
     private var workspaceToolbarControls: some View {
         HStack(spacing: 8) {
             if !orb.isOpen {
@@ -297,7 +317,7 @@ struct RootView: View {
             Button {
                 if session.progress.isRunning { session.cancel() } else { session.analyze() }
             } label: {
-                Label(session.progress.isRunning ? "Cancel analysis" : "Analyze album",
+                Label(session.progress.isRunning ? "Cancel analysis" : "Refresh album",
                       systemImage: session.progress.isRunning ? "stop.circle" : "arrow.clockwise")
             }
             .labelStyle(.iconOnly)
@@ -373,23 +393,22 @@ struct RootView: View {
                     case .additiveRange: session.selectFrame(frame.id, command: true, shift: true)
                     case .double: break
                     }
+                },
+                onSafire: { frame in
+                    preview.pause()
+                    lineage.open(session:session,anchoredAt:frame)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            // Photos and ranked media share the preview and sorting controls.
             if rightPanelExpanded {
                 Divider()
                 VStack(spacing: 0) {
-                    // The right panel's own header is status only: the keyword job
-                    // while one runs, nothing otherwise. Icon actions are in the
-                    // title bar; grid zoom is gesture and keyboard shortcut only.
-                    if session.isWritingPhotosTags {
-                        PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Divider()
-                    }
+                    // The right panel starts directly with its panes: the keyword
+                    // job status shows in the title bar, right of center and just
+                    // before the icon actions. Icon actions are in the title bar;
+                    // grid zoom is gesture and keyboard shortcut only.
                     VideoPreviewPanel(session: session, preview: preview)
                     Divider()
                     FrameOrderPanel(session: session, link: link)

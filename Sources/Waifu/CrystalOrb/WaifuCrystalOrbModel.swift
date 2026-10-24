@@ -12,7 +12,10 @@ import Combine
 
 @MainActor
 final class WaifuCrystalOrbModel: ObservableObject {
-    enum Mode: String, CaseIterable { case sideBySide = "Side by Side", swipe = "Swipe", toggle = "Toggle", difference = "Difference" }
+    enum Mode: String, CaseIterable {
+        case sideBySide = "Side by Side", swipe = "Swipe", toggle = "Toggle", difference = "Difference", alpha = "Alpha Overlay", blink = "Blink"
+        static let standardModes: [Self] = [.sideBySide,.swipe,.toggle,.difference]
+    }
     struct Pair {
         let queryID: UUID
         let frame: AnalyzedFrame
@@ -179,6 +182,31 @@ final class WaifuCrystalOrbModel: ObservableObject {
     var candidateIsPhoto: Bool { selected.map { photoURL(for: $0) != nil } ?? false }
     var pairIsCurrent: Bool { pair?.queryID == query?.id && pair?.frame.id == selectedID }
 
+    /// A fixed Photos pair for Image Lineage, using the same comparison,
+    /// registration, raster and pixel inspection pipeline without opening search.
+    private var lineagePairIdentity: String?
+    func inspectLineage(target: CGImage, candidate: CGImage, metadata: PhotoMetadata,
+                        frame: AnalyzedFrame, session: WaifuSession, original: Bool,
+                        targetNativeSize: CGSize? = nil, candidateNativeSize: CGSize? = nil,
+                        pairIdentity: String? = nil) {
+        let preserveNavigation = pairIdentity != nil && pairIdentity == lineagePairIdentity && pair != nil
+        let previousRegistration = preserveNavigation ? registration : .init()
+        lineagePairIdentity = pairIdentity
+        cancelInspection(); comparisonTask?.cancel(); differenceTask?.cancel()
+        self.session = session; generation = session.thumbnailGeneration
+        let id = UUID()
+        query = CrystalOrbQuery(id:id,image:target,metadata:metadata,fileURL:nil,
+            nativeSize:targetNativeSize ?? CGSize(width:target.width,height:target.height),isOriginal:original)
+        selectedID = frame.id; selectedMatch = CrystalOrbMatch(frame:frame,distance:0)
+        let alignment = CrystalOrbAlignment(target:targetNativeSize ?? CGSize(width:target.width,height:target.height),
+                                           candidate:candidateNativeSize ?? CGSize(width:candidate.width,height:candidate.height),registration:previousRegistration)
+        pair = Pair(queryID:id,frame:frame,target:target,candidate:candidate,alignment:alignment,
+                    targetIsOriginal:original,candidateIsOriginal:original,candidateNativeSize:alignment.candidateSize)
+        loading = false; comparisonError = nil; registration = previousRegistration
+        if !preserveNavigation { resetZoom() }
+        refreshVisualization()
+    }
+
     func open(session: WaifuSession) {
         self.session = session
         if !isOpen { session.previewFrame = nil; session.closeUncover() }
@@ -188,6 +216,8 @@ final class WaifuCrystalOrbModel: ObservableObject {
     }
 
     func close() {
+        let ownedWorkspaceNavigation = isOpen
+        lineagePairIdentity = nil
         cancelInspection()
         cancelSearch()
         importTask?.cancel(); importTicket = UUID(); dropTicket = UUID()
@@ -200,8 +230,10 @@ final class WaifuCrystalOrbModel: ObservableObject {
         holdingToggle = false
         importing = false
         isOpen = false
-        session?.crystalOrbIsOpen = false
-        session?.finishCrystalOrbNavigation()
+        if ownedWorkspaceNavigation {
+            session?.crystalOrbIsOpen = false
+            session?.finishCrystalOrbNavigation()
+        }
         // Release the potentially large external bitmap; reusable features remain in the engine.
         query = nil; matches = []; selectedID = nil; selectedMatch = nil; candidateMetadata = nil
         status = nil
@@ -603,16 +635,19 @@ final class WaifuCrystalOrbModel: ObservableObject {
             } catch { if pixelTicket == ticket { pixelTask = nil } }
         }
     }
-    func autoAlign() {
+    func autoAlign(includeScale: Bool = false) {
         guard let input = pair, pairIsCurrent, !alignmentLocked else { return }
         followsBestMatch = false
         registrationTask?.cancel(); let revision = UUID(); registrationTicket = revision
         let ticket = comparisonTicket
-        registering = true; alignmentMessage = "Estimating translation…"
+        registering = true; alignmentMessage = includeScale ? "Matching shared image detail…" : "Estimating translation…"
         registrationTask = Task {
             do {
-                let result = try await CrystalOrbRegistrar.shared.align(target: input.target, candidate: input.candidate,
+                var result = try await CrystalOrbRegistrar.shared.align(target: input.target, candidate: input.candidate,
                     geometry: input.alignment, query: input.queryID, frame: input.frame.id, generation: generation)
+                if includeScale, (result?.correlation ?? -1) < 0.985 {
+                    result = try await LineageCropRegistrar.shared.align(target:input.target,candidate:input.candidate,geometry:input.alignment)
+                }
                 guard !Task.isCancelled, registrationTicket == revision, comparisonTicket == ticket,
                       pair?.target === input.target, pair?.candidate === input.candidate else { return }
                 registering = false

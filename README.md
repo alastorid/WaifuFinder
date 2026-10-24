@@ -12,6 +12,28 @@ Public release builds include PGTFormer and are for non-commercial use. See
 
 The pre-squash commit hash record is backed up in a [private GitHub archive](https://github.com/alastorid/waifufinder-history-archive/blob/main/secret%20commit%20hash.md); access requires authorization to the private repository.
 
+## SAFIRE for Photos
+
+Right-click a Photos thumbnail and choose **SAFIRE**. It analyzes that photo, or
+its complete group in one-group-per-line mode. Each photo gets a clear highlighted
+overlay and a separate mask, sorted by lowest mask-area ratio first. The least
+masked versions are original candidates under that ranking rule, rather than a
+proven chronology. Photos preview also has a **SAFIRE** overlay/mask toggle.
+Install the model through Settings → Models. See [SAFIRE](docs/ImageLineage.md)
+for the workflow, validation, CPU/GPU measurements and remote execution.
+
+## TruFor forensic scores
+
+The Forensic section in the Photos ordering panel scores still photos with
+[TruFor](https://github.com/grip-unina/TruFor) (Guillaro et al., CVPR 2023):
+the official trained detection head produces the manipulation score at native
+resolution, and the Photos preview offers a **TruFor** toggle with genuine
+anomaly, reliability and Noiseprint++ layers. Install the model through
+Settings → Models. TruFor is redistributed with credit under the GRIP-UNINA
+licence: informational and nonprofit use only, and public results must credit
+the original authors. See [TruFor](docs/TruFor.md) for validation and
+measurements.
+
 ## Install on a Mac
 
 Requires Apple silicon and macOS 15 or later. Download the DMG from the

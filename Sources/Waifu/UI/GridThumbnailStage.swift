@@ -73,6 +73,9 @@ struct GridStageRow: Identifiable, Sendable {
     let cellWidth: CGFloat
     let contentHeight: CGFloat
     let originY: CGFloat
+    /// The gap drawn below this row. Group strips separate their sections; flat
+    /// thumbnail rows sit one pixel apart, matching the cells inside them.
+    let spacing: CGFloat
     var height: CGFloat { contentHeight + (strip ? 16 : 0) }
 }
 
@@ -97,10 +100,10 @@ struct GridStageSnapshot: Sendable {
         let groupWidth = min(max((key.width - 2 - CGFloat(key.groupColumns - 1)) / CGFloat(key.groupColumns), 80), 220)
         var result: [GridStageRow] = []
         var top: CGFloat = 1
-        let spacing: CGFloat = key.grouped ? 12 : 1
         let prefix = key.generation.uuidString + ":"
 
         func append(id: String, frames: ArraySlice<AnalyzedFrame>, strip: Bool, group: FrameGroupID?) {
+            let spacing: CGFloat = strip ? 12 : 1
             let width = strip ? groupWidth : flatWidth
             let items = frames.map { frame in
                 let cached = frame.thumbnailAspectRatio == nil
@@ -117,7 +120,7 @@ struct GridStageSnapshot: Sendable {
             if strip && beyond > 0 && !revealed { height = max(height, width * (key.square ? 1 : 9.0 / 16)) }
             let row = GridStageRow(id: id, items: items, strip: strip, groupID: group,
                                    beyond: beyond, revealed: revealed, cellWidth: width,
-                                   contentHeight: height, originY: top)
+                                   contentHeight: height, originY: top, spacing: spacing)
             result.append(row)
             top += row.height + spacing
         }
@@ -142,9 +145,23 @@ struct GridStageSnapshot: Sendable {
         let frameIndices = Dictionary(uniqueKeysWithValues: result.enumerated().flatMap { index, row in
             row.items.map { ($0.id, index) }
         })
-        return Self(key: key, navigation: FrameNavigationOrder(frames: input.frames, rows: input.rows, groupRows: key.grouped),
+        // The rows the grid draws, as ranges over the navigation sequence: strips
+        // and the chunked lines of an ungrouped run. `result`'s items follow
+        // `input.frames`/`input.rows` order, so the ranges index that sequence.
+        var lineRanges: [Range<Int>] = []
+        if key.grouped {
+            var start = 0
+            for row in result {
+                guard !row.items.isEmpty else { continue }
+                lineRanges.append(start..<start + row.items.count)
+                start += row.items.count
+            }
+        }
+        return Self(key: key, navigation: FrameNavigationOrder(frames: input.frames, rows: input.rows,
+                                                               groupRows: key.grouped,
+                                                               lineRanges: key.grouped ? lineRanges : nil),
                     sourceURL: input.sourceURL, rows: result,
-                    contentHeight: result.isEmpty ? 2 : top - spacing + 1, rowIndexByToken: indices,
+                    contentHeight: result.isEmpty ? 2 : top - (result.last?.spacing ?? 1) + 1, rowIndexByToken: indices,
                     rowIndexByFrameID: frameIndices)
     }
 

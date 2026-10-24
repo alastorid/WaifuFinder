@@ -45,7 +45,7 @@ struct TagResultCacheIdentity: Hashable, Sendable {
         vocabularyFingerprint = vocabulary.cacheFingerprint
     }
 
-    fileprivate init(sourcePath: String, sourceSize: UInt64, sourceModifiedMilliseconds: UInt64,
+    init(sourcePath: String, sourceSize: UInt64, sourceModifiedMilliseconds: UInt64,
                      analysisWidth: UInt32, vocabularyFingerprint: UInt64) {
         self.sourcePath = sourcePath
         self.sourceSize = sourceSize

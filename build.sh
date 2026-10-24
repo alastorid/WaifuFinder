@@ -71,6 +71,8 @@ rm -f "$APP/Contents/Resources/Runtime/waifu-svfr" \
 
 if [ "$ARCH" = arm64 ]; then
     "$ROOT/tools/build-native-uncover.sh"
+    "$ROOT/tools/build-native-safire.sh"
+    if [ "${WAIFU_COMMERCIAL_DISTRIBUTION:-0}" != "1" ]; then "$ROOT/tools/build-native-trufor.sh"; fi
     NATIVE="$APP/Contents/Resources/Runtime"
     PREVIOUS_NATIVE="$APP/Contents/Resources/NativeVideoRuntime"
     LEGACY_NATIVE="$APP/Contents/Resources/NativeSeedVR2"
@@ -98,6 +100,13 @@ if [ "$ARCH" = arm64 ]; then
     cp "$ROOT/.native-runtime/waifu-flashvsr" "$NATIVE/waifu-flashvsr"
     cp "$ROOT/.native-runtime/waifu-pgtformer" "$NATIVE/waifu-pgtformer"
     cp "$ROOT/.native-runtime/waifu-wdtagger" "$NATIVE/waifu-wdtagger"
+    cp "$ROOT/.native-runtime/waifu-safire" "$NATIVE/waifu-safire"
+    if [ "${WAIFU_COMMERCIAL_DISTRIBUTION:-0}" != "1" ]; then
+        cp "$ROOT/.native-runtime/waifu-trufor" "$NATIVE/waifu-trufor"
+        cp "$ROOT/Runtime/TRUFOR-LICENSE.txt" "$ROOT/Runtime/TRUFOR-CMX-LICENSE.txt" "$NATIVE/"
+    else
+        rm -f "$NATIVE/waifu-trufor" "$NATIVE/TRUFOR-LICENSE.txt" "$NATIVE/TRUFOR-CMX-LICENSE.txt"
+    fi
     ditto "$ROOT/.native-runtime/WaifuRuntime_WDTaggerMLX.bundle" "$NATIVE/WaifuRuntime_WDTaggerMLX.bundle"
     cp "$ROOT/.native-runtime/pos_emb.safetensors" "$APP/Contents/Resources/pos_emb.safetensors"
     # Keep the full license texts for every third-party package linked into the
@@ -115,6 +124,9 @@ if [ "$ARCH" = arm64 ]; then
     mkdir -p "$THIRD_PARTY"
     cp "$ROOT/Runtime/APP-THIRD-PARTY-NOTICES.md" "$THIRD_PARTY/README.md"
     cp "$ROOT/LICENSE" "$THIRD_PARTY/WaifuFinder-LICENSE"
+    for SAFIRE_NOTICE in SAFIRE-NOTICE.md SAFIRE-APACHE-LICENSE SAFIRE-WEIGHTS-LICENSE SAFIRE-OPENCV-LICENSE SAFIRE-KMEANS-LICENSE; do
+        cp "$ROOT/Runtime/$SAFIRE_NOTICE" "$THIRD_PARTY/$SAFIRE_NOTICE"
+    done
     cp "$ROOT/docs/Licensing.md" "$THIRD_PARTY/WaifuFinder-Licensing.md"
     cp "$ROOT/Runtime/THIRD_PARTY_LICENSES.md" "$THIRD_PARTY/THIRD_PARTY_LICENSES.md"
     cp "$ROOT/Runtime/INFERKIT-LICENSE" "$THIRD_PARTY/INFERKIT-LICENSE"
@@ -136,6 +148,8 @@ if [ "$ARCH" = arm64 ]; then
     codesign --force --sign - "$NATIVE/waifu-flashvsr"
     codesign --force --sign - "$NATIVE/waifu-pgtformer"
     codesign --force --sign - "$NATIVE/waifu-wdtagger"
+    codesign --force --sign - "$NATIVE/waifu-safire"
+    if [ -f "$NATIVE/waifu-trufor" ]; then codesign --force --sign - "$NATIVE/waifu-trufor"; fi
 fi
 
 # The native Metal TSP port is present on every architecture, including builds
@@ -151,12 +165,14 @@ cp "$ROOT/ThirdParty/cuopt/NOTICE" "$APP/Contents/Resources/ThirdPartyLicenses/c
 # build offers PGTFormer and is therefore non-commercial. See
 # Sources/Waifu/Model/WaifuDistribution.swift and docs/Licensing.md.
 RELEASES=(seedvr2 seedvr2-7b flashvsr realesrgan wd-tagger)
+if [ -f "$ROOT/tools/safire-release.json" ]; then RELEASES+=(safire); fi
 SWIFT_FLAGS=()
 if [ "${WAIFU_COMMERCIAL_DISTRIBUTION:-0}" = "1" ]; then
     SWIFT_FLAGS+=(-D WAIFU_COMMERCIAL_DISTRIBUTION)
-    echo "Building a COMMERCIAL distribution: PGTFormer is excluded."
+    echo "Building a COMMERCIAL distribution: PGTFormer and TruFor are excluded."
 else
     RELEASES+=(pgtformer)
+    if [ -f "$ROOT/tools/trufor-release.json" ]; then RELEASES+=(trufor); fi
 fi
 
 # Remove FFmpeg artifacts left by an older build so the app bundle contains no LGPL media runtime.

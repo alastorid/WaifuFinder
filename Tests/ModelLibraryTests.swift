@@ -103,12 +103,18 @@ func registerModelLibraryTests() {
         _ = await checkThrowsAsync("cancelled transfer throws") { try await task.value }
         checkEqual(try Data(contentsOf: target), existing, "cancellation leaves the installed model intact")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "every managed model has a pinned hosted release", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "downloadable models have pinned releases", knownBug: nil) {
         // PGTFormer and RealESRGAN used to arrive from a GitHub release or from a
         // hand-picked folder. A model with no descriptor is one the app cannot
         // download, verify or offer, so this fails loudly rather than at runtime.
-        let missing = ManagedModel.allCases.filter { $0.releaseName == nil }
-        checkEqual(missing.map(\.rawValue), [], "every managed model is downloadable")
+        let missing = ManagedModel.allCases.filter { $0.supportsDownload && $0.releaseName == nil }
+        checkEqual(missing.map(\.rawValue), [], "every downloadable model is pinned")
+        // TruFor redistributes the GRIP-UNINA weights with credit under the
+        // original licence: the descriptor is pinned like any other model, and
+        // the licence restriction is what keeps it out of commercial builds.
+        check(ManagedModel.trufor.supportsDownload, "credit-carrying TruFor redistribution is offered")
+        checkEqual(ManagedModel.trufor.releaseName, "trufor-release", "TruFor pins its published release")
+        _ = checkThrows("an unpublished catalog cannot download TruFor") { try ModelInstaller.release(.trufor) }
     })
     Registry.shared.add(suite: suite, TestCase(name: "a release manifest must pin its model files, and Core ML packages are found by manifest", knownBug: nil) {
         let root = try Temporary.directory("model-manifest")
@@ -137,7 +143,8 @@ func registerModelLibraryTests() {
         // The default build is non-commercial and offers everything. A commercial
         // build must drop PGTFormer everywhere, not merely refuse to download it.
         checkEqual(ManagedModel.pgt.isNonCommercialRestricted, true, "PGTFormer is licence-restricted")
-        for model in ManagedModel.allCases where model != .pgt {
+        check(ManagedModel.trufor.isNonCommercialRestricted, "TruFor is license-restricted")
+        for model in ManagedModel.allCases where model != .pgt && model != .trufor {
             checkEqual(model.isNonCommercialRestricted, false, "\(model.rawValue) is permissively licensed")
         }
         let offered = Set(ManagedModel.offered)
@@ -146,7 +153,8 @@ func registerModelLibraryTests() {
                        "the default build offers every model")
         } else {
             check(!offered.contains(.pgt), "a commercial build does not offer PGTFormer")
-            checkEqual(ManagedModel.offered.count, ManagedModel.allCases.count - 1,
+            check(!offered.contains(.trufor), "a commercial build does not offer TruFor")
+            checkEqual(ManagedModel.offered.count, ManagedModel.allCases.count - 2,
                        "only the restricted model is dropped")
         }
         // A session saved while PGTFormer was offered must still decode and report

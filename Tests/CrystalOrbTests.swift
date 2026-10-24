@@ -4,6 +4,7 @@ import ImageIO
 import Vision
 import Combine
 import UniformTypeIdentifiers
+import os
 
 private func orbFrame(_ index: Int, feature: Data? = nil) -> AnalyzedFrame {
     AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index), faceScore: nil,
@@ -245,6 +246,62 @@ func registerCrystalOrbLifecycleTests() {
             check(model.query != nil, "untyped image drop reaches the orb")
             check(session.video == nil && !session.progress.isRunning, "untyped image drop is never handed to the video importer")
             model.close(); session.cancel()
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "flaky drop representations are re-asked before the drop is declared unreadable", knownBug: nil) {
+        let directory = try Temporary.directory("orb-drop-retry")
+        let payload = orbPNG(try orbImage(3, width: 160, height: 120))
+        // Registered load handlers run once per request, so a first failure
+        // followed by success models the cross-process flakes DropRetry exists
+        // for. Handlers are invoked on provider queues, so the counters lock.
+        let dataAsks = OSAllocatedUnfairLock(initialState: 0)
+        let urlAsks = OSAllocatedUnfairLock(initialState: 0)
+        let fileAsks = OSAllocatedUnfairLock(initialState: 0)
+        let transient = NSError(domain: NSItemProvider.errorDomain, code: -1000)
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+
+            // Corrupt bytes on the first data load, a real image on the second.
+            let corruptFirst = NSItemProvider()
+            corruptFirst.registerDataRepresentation(forTypeIdentifier: "public.png", visibility: .all) { completion in
+                let first = dataAsks.withLock { asks -> Bool in asks += 1; return asks == 1 }
+                completion(first ? Data("not an image".utf8) : payload, nil)
+                return nil
+            }
+            check(CrystalOrbImport.accept([corruptFirst], model: model, session: session), "flaky bitmap drop accepted")
+            try await orbWait { model.query != nil && !model.importing }
+            check(model.query != nil, "corrupt first representation retries into a successful import")
+            check(dataAsks.withLock { $0 } >= 2, "undecodable payload causes a second ask")
+            model.close()
+
+            // A URL resolution that fails once would otherwise lose the file
+            // from the drop entirely.
+            let dropped = directory.appendingPathComponent("retry-drop.png")
+            try payload.write(to: dropped)
+            let urlFlaky = NSItemProvider()
+            urlFlaky.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier, visibility: .all) { completion in
+                let first = urlAsks.withLock { asks -> Bool in asks += 1; return asks == 1 }
+                if first { completion(nil, transient) } else { completion(dropped.dataRepresentation, nil) }
+                return nil
+            }
+            checkEqual(await VideoDrop.urls(from: [urlFlaky]), [dropped], "transient URL failure is re-asked and resolves")
+
+            // The file-promise fallback gets the same treatment.
+            let fileFlaky = NSItemProvider()
+            fileFlaky.registerFileRepresentation(forTypeIdentifier: "public.png", fileOptions: [], visibility: .all) { completion in
+                let first = fileAsks.withLock { asks -> Bool in asks += 1; return asks == 1 }
+                if first { completion(nil, false, transient); return nil }
+                let promised = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("waifu-flaky-\(UUID().uuidString).png")
+                do { try payload.write(to: promised); completion(promised, false, nil) }
+                catch { completion(nil, false, error) }
+                return nil
+            }
+            let staged = await CrystalOrbImport.stageImageFile(from: fileFlaky)
+            check(staged != nil, "transient file-promise failure is re-asked and staged")
+            if let staged { check(CrystalOrbImport.isDecodable(try Data(contentsOf: staged)), "staged retry decodes") }
+            check(fileAsks.withLock { $0 } >= 2, "failed file representation causes a second ask")
         }.value
     })
     Registry.shared.add(suite: suite, TestCase(name: "replacing imports and closing cannot publish late query pixels", knownBug: nil) {

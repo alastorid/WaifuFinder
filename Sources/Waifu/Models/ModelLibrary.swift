@@ -8,6 +8,7 @@ struct ModelLibraryEntry: Identifiable {
     var location: URL?
     var bytes: Int64 = 0
     var ready = false
+    var updateAvailable = false
     var pending: URL?
 }
 
@@ -41,8 +42,12 @@ final class ModelLibrary: ObservableObject {
     }
     func acquireTagger() { inUse[.tagger, default: 0] += 1 }
     func releaseTagger() { inUse[.tagger] = max(0, (inUse[.tagger] ?? 0) - 1) }
+    func acquireSafire() { inUse[.safire, default:0] += 1 }
+    func releaseSafire() { inUse[.safire] = max(0,(inUse[.safire] ?? 0)-1) }
+    func acquireTruFor() { inUse[.trufor,default:0]+=1 }
+    func releaseTruFor() { inUse[.trufor]=max(0,(inUse[.trufor] ?? 0)-1) }
     var totalBytes: Int64 { entries.reduce(0) { $0 + $1.bytes } }
-    var canDownloadAll: Bool { entries.contains { !$0.ready } }
+    var canDownloadAll: Bool { entries.contains { $0.model.supportsDownload && (!$0.ready || $0.updateAvailable) } }
     func isManaged(_ entry: ModelLibraryEntry) -> Bool {
         guard let location = entry.location,
               let owned = defaults.string(forKey: "ownedModel.\(entry.id)") else { return false }
@@ -58,6 +63,8 @@ final class ModelLibrary: ObservableObject {
         case .flash: return FlashVSRConfiguration.load().map { URL(fileURLWithPath: $0.model) }
         case .pgt: return PGTFormerConfiguration.load().map { URL(fileURLWithPath: $0.model) }
         case .tagger: return WDTaggerConfiguration.availableDirectory
+        case .safire: return SafireConfiguration.availableDirectory
+        case .trufor: return TruForConfiguration.availableDirectory
         case .real:
             if let data = try? Data(contentsOf: root.appendingPathComponent("realesrgan-model.txt")),
                let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
@@ -79,6 +86,10 @@ final class ModelLibrary: ObservableObject {
                 let ready: Bool
                 if model == .tagger {
                     ready = location.map { WDTaggerBackend.isAvailable(directory: $0) } ?? false
+                } else if model == .safire {
+                    ready = SafireConfiguration.load() != nil
+                } else if model == .trufor {
+                    ready=TruForConfiguration.load() != nil
                 } else if let algorithm = model.algorithm {
                     ready = await algorithm.makeBackend().capabilities().available
                 } else { ready = false }
@@ -87,7 +98,17 @@ final class ModelLibrary: ObservableObject {
                 var bytes = if let location { await ModelInstaller.shared.diskBytes(location) } else { Int64(0) }
                 if let pending { bytes += await ModelInstaller.shared.diskBytes(pending) }
                 guard !Task.isCancelled else { return }
-                updated.append(ModelLibraryEntry(model: model, location: location, bytes: bytes, ready: ready, pending: pending))
+                let updateAvailable: Bool
+                if model == .trufor, let location, ready {
+                    // A locally converted folder never matches the published
+                    // manifest byte-for-byte, so TruFor compares what inference
+                    // actually loads: the converted weights hash.
+                    updateAvailable = (try? ModelInstaller.hashes(location)["model.safetensors"]) != TruForConfiguration.weightsSHA
+                } else if model == .safire, let location, let release=try? ModelInstaller.release(model),
+                   let installed=try? ModelInstaller.digest(location.appendingPathComponent("manifest.json")) {
+                    updateAvailable = installed != release.manifestSHA256
+                } else { updateAvailable = false }
+                updated.append(ModelLibraryEntry(model: model, location: location, bytes: bytes, ready: ready, updateAvailable:updateAvailable,pending: pending))
             }
             entries = updated
         }
@@ -123,7 +144,7 @@ final class ModelLibrary: ObservableObject {
             do {
                 await refreshTask?.value
                 try Task.checkCancellation()
-                let pending = entries.filter { !$0.ready }
+                let pending = entries.filter { $0.model.supportsDownload && (!$0.ready || $0.updateAvailable) }
                 total = pending.count
                 guard total > 0 else {
                     batchStatus = "All models are already ready"
@@ -138,8 +159,8 @@ final class ModelLibrary: ObservableObject {
                         throw ModelInstaller.fail("\(model.name) is currently in use and cannot be set up.")
                     }
                     batchStatus = "Downloading and configuring all models · \(index + 1) of \(total) · \(model.name)"
-                    let directory = entry.location ?? storage
-                    try await performSetup(model, download: entry.location == nil, directory: directory, token: token)
+                    let directory = entry.updateAvailable ? storage : entry.location ?? storage
+                    try await performSetup(model, download: entry.location == nil || entry.updateAvailable, directory: directory, token: token)
                     completed += 1
                     active = nil
                     fraction = nil
@@ -243,6 +264,8 @@ final class ModelLibrary: ObservableObject {
         }
         switch model {
         case .tagger: try removeFile("wd-tagger-model.txt")
+        case .safire: try removeFile("safire-model.txt")
+        case .trufor: try removeFile("trufor-model.txt")
         case .flash: try removeFile("flashvsr.json")
         case .pgt: try removeFile("pgtformer.json")
         case .real:

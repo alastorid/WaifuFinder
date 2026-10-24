@@ -1,0 +1,48 @@
+{
+  "feature": "TruFor for Photos",
+  "runtimeRevision": "trufor-native-v1",
+  "preprocessingVersion": "trufor-native-rgb-div256-v1",
+  "sourceSHA256": "ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844",
+  "convertedWeightsSHA256": "3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c",
+  "distribution": "alastorid/TruFor-Swift-MLX @ 80cdfb30d990a115b309793851435b8907ecd648, immutable path releases/trufor-native-v1-46b5190799530f2f, grip-unina-trufor-non-commercial",
+  "referenceParity": {
+    "fixture": "native-resolution odd geometry 516x644, official forward math, all four fusion stages",
+    "singlePath": {
+      "status": "passed",
+      "scoreParityPassed": true,
+      "spatialParityPassed": true,
+      "report": "trufor-validation-v1.json"
+    },
+    "tiledPath": {
+      "status": "passed",
+      "scoreParityPassed": true,
+      "spatialParityPassed": true,
+      "report": "trufor-tiled-validation-v1.json"
+    },
+    "anomalyMaskIoU": 1.0,
+    "scoreMaximumAbsoluteError": 1e-05
+  },
+  "benchmarks": {
+    "method": "warm worker, complete inference (decode + forward + serialization), median of three; cold start adds about 0.19 s model load",
+    "m3": {
+      "host": "Apple M3 (this workspace)",
+      "single1024x768Seconds": 1.79,
+      "batchOfFourSeconds": 7.19,
+      "batchNote": "combined area exceeds the batch envelope, so images predict per image"
+    },
+    "m4": {
+      "host": "Apple M4 (thefreebao.local, independently built)",
+      "single1024x768Seconds": 1.43,
+      "batchOfFourSeconds": 5.72,
+      "parity": "passed with identical error magnitudes to M3"
+    },
+    "smallBatchJointSeconds": 0.179,
+    "caveat": "does not establish a globally fastest configuration or a busy machine timing"
+  },
+  "distributionVerification": {
+    "cleanDownload": "all 7 published files fetched and hash-verified against the descriptor",
+    "nativeValidation": "waifu-trufor --validate passed on the downloaded copy",
+    "bitIdenticalInference": true,
+    "optInInstallerLoopbackTest": "WAIFU_TEST_TRUFOR_INSTALL=1 passed: real installer download, isolated activation, identical evidence across encrypted loopback"
+  }
+}

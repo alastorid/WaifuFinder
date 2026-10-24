@@ -17,7 +17,16 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
     var tagger: TaggerCapability?
     /// Every algorithm in `UncoverAlgorithm.allCases` order.
     var uncover: [UncoverCapability]
+    var safire: SafireCapability? = nil
+    var trufor: SafireCapability? = nil
     var vision: VisionCapability
+
+    struct SafireCapability: Codable, Sendable, Equatable {
+        let available: Bool
+        let modelFingerprint: String
+        let runtimeRevision: String
+        let preprocessingVersion: String
+    }
 
     struct TaggerCapability: Codable, Sendable, Equatable {
         var available: Bool
@@ -116,6 +125,9 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
         }
         return Self(protocolVersion: protocolVersion, appVersion: appVersion, serverName: serverName,
                     sessionID: sessionID, tagger: tagger, uncover: uncover,
+                    safire: SafireConfiguration.load().map { .init(available:true,modelFingerprint:$0.fingerprint,
+                        runtimeRevision:SafireSpatialResult.runtimeRevision,preprocessingVersion:SafireSpatialResult.preprocessingVersion) },
+                    trufor:TruForConfiguration.load().map{.init(available:true,modelFingerprint:$0.fingerprint,runtimeRevision:TruForConfiguration.runtime,preprocessingVersion:TruForConfiguration.preprocessing)},
                     vision: VisionCapability(available: true))
     }
 }

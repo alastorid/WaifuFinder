@@ -114,7 +114,7 @@ struct WaifuCrystalOrbView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HSplitView {
-                    CrystalOrbComparisonView(model: model).frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
+                    CrystalOrbComparisonView(model: model, session: session).frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
                     if showInspector {
                         VStack(spacing: 0) {
                             inspectorHeader
@@ -185,7 +185,7 @@ struct WaifuCrystalOrbView: View {
     }
     private var modes: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)], spacing: 4) {
-            ForEach(WaifuCrystalOrbModel.Mode.allCases, id: \.self) { mode in
+            ForEach(WaifuCrystalOrbModel.Mode.standardModes, id: \.self) { mode in
                 Button {
                     if mode == .toggle, model.mode == .toggle { model.showCandidate.toggle() }
                     else { model.mode = mode }
@@ -228,6 +228,7 @@ private struct CrystalOrbCandidateCell: View {
     let side: CGFloat
     let selected: Bool
     let action: () -> Void
+    @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @StateObject private var presentation: GridThumbnailPresentation
     private var identity: String { session.thumbnailGeneration.uuidString + ":" + match.frame.thumbnailKey }
     init(model: WaifuCrystalOrbModel, session: WaifuSession, match: CrystalOrbMatch, rank: Int, side: CGFloat, selected: Bool, action: @escaping () -> Void) {
@@ -245,9 +246,16 @@ private struct CrystalOrbCandidateCell: View {
                 .overlay(Rectangle().inset(by: 1).stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .contextMenu {
-                Button("Open in Photos.app") { model.revealCandidateInPhotos(match) }
-                    .disabled(model.photoURL(for: match) == nil)
+            .contextMenu(isEnabled: googleLensEnabled || model.photoURL(for: match) != nil) {
+                if googleLensEnabled {
+                    Button("Search with Google Lens") {
+                        Task { await GoogleLensSearch.search(frame: match.frame, in: session) }
+                    }
+                }
+                if model.photoURL(for: match) != nil {
+                    if googleLensEnabled { Divider() }
+                    Button("Open in Photos.app") { model.revealCandidateInPhotos(match) }
+                }
             }
             .help(String(format: "#%d · %.3f", rank, match.distance))
             .accessibilityLabel("Candidate \(rank), \(match.id.raw), visual distance \(match.distance)")

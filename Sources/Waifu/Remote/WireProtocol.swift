@@ -32,6 +32,12 @@ enum RemoteOpcode: UInt16, Sendable {
     case uncoverResultBegin = 0x0124
     case uncoverResult = 0x0125
     case uncoverResultEnd = 0x0126
+    case truforRequest = 0x0150
+    case truforResult = 0x0151
+    case truforData = 0x0152
+    case truforEnd = 0x0153
+    case safireRequest = 0x0140
+    case safireResult = 0x0141
     case cancelJob = 0x0130
 
     /// True for messages that mean something on their own, with no request.

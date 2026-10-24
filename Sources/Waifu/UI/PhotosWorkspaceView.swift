@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 /// Photos keeps its album navigation beside the existing ranking workspace.
 /// Choosing another album replaces only the source; the scoring controls and
@@ -9,7 +8,6 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
     private let rankedContent: () -> RankedContent
     private let onBack: () -> Void
     @State private var sidebarExpanded = true
-    @Environment(\.scenePhase) private var scenePhase
 
     init(session: WaifuSession, onBack: @escaping () -> Void,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
@@ -18,8 +16,6 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
         self.rankedContent = rankedContent
     }
 
-    @State private var libraryRevision = 0
-    @State private var keywordRefreshPending = false
     @State private var albums: [PhotosAlbum] = []
     @State private var selectedAlbum: String?
     @State private var loading = true
@@ -67,27 +63,7 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
             }
             ToolbarItem(placement: .principal) { albumTitle }
         }
-        .task(id: libraryRevision) { await refreshLibrary() }
-        .onReceive(NotificationCenter.default.publisher(for: PhotosLibraryChanges.notification)
-            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)) { _ in
-                if session.isWritingPhotosTags {
-                    keywordRefreshPending = true
-                } else {
-                    libraryRevision += 1
-                }
-        }
-        .onChange(of: session.isWritingPhotosTags) { _, running in
-            if !running && keywordRefreshPending {
-                keywordRefreshPending = false
-                libraryRevision += 1
-            }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
-                if session.isWritingPhotosTags { keywordRefreshPending = true }
-                else { libraryRevision += 1 }
-            }
-        }
+        .task { await loadAlbums() }
         .onChange(of: selectedAlbum) { _, selection in openAlbum(selection) }
         .onDisappear { selectionTask?.cancel(); selectionGeneration = UUID() }
     }
@@ -130,42 +106,14 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
         }
     }
 
-    /// Refresh the current source as well as the sidebar. A fresh source URL
-    /// gives previews and thumbnails a new identity after edits or deletions.
-    private func refreshLibrary() async {
-        let sourceURL = session.photosAlbumURL
-        let selectionToken = selectionGeneration
+    /// Read sidebar metadata once when opening the workspace. Album analysis is
+    /// refreshed only by the existing Analyze album button.
+    private func loadAlbums() async {
         loading = true
         do {
-            let refreshedAlbums = try await PhotosMedia.shared.listAlbums()
+            albums = try await PhotosMedia.shared.listAlbums()
             try Task.checkCancellation()
-            albums = refreshedAlbums
             error = albums.allSatisfy({ $0.count == 0 }) ? "No accessible albums contain photos." : nil
-            if let sourceURL, let previous = PhotosMedia.shared.album(sourceURL) {
-                let selection = albums.lazy.compactMap { $0.find(previous.collectionIdentifier) }.first
-                guard let selection else {
-                    if session.photosAlbumURL == sourceURL, selectionGeneration == selectionToken {
-                        session.clearPhotosAlbum()
-                        selectedAlbum = nil
-                    }
-                    loading = false
-                    return
-                }
-                let refreshedURL = try await Task.detached(priority: .utility) {
-                    try PhotosMedia.shared.openAlbum(selection, allowEmpty: true)
-                }.value
-                guard !Task.isCancelled, session.photosAlbumURL == sourceURL,
-                      selectionGeneration == selectionToken else {
-                    PhotosMedia.shared.release(refreshedURL)
-                    return
-                }
-                if let refreshed = PhotosMedia.shared.album(refreshedURL),
-                   refreshed.fingerprint != previous.fingerprint || refreshed.title != previous.title {
-                    session.refreshPhotosAlbum(at: refreshedURL)
-                } else {
-                    PhotosMedia.shared.release(refreshedURL)
-                }
-            }
         } catch is CancellationError { return }
         catch { self.error = error.localizedDescription }
         loading = false

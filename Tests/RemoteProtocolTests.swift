@@ -1228,3 +1228,171 @@ private func cancellationCase() async throws {
     check(probe.cancelled, "client cancellation reaches the running server backend")
     checkEqual(ModelLibrary.shared.inUse[.seed3, default: 0], references, "the model reference is released")
 }
+
+/// Opt-in release verification uses actual downloaded SAFIRE weights and the
+/// production native worker on both sides of a real authenticated connection.
+/// No Photos mutation, global model pointer change, UI, or simulated masks.
+func registerSafireNativeIntegrationTests() {
+    Registry.shared.add(suite:"SAFIRE integration",TestCase(name:"published SAFIRE installs and returns identical real masks over encrypted loopback",knownBug:nil) {
+        guard ProcessInfo.processInfo.environment["WAIFU_TEST_SAFIRE_INSTALL"]=="1" else {
+            throw SkipTest(reason:"opt in with WAIFU_TEST_SAFIRE_INSTALL=1 after building the release catalog")
+        }
+        try await Task { @MainActor in
+            let previous=try? Data(contentsOf:SafireConfiguration.pointerURL)
+            let root=try Temporary.directory("safire-install")
+            let configRoot=root.appendingPathComponent("configuration")
+            let installer=ModelInstaller(configurationRoot:configRoot)
+            let installed=try await installer.install(.safire,root:root.appendingPathComponent("models"),progress:{ _,_ in })
+            let reused=try await installer.install(.safire,root:root.appendingPathComponent("models"),progress:{ _,_ in })
+            checkEqual(reused,installed,"verified immutable release is reused")
+            checkEqual(try? Data(contentsOf:SafireConfiguration.pointerURL),previous,"real model settings untouched")
+            let config=try SafireConfiguration.validate(installed)
+            checkEqual(try String(contentsOf:configRoot.appendingPathComponent("safire-model.txt"),encoding:.utf8),installed.path,"installer activates in its isolated configuration")
+            guard let executable=SafireConfiguration.executable else { throw ModelInstaller.fail("Missing bundled SAFIRE worker") }
+            let worker=try SafireWorker(model:installed,executable:executable)
+            defer { worker.cancel() }
+            let imageURL=URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png")
+            let png=try Data(contentsOf:imageURL)
+            let photo=LineagePhoto(id:"native-safire-fixture",contentIdentity:LineageIdentity.hash(png.base64EncodedString()),name:"rgb-gradient.png",width:448,height:448,format:"PNG",url:URL(string:"waifu-photos://native-fixture")!,offset:0)
+            let local=try await Task.detached { try worker.infer(png,photo:photo,configuration:config) }.value
+            var catalog=StubCatalog.uncoverOnly()
+            let baseCapabilities=catalog.capabilities
+            catalog.capabilities={ version,name,session in
+                var value=await baseCapabilities(version,name,session)
+                value.safire = .init(available:true,modelFingerprint:config.fingerprint,runtimeRevision:SafireSpatialResult.runtimeRevision,preprocessingVersion:SafireSpatialResult.preprocessingVersion)
+                return value
+            }
+            catalog.safire={ request in
+                guard request.modelFingerprint==config.fingerprint else { throw RemoteError.modelUnavailable("Fingerprint mismatch") }
+                return try await Task.detached { try worker.infer(request.png,photo:request.photo,configuration:config) }.value
+            }
+            let pair=try LoopbackPair(catalog:catalog,key:Array(repeating:0x63,count:32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("Native SAFIRE loopback did not authenticate") }
+            let remote=try await pair.client.safire(png:png,photo:photo)
+            checkEqual(remote.modelFingerprint,local.modelFingerprint,"exact checkpoint identity")
+            checkEqual(remote.probabilities,local.probabilities,"lossless input and encrypted result preserve every real probability")
+            checkEqual(remote.partitions,local.partitions,"source partitions are identical")
+            checkEqual(remote.width,1024,"full spatial output retained")
+            checkEqual(remote.height,1024,"full spatial output retained")
+            checkEqual(remote.contentIdentity,photo.contentIdentity,"asset revision remains attached to evidence")
+        }.value
+    })
+}
+
+/// TruFor's wire path must carry genuine evidence and score batches across a real
+/// authenticated connection byte-for-byte, and must refuse a server whose pinned
+/// fingerprint, runtime or preprocessing differs. The stub keeps the loopback
+/// network honest without needing weights; the opt-in test below adds the real
+/// checkpoint end to end.
+func registerTruForLoopbackTests() {
+    let side=32, pixels=side*side
+    let stub=TruForSpatial(width:side,height:side,score:0.4164,
+        anomaly:(0..<pixels).map{Float($0%7)/8},
+        reliability:(0..<pixels).map{Float($0%5)/6},
+        noiseprint:(0..<pixels).map{sin(Float($0))*0.25})
+    let catalog:(@Sendable (String?,String?,String?)->RemoteModelCatalog) = { fingerprint,runtime,preprocessing in
+        var catalog=StubCatalog.uncoverOnly()
+        let base=catalog.capabilities
+        catalog.capabilities={ version,name,session in
+            var value=await base(version,name,session)
+            if let fingerprint {
+                value.trufor = .init(available:true,modelFingerprint:fingerprint,runtimeRevision:runtime ?? TruForConfiguration.runtime,preprocessingVersion:preprocessing ?? TruForConfiguration.preprocessing)
+            }
+            return value
+        }
+        catalog.trufor={ request in
+            guard request.fingerprint==TruForConfiguration.weightsSHA else { throw RemoteError.modelUnavailable("fingerprint") }
+            if request.evidence { return .evidence(stub) }
+            return .scores(request.images.indices.map{Float($0+1)*0.11})
+        }
+        return catalog
+    }
+    Registry.shared.add(suite:"TruFor remote",TestCase(name:"evidence and score batches cross an encrypted loopback unchanged",knownBug:nil) {
+        try await Task { @MainActor in
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let pair=try LoopbackPair(catalog:catalog(TruForConfiguration.weightsSHA,TruForConfiguration.runtime,TruForConfiguration.preprocessing),key:Array(repeating:0x64,count:32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
+            let evidence=try await pair.client.truforEvidence(png)
+            checkEqual(evidence.width,side,"evidence width survives the link")
+            checkEqual(evidence.height,side,"evidence height survives the link")
+            checkEqual(evidence.score,stub.score,"detection score is exact")
+            checkEqual(evidence.anomaly,stub.anomaly,"anomaly map is exact")
+            checkEqual(evidence.reliability,stub.reliability,"reliability map is exact")
+            checkEqual(evidence.noiseprint,stub.noiseprint,"Noiseprint++ map is exact")
+            let scores=try await pair.client.truforScores([png,png])
+            checkEqual(scores,[0.11,0.22],"score batches keep their order")
+        }.value
+    })
+    Registry.shared.add(suite:"TruFor remote",TestCase(name:"a mismatched fingerprint, runtime or preprocessing is never offered",knownBug:nil) {
+        try await Task { @MainActor in
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            for (fingerprint,runtime,preprocessing,reason) in [
+                ("0"+String(TruForConfiguration.weightsSHA.dropFirst()),TruForConfiguration.runtime,TruForConfiguration.preprocessing,"weights revision"),
+                (TruForConfiguration.weightsSHA,"trufor-native-v0",TruForConfiguration.preprocessing,"runtime revision"),
+                (TruForConfiguration.weightsSHA,TruForConfiguration.runtime,"trufor-native-rgb-div128-v1","preprocessing revision"),
+            ] {
+                let pair=try LoopbackPair(catalog:catalog(fingerprint,runtime,preprocessing),key:Array(repeating:0x65,count:32))
+                defer { pair.tearDown() }
+                guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
+                var refused=false
+                do { _ = try await pair.client.truforScores([png]) } catch { refused=true }
+                check(refused, "\(reason) mismatch refuses the server")
+            }
+        }.value
+    })
+}
+
+/// Opt-in release verification uses the actual published TruFor weights, the real
+/// installer, and the production native worker on both sides of a real
+/// authenticated connection. No Photos mutation, global pointer change, or UI.
+func registerTruForNativeIntegrationTests() {
+    Registry.shared.add(suite:"TruFor integration",TestCase(name:"published TruFor installs and returns identical real evidence over encrypted loopback",knownBug:nil) {
+        guard ProcessInfo.processInfo.environment["WAIFU_TEST_TRUFOR_INSTALL"]=="1" else {
+            throw SkipTest(reason:"opt in with WAIFU_TEST_TRUFOR_INSTALL=1 after building the release catalog")
+        }
+        try await Task { @MainActor in
+            let previous=try? Data(contentsOf:TruForConfiguration.pointerURL)
+            let root=try Temporary.directory("trufor-install")
+            let configRoot=root.appendingPathComponent("configuration")
+            let installer=ModelInstaller(configurationRoot:configRoot)
+            let installed=try await installer.install(.trufor,root:root.appendingPathComponent("models"),progress:{ _,_ in })
+            let reused=try await installer.install(.trufor,root:root.appendingPathComponent("models"),progress:{ _,_ in })
+            checkEqual(reused,installed,"verified immutable release is reused")
+            checkEqual(try? Data(contentsOf:TruForConfiguration.pointerURL),previous,"real model settings untouched")
+            let configuration=try TruForConfiguration.validate(installed)
+            checkEqual(try String(contentsOf:configRoot.appendingPathComponent("trufor-model.txt"),encoding:.utf8),installed.path,"installer activates in its isolated configuration")
+            guard let executable=TruForConfiguration.executable else { throw ModelInstaller.fail("Missing bundled TruFor worker") }
+            let backend=TruForBackend(configuration:configuration,executable:executable)
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let localEvidence=try await backend.submit(images:[png],evidence:true)
+            guard case .evidence(let local)=localEvidence else { throw ModelInstaller.fail("Missing local TruFor evidence") }
+            var catalog=StubCatalog.uncoverOnly()
+            let base=catalog.capabilities
+            catalog.capabilities={ version,name,session in
+                var value=await base(version,name,session)
+                value.trufor = .init(available:true,modelFingerprint:configuration.fingerprint,runtimeRevision:TruForConfiguration.runtime,preprocessingVersion:TruForConfiguration.preprocessing)
+                return value
+            }
+            catalog.trufor={ request in
+                guard request.fingerprint==configuration.fingerprint else { throw RemoteError.modelUnavailable("Fingerprint mismatch") }
+                return try await backend.submit(images:request.images,evidence:request.evidence)
+            }
+            let pair=try LoopbackPair(catalog:catalog,key:Array(repeating:0x66,count:32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("Native TruFor loopback did not authenticate") }
+            let remote=try await pair.client.truforEvidence(png)
+            checkEqual(remote.width,local.width,"lossless transport keeps full spatial output")
+            checkEqual(remote.height,local.height,"lossless transport keeps full spatial output")
+            checkEqual(remote.score,local.score,"detection score is identical across the link")
+            checkEqual(remote.anomaly,local.anomaly,"real anomaly map is identical")
+            checkEqual(remote.reliability,local.reliability,"real reliability map is identical")
+            checkEqual(remote.noiseprint,local.noiseprint,"real Noiseprint++ map is identical")
+            let localScores=try await backend.submit(images:[png,png],evidence:false)
+            let remoteScores=try await pair.client.truforScores([png,png])
+            guard case .scores(let values)=localScores else { throw ModelInstaller.fail("Missing local TruFor scores") }
+            checkEqual(remoteScores,values,"real score batch is identical")
+        }.value
+    })
+}

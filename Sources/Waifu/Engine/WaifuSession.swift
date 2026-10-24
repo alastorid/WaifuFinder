@@ -188,6 +188,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     // MARK: Analysis results
 
+    let forensic=TruForJob()
+
     @Published private(set) var frames: [AnalyzedFrame] = [] {
         didSet {
             visualOrderBaseFrames = nil
@@ -462,8 +464,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             ? min(max(preset.groupingThreshold, 0.05), 1.2) : WaifuSettings.default.similarityThreshold
         let needsRegroup = threshold != settings.similarityThreshold
         applyingPanelPreset = true
-        frameOrder = preset.order.enabledCount > 0 ? preset.order : .defaultOrder
-        frameLimits = preset.limits
+        let requestedOrder=photosAlbumURL == nil ? preset.order.withoutForensic : preset.order
+        frameOrder = requestedOrder.enabledCount > 0 ? requestedOrder : .defaultOrder
+        frameLimits = photosAlbumURL == nil ? preset.limits.withoutForensic : preset.limits
         tagFilter = preset.tags
         faceFilter = preset.faces
         groupingEnabled = preset.groupingEnabled
@@ -573,8 +576,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func deleteSelectedPhotos() {
         guard !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
               !progress.isRunning, uncover == nil, !showExportSheet,
-              let albumURL = photosAlbumURL,
-              let collectionIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
+              let albumURL = photosAlbumURL else { return }
 
         var seen = Set<String>()
         let identifiers = displayOrderFrames.compactMap { frame -> String? in
@@ -583,14 +585,42 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                   seen.insert(identifier).inserted else { return nil }
             return identifier
         }
-        guard !identifiers.isEmpty else { return }
+        deletePhotos(identifiers: identifiers, from: albumURL)
+    }
 
+    /// Shared PhotoKit deletion path for ranking and Image Lineage. The captured
+    /// identifiers are validated again by PhotosMedia at the mutation boundary.
+    /// Completion runs only after Photos commits; failed/denied requests keep all
+    /// lineage evidence intact. Never derives targets from scores or hypotheses.
+    func deletePhotos(identifiers: [String], from albumURL: URL,
+                      onSuccess: @escaping @MainActor (Set<String>) -> Void = { _ in }) {
+        guard !identifiers.isEmpty, !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
+              !progress.isRunning, uncover == nil, !showExportSheet,
+              photosAlbumURL == albumURL,
+              let collectionIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
         isDeletingPhotos = true
         Task {
             defer { isDeletingPhotos = false }
             do {
                 try await PhotosMedia.shared.deleteAssets(identifiers: identifiers,
                                                          collectionIdentifier: collectionIdentifier)
+                let deleted = Set(identifiers)
+                if photosAlbumURL == albumURL {
+                    let removed = Set(frames.compactMap { frame -> FrameID? in
+                        guard let identifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
+                              deleted.contains(identifier) else { return nil }
+                        return frame.id
+                    })
+                    if isRegrouping { cancel() }
+                    PhotosMedia.shared.removeDeletedAssets(deleted, from: albumURL)
+                    removeAnalyzedFrames(removed)
+                    if let checkpoint = photosAnalysisCheckpoint {
+                        photosAnalysisCheckpoint = PhotosAnalysisCheckpoint(sourceURL: albumURL,
+                            settings: checkpoint.settings, frames: frames)
+                    }
+                    photosOrderSyncMessage = nil
+                }
+                onSuccess(deleted)
             } catch {
                 if photosAlbumURL == albumURL {
                     errorMessage = "Couldn’t delete selected items from Photos: \(error.localizedDescription)"
@@ -598,6 +628,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
         }
     }
+
+    /// Photos our current (or most recent) keyword job writes to, and when that
+    /// job ended. Library changes confined to these photos right around the job
+    /// are our own writes echoing back and must not trigger a reload.
+    @Published private(set) var keywordJobAssetIDs: Set<String> = []
+    private(set) var keywordJobEndedAt: Date?
 
     func writePhotosTags(for frame: AnalyzedFrame) {
         guard !isWritingPhotosTags, let sourceURL = video?.url else { return }
@@ -616,6 +652,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             defer {
                 status.progress = nil
                 isWritingPhotosTags = false
+                keywordJobEndedAt = Date()
                 photosKeywordTask = nil
             }
             let worker = Task.detached(priority: .userInitiated) {
@@ -626,21 +663,25 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     }
                     return identifier
                 }
+                let assetIDs = Set(updates.map(\.assetIdentifier))
                 try Task.checkCancellation()
-                let groups = PhotosKeywordWriter.groups(for: updates)
                 try await PhotosKeywordWriter.openPhotosIfNeeded()
                 try Task.checkCancellation()
                 await MainActor.run {
-                    if status.progress?.phase != .stopping {
-                        status.progress?.total = groups.reduce(0) { $0 + $1.count }
-                        status.progress?.phase = .writing
-                    }
+                    self.keywordJobAssetIDs = assetIDs
+                    if status.progress?.phase != .stopping { status.progress?.phase = .writing }
                 }
-                try await PhotosKeywordWriter.run(groups) { count in
-                    await MainActor.run {
-                        status.progress?.completed = max(status.progress?.completed ?? 0, count)
+                do {
+                    try await PhotosKeywordWriter.run(updates) { count in
+                        await MainActor.run { status.progress?.completed = count }
                     }
+                } catch {
+                    // Partial writes still bump modification dates; snapshot them
+                    // too so a cancelled job's echoes are recognized as ours.
+                    await PhotosMedia.shared.recordKeywordWriteBaselines(for: Array(assetIDs))
+                    throw error
                 }
+                await PhotosMedia.shared.recordKeywordWriteBaselines(for: Array(assetIDs))
             }
             do {
                 try await withTaskCancellationHandler {
@@ -652,8 +693,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 // Already-written keywords are retained; the next photo is never started.
             } catch {
                 let completed = status.progress?.completed ?? 0
-                let total = status.progress?.total ?? targets.count
-                errorMessage = "Couldn’t write tags to Photos (\(completed)/\(total) photos updated): \(error.localizedDescription)"
+                errorMessage = "Couldn’t write tags to Photos (\(completed)/\(targets.count) photos updated): \(error.localizedDescription)"
             }
         }
     }
@@ -935,7 +975,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     /// Loads original videos into one results workspace, preserving the supplied order.
-    func loadVideos(at urls: [URL]) {
+    func loadVideos(at urls: [URL], retainingPhotos retained: [AnalyzedFrame] = []) {
         guard let url = urls.first else { return }
         Diag.trace(.analysis, message: "load source photos=\(PhotosMedia.shared.album(url)?.items.count ?? 0)")
         closeUncover()
@@ -956,7 +996,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         progress = AnalysisProgress(phase: .probing, processed: 0, total: 1, elapsed: 0, message: urls.count > 1 ? "Reading \(urls.count) videos…" : PhotosMedia.isPhotos(url) ? "Reading Photos album…" : (url.isFileURL ? "Probing video…" : "Downloading and preparing media…"))
 
         let token = analysisGeneration, config = settings.validated()
-        let checkpoint = photosAlbumURL.map { PhotosAnalysisCheckpoint(sourceURL: $0, settings: config) }
+        let checkpoint = photosAlbumURL.map { PhotosAnalysisCheckpoint(sourceURL: $0, settings: config, frames: retained) }
         photosAnalysisCheckpoint = checkpoint
         analysisTask = Task.detached { [weak self] in
             await self?.runAnalysisPipeline(for: url, existing: nil, settings: config, token: token,
@@ -964,10 +1004,128 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
-    func refreshPhotosAlbum(at url: URL) {
+    /// Reuse scores by photo identity and revision, never by album position.
+    private func refreshPhotosAlbum(at url: URL) async {
+        guard let sourceURL = photosAlbumURL,
+              let previous = PhotosMedia.shared.album(sourceURL),
+              let refreshed = PhotosMedia.shared.album(url),
+              previous.collectionIdentifier == refreshed.collectionIdentifier else {
+            PhotosMedia.shared.release(url)
+            return
+        }
+        let token = analysisGeneration
+        let checkpoint = photosAnalysisCheckpoint
+        var completed = Dictionary(uniqueKeysWithValues: (await checkpoint?.frames() ?? []).map { ($0.id, $0) })
+        guard !Task.isCancelled, analysisGeneration == token, photosAlbumURL == sourceURL else {
+            PhotosMedia.shared.release(url)
+            return
+        }
+        // Visible frames carry newer tags and grouping metadata than the scorer.
+        for frame in frames { completed[frame.id] = frame }
+        let retained: [AnalyzedFrame]
+        if checkpoint?.settings.minimumFaceAreaFraction == settings.validated().minimumFaceAreaFraction {
+            let stillIndices = Set(previous.items.filter(\.isStill).map { PhotosMedia.frameIndex(seconds: $0.offset) })
+            retained = PhotosAnalysisCheckpoint.reusableFrames(completed.values.filter { stillIndices.contains($0.id.sampleIndex) },
+                before: PhotosMedia.shared.albumRevisions(sourceURL) ?? [], offsetsBefore: previous.offsets,
+                after: PhotosMedia.shared.albumRevisions(url) ?? [], offsetsAfter: refreshed.offsets,
+                keywordBaselines: PhotosMedia.shared.keywordWriteBaselines())
+        } else {
+            retained = []
+        }
+        if previous.title == refreshed.title, retained.count == refreshed.items.count,
+           frames.count == retained.count,
+           PhotosMedia.revisionsMatch(PhotosMedia.shared.albumRevisions(sourceURL) ?? [],
+                                      PhotosMedia.shared.albumRevisions(url) ?? [],
+                                      keywordBaselines: PhotosMedia.shared.keywordWriteBaselines()),
+           checkpoint?.settings.grouping == settings.validated().grouping {
+            PhotosMedia.shared.release(url)
+            progress = AnalysisProgress(phase: .complete, processed: frames.count, total: frames.count,
+                                        elapsed: 0, message: "Album is up to date")
+            return
+        }
         let limits = frameLimits
-        loadVideo(at: url)
+        let oldStem = sourceURL.deletingPathExtension().lastPathComponent
+        let thumbnails = retained.compactMap { frame -> (String, Data)? in
+            thumbnailCache.thumbnailDataSync(forKey: frame.thumbnailKey, videoStem: oldStem, touchLRU: false, allowPrefixMatch: false).map { (frame.thumbnailKey, $0) }
+        }
+        loadVideos(at: [url], retainingPhotos: retained)
+        let newStem = url.deletingPathExtension().lastPathComponent
+        for (key, data) in thumbnails { try? thumbnailCache.store(data, forKey: key, videoStem: newStem) }
         frameLimits = limits
+    }
+
+    private func refreshCurrentPhotosAlbum() {
+        guard let sourceURL = photosAlbumURL, let album = PhotosMedia.shared.album(sourceURL),
+              !isDeletingPhotos, !isWritingPhotosTags, !isSyncingPhotosOrder else { return }
+        let previousTask = analysisTask
+        cancel()
+        let token = analysisGeneration
+        errorMessage = nil
+        progress = AnalysisProgress(phase: .probing, processed: frames.count, total: album.items.count,
+                                    elapsed: 0, message: "Checking for new or changed photos…")
+        let selection = PhotosAlbum(id: album.collectionIdentifier, title: album.title,
+                                    count: album.items.count, isSmartAlbum: false)
+        analysisTask = Task { [weak self] in
+            // Join a stopped pass before taking its final completed-photo snapshot.
+            await previousTask?.value
+            guard let self, !Task.isCancelled, self.analysisGeneration == token else { return }
+            do {
+                let url = try await Task.detached(priority: .userInitiated) {
+                    try PhotosMedia.shared.openAlbum(selection, allowEmpty: true)
+                }.value
+                guard !Task.isCancelled, self.analysisGeneration == token, self.photosAlbumURL == sourceURL else {
+                    PhotosMedia.shared.release(url)
+                    return
+                }
+                await self.refreshPhotosAlbum(at: url)
+            } catch {
+                guard !Task.isCancelled, self.analysisGeneration == token else { return }
+                self.errorMessage = error.localizedDescription
+                self.progress.phase = .failed
+                self.progress.message = "Couldn’t refresh album"
+            }
+        }
+    }
+
+    /// Keep the loaded workspace and all surviving analysis when only album
+    /// members disappeared. Their original timeline positions remain valid.
+    func applyPhotosAlbumDeletions(from refreshedURL: URL) -> Bool {
+        guard !progress.isRunning, !isWritingPhotosTags,
+              let sourceURL = photosAlbumURL, let previous = PhotosMedia.shared.album(sourceURL),
+              let removed = PhotosMedia.shared.applyAlbumDeletions(from: refreshedURL, to: sourceURL) else { return false }
+        let removedFrames = Set(frames.compactMap { frame -> FrameID? in
+            guard let index = PhotosMedia.itemIndex(offsets: previous.offsets, seconds: frame.timeSeconds),
+                  removed.contains(previous.items[index].asset.localIdentifier) else { return nil }
+            return frame.id
+        })
+        if isRegrouping { cancel() }
+        removeAnalyzedFrames(removedFrames)
+        if let checkpoint = photosAnalysisCheckpoint {
+            photosAnalysisCheckpoint = PhotosAnalysisCheckpoint(sourceURL: sourceURL, settings: checkpoint.settings, frames: frames)
+        }
+        photosOrderSyncMessage = nil
+        return true
+    }
+
+    /// Remove results without clearing thumbnails, filters, tags or group IDs.
+    func removeAnalyzedFrames(_ removed: Set<FrameID>) {
+        guard !removed.isEmpty else { return }
+        cancelTagging()
+        let rawIDs = Set(removed.map(\.description))
+        groups = groups.compactMap { group in
+            let members = group.memberIDs.filter { !rawIDs.contains($0) }
+            return members.isEmpty ? nil : FrameGroup(id: group.id, memberIDs: members)
+        }
+        selectedFrameIDs.subtract(removed)
+        if let selectionAnchor, removed.contains(selectionAnchor) { self.selectionAnchor = nil }
+        if let focusedFrameID, removed.contains(focusedFrameID) { self.focusedFrameID = nil }
+        if let gridNavigationFrameID, removed.contains(gridNavigationFrameID) { self.gridNavigationFrameID = nil }
+        if let crystalOrbRevealID, removed.contains(crystalOrbRevealID) { self.crystalOrbRevealID = nil }
+        if let previewFrame, removed.contains(previewFrame.id) { self.previewFrame = nil }
+        previewNavigation = nil
+        presentedGridNavigation = nil
+        revealedGroups.formIntersection(Set(groups.map(\.id)))
+        frames.removeAll { removed.contains($0.id) }
     }
 
     /// An album removed in Photos must not leave exportable stale results.
@@ -987,6 +1145,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     /// Re-runs the analysis under current settings without re-probing.
     func analyze() {
+        if photosAlbumURL != nil {
+            refreshCurrentPhotosAlbum()
+            return
+        }
         guard video != nil else { return }
         cancelTagging(keepingCompletedResults: false)
         cancel()
@@ -1387,6 +1549,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var updatedFrames = frames
         for index in updatedFrames.indices {
             if let replacement = replacements.removeValue(forKey: updatedFrames[index].id) {
+                var replacement=replacement
+                replacement.truforScore=updatedFrames[index].truforScore
+                replacement.truforFingerprint=updatedFrames[index].truforFingerprint
+                replacement.truforContentIdentity=updatedFrames[index].truforContentIdentity
                 updatedFrames[index] = replacement
             }
         }
@@ -2062,15 +2228,32 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Keep tagger output and selection stable as the scored prefix grows.
     private func preservingLiveTags(_ incoming: [AnalyzedFrame]) -> [AnalyzedFrame] {
         incoming.map { frame in
-            guard let previous = frameByID[frame.id], previous.hasTaggingResult else { return frame }
-            var copy = frame
-            copy.tagProbabilities = previous.tagProbabilities
-            copy.tagVocabularyFingerprint = previous.tagVocabularyFingerprint
-            copy.tagRating = previous.tagRating
-            copy.topTags = previous.topTags
-            copy.tagGeneralScore = previous.tagGeneralScore
+            guard let previous=frameByID[frame.id] else { return frame }
+            var copy=frame
+            if previous.hasTaggingResult {
+                copy.tagProbabilities=previous.tagProbabilities;copy.tagVocabularyFingerprint=previous.tagVocabularyFingerprint
+                copy.tagRating=previous.tagRating;copy.topTags=previous.topTags;copy.tagGeneralScore=previous.tagGeneralScore
+            }
+            if previous.thumbnailKey==frame.thumbnailKey,copy.truforScore==nil {
+                copy.truforScore=previous.truforScore;copy.truforFingerprint=previous.truforFingerprint;copy.truforContentIdentity=previous.truforContentIdentity
+            }
             return copy
         }
+    }
+    /// Commit into current frames, preserving concurrent Tagger results. A moved,
+    /// changed or deleted asset cannot inherit another photo's forensic score.
+    func applyForensicScores(_ scores:[String:Float],photos:[TruForPhoto],fingerprint:String,source:URL) {
+        guard photosAlbumURL==source else { return }
+        let wanted=Dictionary(uniqueKeysWithValues:photos.map{($0.assetKey.identifier,$0)})
+        var updates:[AnalyzedFrame]=[]
+        let next=frames.map { frame -> AnalyzedFrame in
+            guard let url=PhotosMedia.shared.photoItemURL(for:source,seconds:frame.timeSeconds),
+                  let current=PhotosMedia.shared.item(url)?.assetCacheKey,let photo=wanted[current.identifier],current==photo.assetKey else { return frame }
+            var copy=frame;copy.truforScore=scores[photo.contentIdentity];copy.truforFingerprint=copy.truforScore==nil ? nil:fingerprint;copy.truforContentIdentity=copy.truforScore==nil ? nil:photo.contentIdentity
+            if copy != frame { updates.append(copy) };return copy
+        }
+        guard !updates.isEmpty else { return }
+        incrementallyTaggedFrames=updates;frames=next
     }
     private func acceptLivePhotos(frames: [AnalyzedFrame], groups: [FrameGroup], token: UUID) {
         guard analysisGeneration == token else { return }
@@ -2100,6 +2283,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         importedMedia = prepared
         currentVideoStem = video.url.deletingPathExtension().lastPathComponent
         self.video = video
+        forensic.cancel()
+        if photosAlbumURL == nil { frameOrder=frameOrder.withoutForensic;frameLimits=frameLimits.withoutForensic }
         return true
     }
     private func acceptProgress(_ progress: AnalysisProgress, token: UUID) {
@@ -2268,7 +2453,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             guard self.analysisGeneration == analysisToken, self.video?.url == sourceURL,
                   !self.taggingProgress.isRunning else { return }
             if restored.restoredCount > 0 {
-                self.frames = restored.frames
+                self.frames = restored.frames.map { restoredFrame in
+                    var copy = restoredFrame
+                    if let current = self.frameByID[copy.id], current.thumbnailKey == copy.thumbnailKey {
+                        copy.truforScore = current.truforScore
+                        copy.truforFingerprint = current.truforFingerprint
+                        copy.truforContentIdentity = current.truforContentIdentity
+                    }
+                    return copy
+                }
                 self.invalidateTagSummaries()
                 self.recomputeDisplayedFrames()
             }
@@ -2760,12 +2953,25 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         focus(on: target)
     }
 
-    /// Moves focus to the first frame of the next or previous group.
+    /// Moves focus one line up or down in one-group-per-line mode, and to the
+    /// first frame of the next or previous group in the flow grid.
+    ///
+    /// The lines the grid draws are the navigation when each group has its own:
+    /// a group strip is one line, and a long ungrouped run is split into chunked
+    /// lines (a Photos album's ungrouped tail can be most of the grid). Stepping
+    /// by group boundaries instead strands ↑/↓ inside that run — every ungrouped
+    /// frame shares `groupID == nil`, so "next group" skips all of its lines.
+    /// Line steps land on the cell nearest the column the focus left.
     func focusGroupEdge(forward: Bool) {
         guard uncover == nil, groupingEnabled else { return }
         let order = navigationOrder
         let frames = order.frames
         guard !frames.isEmpty else { return }
+        if let current = focusedFrameID,
+           let target = order.verticalNeighbour(of: current, forward: forward) {
+            focus(on: target)
+            return
+        }
         guard let current = focusedFrameID,
               let index = order.indexByID[current] else {
             focus(on: frames[0])

@@ -1,0 +1,201 @@
+{
+  "runtimeRevision": "safire-native-v1",
+  "source": "NASA Johnson Space Center, Apollo 17 photograph AS17-148-22727",
+  "sourceURL": "https://science.nasa.gov/resource/the-blue-marble/",
+  "scope": "One photographic scene and known edits; diagnostic behavior, not dataset-level accuracy. Baseline flagged area is an overflagging diagnostic, not a pristine-camera false-positive rate. Window rates are not exact-mask recall.",
+  "results": [
+    {
+      "name": "baseline.png",
+      "sha256": "30786501d7b66830860bb3c66f0aad9d7e6cf4c723ac03f44f202508a81b8038",
+      "operation": "Apple ImageIO 512px rendition of the attributed source; not a claim of an untouched camera original",
+      "wallSeconds": 11.189353625,
+      "flaggedFraction": 0.011923789978027344,
+      "meanProbability": 0.12520925005202344,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "recompressed.jpg",
+      "sha256": "c8c1ad71424d2b410801dfecb74d7691c557f116d615a59d238d44092e9026e4",
+      "operation": "JPEG recompression quality 0.35",
+      "wallSeconds": 10.761036458000001,
+      "flaggedFraction": 0.034173011779785156,
+      "meanProbability": 0.3151009031226977,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "downsampled.png",
+      "sha256": "62431370cf2ffc3a0a0e5dc549040ed8ebe60bb4eb92c37db0666094cf59796d",
+      "operation": "Downsample 0.5x",
+      "wallSeconds": 14.491770166999999,
+      "flaggedFraction": 0.09007835388183594,
+      "meanProbability": 0.291832663888016,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "upscaled.png",
+      "sha256": "f1d1b3cddd2c11501871d7cbaf40b399da46cf8622a66a71286ec0baeb26c0f4",
+      "operation": "Classical interpolation 2x",
+      "wallSeconds": 14.743046292000002,
+      "flaggedFraction": 0.003941535949707031,
+      "meanProbability": 0.21758783701827156,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "watermarked.png",
+      "sha256": "985e76d59da1b4ca59cb03ad470d2fda9638e651c98451d1a962c3bc6190c8e6",
+      "operation": "Semitransparent WF watermark",
+      "wallSeconds": 14.692584125000003,
+      "flaggedFraction": 0.0105743408203125,
+      "meanProbability": 0.018189090566295363,
+      "sourcePartitionCount": 3,
+      "knownEditWindowTopLeft": [
+        0.68359375,
+        0.830078125,
+        0.822265625,
+        0.912109375
+      ],
+      "windowFlaggedFraction": 0.8133802816901409,
+      "outsideWindowFlaggedFraction": 0.0013370015665876943
+    },
+    {
+      "name": "watermark-removed.png",
+      "sha256": "30786501d7b66830860bb3c66f0aad9d7e6cf4c723ac03f44f202508a81b8038",
+      "operation": "Exact restoration of the known baseline pixels under the watermark",
+      "wallSeconds": 14.634459957999994,
+      "flaggedFraction": 0.011923789978027344,
+      "meanProbability": 0.12520925005202344,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "locally-inpainted.png",
+      "sha256": "e738830159f7d67fc4849e5d9a244b01de609b7ad55e06d4ec443d7f57faa81f",
+      "operation": "Classical boundary-interpolated patch fill, top-left x=43%, y=36%, width=height=10%",
+      "wallSeconds": 11.784441208000004,
+      "flaggedFraction": 0.016111373901367188,
+      "meanProbability": 0.09440284866684578,
+      "sourcePartitionCount": 3,
+      "knownEditWindowTopLeft": [
+        0.43,
+        0.36,
+        0.53,
+        0.46
+      ],
+      "windowFlaggedFraction": 0.11945554920997525,
+      "outsideWindowFlaggedFraction": 0.015065458013428767
+    },
+    {
+      "name": "generation-3.jpg",
+      "sha256": "283dd9a07d372c31a3c8b95c8d9901a65b55ed0e8c457d568ae9225a1f2cd70c",
+      "operation": "Downsample, then watermark, then JPEG recompression",
+      "wallSeconds": 10.727755959000007,
+      "flaggedFraction": 1.9073486328125e-06,
+      "meanProbability": 0.21736523056733859,
+      "sourcePartitionCount": 2
+    },
+    {
+      "name": "sibling-tone.png",
+      "sha256": "822fd87cbf73af0b020f2eb4e6946f7831356f7e977976df9ce64db3396f8176",
+      "operation": "Independent tone adjustment",
+      "wallSeconds": 10.944575084000007,
+      "flaggedFraction": 0.008179664611816406,
+      "meanProbability": 0.08036497612883409,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "sibling-crop.png",
+      "sha256": "9ed2c6a22805d36659f4b707174ef9a95929294a3011e26f86975cc2c7d993f7",
+      "operation": "Independent crop",
+      "wallSeconds": 10.178034334000003,
+      "flaggedFraction": 0.0009584426879882812,
+      "meanProbability": 0.2458190135687346,
+      "sourcePartitionCount": 3
+    },
+    {
+      "name": "ai-restored.png",
+      "sha256": "01aacf10a9ad43493c5934060adf0ee6b6bf0491183da85cc09e2af925437f56",
+      "operation": "Actual native Core ML RealESRGAN x2 restoration; no simulated AI output",
+      "wallSeconds": 10.462804375000019,
+      "flaggedFraction": 0.41654300689697266,
+      "meanProbability": 0.5121049206679231,
+      "sourcePartitionCount": 3
+    }
+  ],
+  "performanceContext": "Concurrent background compilation and other app activity; wall times in this diagnostic are not profile benchmarks.",
+  "correspondence": {
+    "results": [
+      {
+        "correlation": 0.9968966192817876,
+        "meanDifference": 0.02608011283124374,
+        "name": "recompressed.jpg",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": 0.9894998677734502,
+        "meanDifference": 0.030635010962369317,
+        "name": "downsampled.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": 0.9894998677734502,
+        "meanDifference": 0.030635010962369317,
+        "name": "upscaled.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": 0.9985376172910587,
+        "meanDifference": 0.0017800574209175907,
+        "name": "watermarked.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": 1,
+        "meanDifference": 0,
+        "name": "watermark-removed.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": 0.9988719873301806,
+        "meanDifference": 0.0014109293619791745,
+        "name": "locally-inpainted.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": null,
+        "meanDifference": null,
+        "name": "generation-3.jpg",
+        "verifiedRelated": false
+      },
+      {
+        "correlation": null,
+        "meanDifference": null,
+        "name": "sibling-tone.png",
+        "verifiedRelated": false
+      },
+      {
+        "correlation": 0.9964366484973477,
+        "meanDifference": 0,
+        "name": "sibling-crop.png",
+        "verifiedRelated": true
+      },
+      {
+        "correlation": null,
+        "meanDifference": null,
+        "name": "ai-restored.png",
+        "verifiedRelated": false
+      },
+      {
+        "correlation": null,
+        "meanDifference": null,
+        "name": "distinct-capture.jpg",
+        "verifiedRelated": false
+      }
+    ],
+    "scope": "Deterministic pair verification of known-history fixture against baseline; no claim of full lineage recovery"
+  },
+  "distinctCaptureAttribution": {
+    "photo": "AS17-148-22726",
+    "sourceURL": "https://eol.jsc.nasa.gov/SearchPhotos/photo.pl?frame=22726&mission=AS17&roll=148",
+    "credit": "Image courtesy of the Earth Science and Remote Sensing Unit, NASA Johnson Space Center",
+    "terms": "https://eol.jsc.nasa.gov/FAQ/default.htm"
+  }
+}

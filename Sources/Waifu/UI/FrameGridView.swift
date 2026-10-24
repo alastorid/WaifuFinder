@@ -16,7 +16,9 @@ import SwiftUI
 /// Cells show the decoded source frame number. A thick blue border sits inside
 /// selected thumbnails; keyboard browsing moves the selection with the focus.
 ///
-/// Keyboard (when focused): ←/→ walk the list, ↑/↓ jump group boundaries, **Space
+/// Keyboard (when focused): ←/→ walk the list, ↑/↓ step one drawn line (a group
+/// strip, or one of the chunked lines of an ungrouped run) in one-group-per-line
+/// mode and jump group boundaries in the flow grid, **Space
 /// opens the zoomable preview** (it no longer toggles selection — selecting has its
 /// own click, and the preview is what a frame deserves when you stop on it), Home and
 /// ⌘←/↑ focus the first frame, End and ⌘→/↓ focus the last, and Return selects.
@@ -39,8 +41,10 @@ struct FrameGridView: View {
     /// Called when the user clicks a frame (single-click replaces selection,
     /// modifier clicks toggle or extend selection; Return also selects).
     let onFrameClick: (AnalyzedFrame, ClickKind) -> Void
+    var onSafire: ((AnalyzedFrame) -> Void)? = nil
 
     /// Whether the grid has keyboard focus.
+    @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
     @State private var committedNavigation: FrameID?
@@ -187,7 +191,7 @@ struct FrameGridView: View {
     private var stagedLayout: some View {
         let _ = Diag.trace(.grid, message: "grid render input=\(gridRevision) revision=\(thumbnailStage.current?.key.revision.description ?? "nil") rows=\(thumbnailStage.current?.rows.count ?? 0)")
         if let snapshot = thumbnailStage.current {
-            LazyVStack(alignment: .leading, spacing: snapshot.key.grouped ? 12 : spacing) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(snapshot.rows) { row in
                     let token = snapshot.key.tokenPrefix + row.id
                     Group {
@@ -207,6 +211,7 @@ struct FrameGridView: View {
                                 value: [token: proxy.frame(in: .named("frame-grid-viewport"))])
                         }
                     }
+                    .padding(.bottom, row.spacing)
                     .id(row.id)
                 }
             }
@@ -442,6 +447,12 @@ struct FrameGridView: View {
             Button("Select All in Group") { session.selectAll(in: group) }
         }
 
+        if photoURL != nil,let onSafire {
+            // Opening captures the current photo/group. Album analysis and
+            // regrouping do not prevent reading or viewing SAFIRE evidence.
+            Button("SAFIRE",action:{onSafire(frame)})
+        }
+
         if session.offersFocusedRangeAnalysis {
             Button("Analyze ±3 Seconds Range") { session.analyzeFocusedRange(around: frame) }
                 .disabled(!session.canAnalyzeFocusedRange)
@@ -461,6 +472,12 @@ struct FrameGridView: View {
                 .disabled(session.isWritingPhotosTags || session.tagVocabulary == nil || frame.tagProbabilities == nil || frame.tagRating == nil)
         }
 
+        if googleLensEnabled {
+            Divider()
+            Button("Search with Google Lens") {
+                Task { await GoogleLensSearch.search(frame: frame, in: session) }
+            }
+        }
         Divider()
         Button("Copy Timecode") {
             NSPasteboard.general.clearContents()

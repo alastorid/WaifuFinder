@@ -238,6 +238,22 @@ actor RemoteServerSession {
                     await self.handleTagBatch(envelope)
                     await self.tagBatchFinished(envelope.streamID)
                 }
+            case .truforRequest:
+                do {
+                    try await resources.reserve(streamID:envelope.streamID)
+                    Task { [weak self] in
+                        guard let self else { return }
+                        await self.resources.run(streamID:envelope.streamID) { await self.handleTruFor(envelope) }
+                    }
+                } catch { try? await connection.sendError(envelope,Self.describe(error)) }
+            case .safireRequest:
+                do {
+                    try await resources.reserve(streamID:envelope.streamID)
+                    Task { [weak self] in
+                        guard let self else { return }
+                        await self.resources.run(streamID:envelope.streamID) { await self.handleSafire(envelope) }
+                    }
+                } catch { try? await connection.sendError(envelope,Self.describe(error)) }
             case .vocabularyRequest: await handleVocabularyRequest(envelope)
             case .uncoverBegin: await handleUncover(envelope)
             default:

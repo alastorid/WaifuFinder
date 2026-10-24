@@ -6,10 +6,12 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
     let session: WaifuSession
     let isPhotosMode: Bool
     var orb: WaifuCrystalOrbModel? = nil
+    var lineage: ImageLineageModel? = nil
 
     func makeNSView(context: Context) -> KeyboardView {
         let view = KeyboardView()
         view.orb = orb
+        view.lineage = lineage
         view.session = session
         view.isPhotosMode = isPhotosMode
         return view
@@ -17,6 +19,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
 
     func updateNSView(_ view: KeyboardView, context: Context) {
         view.orb = orb
+        view.lineage = lineage
         view.session = session
         view.isPhotosMode = isPhotosMode
     }
@@ -29,6 +32,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
         var session: WaifuSession?
         var isPhotosMode = false
         var orb: WaifuCrystalOrbModel?
+        var lineage: ImageLineageModel?
         private var monitor: Any?
         private var resignObserver: NSObjectProtocol?
         private var router = PreviewToggleKeyRouter()
@@ -63,6 +67,19 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                             if let orb = self.orb, orb.isOpen { return orb.handleKey(event) }
                         }
                         if self.orb?.isOpen == true { return false }
+                        if let lineage = self.lineage, lineage.isOpen {
+                            guard !hasTextFocus, window.attachedSheet == nil,
+                                  !session.showExportSheet, session.errorMessage == nil,
+                                  !lineage.showDeleteConfirmation else { return false }
+                            if event.type == .keyDown, event.keyCode == 51, modifiers == .command {
+                                if !event.isARepeat { lineage.requestDelete() }; return true
+                            }
+                            if event.keyCode == 49, modifiers.isEmpty {
+                                if event.type == .keyDown, !event.isARepeat { lineage.inspect(native:true) }; return true
+                            }
+                            // Never let the hidden ranking selection receive preview keys.
+                            return false
+                        }
                         if event.type == .keyDown, event.keyCode == 51, modifiers == .command,
                            self.isPhotosMode, !hasTextFocus,
                            session.uncover == nil, !session.progress.isRunning,

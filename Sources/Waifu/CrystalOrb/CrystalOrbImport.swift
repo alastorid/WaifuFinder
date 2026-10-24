@@ -13,13 +13,19 @@ enum CrystalOrbImport {
             ?? UTType.image.identifier
     }
 
-    static func imageData(from provider: NSItemProvider) async throws -> Data {
+    /// Loads the provider's data representation as decodable image bytes. A load
+    /// error and bytes ImageIO rejects are both treated as transient — see
+    /// `DropRetry` — so the provider is re-asked before data is given up on.
+    static func imageData(from provider: NSItemProvider) async -> Data? {
         let type = imageType(of: provider)
-        return try await withCheckedThrowingContinuation { continuation in
-            provider.loadDataRepresentation(forTypeIdentifier: type) { data, error in
-                if let data { continuation.resume(returning: data) }
-                else { continuation.resume(throwing: error ?? CrystalOrbImageSource.failure) }
+        return await DropRetry.value {
+            let data = try? await withCheckedThrowingContinuation { continuation in
+                provider.loadDataRepresentation(forTypeIdentifier: type) { data, error in
+                    if let data { continuation.resume(returning: data) }
+                    else { continuation.resume(throwing: error ?? CrystalOrbImageSource.failure) }
+                }
             }
+            return data.flatMap { isDecodable($0) ? $0 : nil }
         }
     }
 
@@ -30,21 +36,31 @@ enum CrystalOrbImport {
         return CGImageSourceGetCount(source) > 0
     }
 
+    /// Whether a staged file holds a payload ImageIO recognises; reads only the
+    /// container header, not the full bitmap.
+    static func isDecodableFile(_ url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+        return CGImageSourceGetCount(source) > 0
+    }
+
     /// Materialises the representation as a file. Some sources (notably Photos
     /// promises) cannot coerce data but can deliver a file, so this is the fallback
     /// when data loading fails or is undecodable. The handed-out URL is valid only
-    /// inside the callback, hence the synchronous copy.
+    /// inside the callback, hence the synchronous copy; a copy ImageIO rejects is
+    /// re-asked for like any other transient drop failure (see `DropRetry`).
     static func stageImageFile(from provider: NSItemProvider) async -> URL? {
         let type = imageType(of: provider)
-        return await withCheckedContinuation { continuation in
-            provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
-                let staged = url.flatMap { source -> URL? in
-                    let destination = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("waifu-orb-drop-\(UUID().uuidString)")
-                    return (try? FileManager.default.copyItem(at: source, to: destination)) != nil ? destination : nil
+        return await DropRetry.value {
+            await withCheckedContinuation { continuation in
+                provider.loadFileRepresentation(forTypeIdentifier: type) { url, _ in
+                    let staged = url.flatMap { source -> URL? in
+                        let destination = FileManager.default.temporaryDirectory
+                            .appendingPathComponent("waifu-orb-drop-\(UUID().uuidString)")
+                        return (try? FileManager.default.copyItem(at: source, to: destination)) != nil ? destination : nil
+                    }
+                    continuation.resume(returning: staged)
                 }
-                continuation.resume(returning: staged)
-            }
+            }.flatMap { isDecodableFile($0) ? $0 : nil }
         }
     }
 
@@ -67,9 +83,9 @@ enum CrystalOrbImport {
                 // resolves as an image: promised files can arrive before their
                 // type is derivable from the path, and handing them to the video
                 // importer loses the drop. Data first; providers that cannot
-                // coerce data still go through the file-promise machinery.
-                let payload = try? await imageData(from: imageProvider)
-                if let payload, isDecodable(payload) {
+                // coerce data still go through the file-promise machinery. Both
+                // loads retry transient corruption themselves (see `DropRetry`).
+                if let payload = await imageData(from: imageProvider) {
                     guard model.dropTicket == ticket else { return }
                     // Prefer the drag's own file when exactly one is present:
                     // metadata and security scope survive; otherwise use bytes.

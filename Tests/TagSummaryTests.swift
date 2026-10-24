@@ -80,57 +80,14 @@ func registerTagSummaryTests() {
         checkEqual(values, tags, "text is passed directly, with no script escaping or delimiters")
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword batch event addresses every photo in one set-data request", knownBug: nil) {
-        let tags = ["explicit", "a,b", "quoted\"tag", "line\nbreak", "\\backslash", "猫"]
-        let batch = [PhotosKeywords.Update(assetIdentifier: "asset-a", keywords: tags),
-                     PhotosKeywords.Update(assetIdentifier: "asset\"\\b", keywords: tags)]
-        let event = try PhotosKeywordWriter.event(for: batch)
-        checkEqual(event.eventClass, AEEventClass(kAECoreSuite), "standard Apple event suite")
-        checkEqual(event.eventID, AEEventID(kAESetData), "one event replaces the keyword property")
-        let property = event.paramDescriptor(forKeyword: keyDirectObject)
-        checkEqual(property?.descriptorType, DescType(typeObjectSpecifier), "property is an object specifier")
-        checkEqual(property?.forKeyword(OSType(keyAEKeyData))?.typeCodeValue, PhotosKeywordWriter.keywordsProperty, "keywords property")
-        let container = property?.forKeyword(OSType(keyAEContainer))
-        checkEqual(container?.descriptorType, DescType(typeAEList), "one property over a list of photos")
-        for (index, identifier) in ["asset-a", "asset\"\\b"].enumerated() {
-            let photo = container?.atIndex(index + 1)
-            checkEqual(photo?.forKeyword(OSType(keyAEDesiredClass))?.typeCodeValue, PhotosKeywordWriter.mediaItemClass, "media item")
-            checkEqual(photo?.forKeyword(OSType(keyAEKeyForm))?.enumCodeValue, OSType(formUniqueID), "uses stable ID, not an index")
-            checkEqual(photo?.forKeyword(OSType(keyAEKeyData))?.stringValue, identifier, "exact asset ID")
-        }
-        let data = event.paramDescriptor(forKeyword: keyAEData)
-        let values = (1...tags.count).compactMap { data?.atIndex($0)?.stringValue }
-        checkEqual(values, tags, "one shared keyword list, passed directly with no script escaping")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword batches collapse repeated assets and shared keyword lists", knownBug: nil) {
-        let updates = [
-            PhotosKeywords.Update(assetIdentifier: "A", keywords: ["general", "tag 1"]),
-            PhotosKeywords.Update(assetIdentifier: "B", keywords: ["explicit"]),
-            PhotosKeywords.Update(assetIdentifier: "C", keywords: ["general", "tag 1"]),
-            PhotosKeywords.Update(assetIdentifier: "A", keywords: ["general", "tag 9"]),
-            PhotosKeywords.Update(assetIdentifier: "D", keywords: ["explicit"])
-        ]
-        let grouped = PhotosKeywordWriter.groups(for: updates)
-        checkEqual(grouped.map { $0.map(\.assetIdentifier) }, [["A"], ["B", "D"], ["C"]],
-                   "one batch per shared keyword list, in first-appearance order")
-        checkEqual(grouped[0].first?.keywords, ["general", "tag 9"], "a repeated asset keeps only its final keywords")
-        let repeated = (0..<5).map { PhotosKeywords.Update(assetIdentifier: "P\($0)", keywords: ["general"]) }
-        checkEqual(PhotosKeywordWriter.groups(for: repeated, batchLimit: 2).map(\.count), [2, 2, 1],
-                   "batches are capped so one rejection cannot lose the whole job")
-    })
-
     Registry.shared.add(suite: suite, TestCase(name: "Photos keyword cancellation finishes the in-flight photo then stops", knownBug: nil) {
-        let probe = KeywordWriteProbe(holdWrites: 1)
-        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        let groups = PhotosKeywordWriter.groups(for: updates)
-        checkEqual(groups.count, 3, "distinct keyword lists stay separate writes")
+        let probe = KeywordWriteProbe(pauseFirst: true)
+        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["general"]) }
         let task = Task {
-            try await PhotosKeywordWriter.run(groups, workerCount: 1,
-                                              write: { try await probe.write($0) },
+            try await PhotosKeywordWriter.run(updates, write: { try await probe.write($0) },
                                               progress: { await probe.report($0) })
         }
-        await probe.waitForInFlight(1)
+        await probe.waitForFirstWrite()
         task.cancel()
         await probe.release()
         do {
@@ -142,110 +99,19 @@ func registerTagSummaryTests() {
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "Photos keyword progress counts only confirmed writes and stops on failure", knownBug: nil) {
-        let probe = KeywordWriteProbe(failIdentifiers: ["photo 1"])
-        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
+        let probe = KeywordWriteProbe(failSecond: true)
+        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["general"]) }
         do {
-            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
-                                              write: { try await probe.write($0) },
+            try await PhotosKeywordWriter.run(updates, write: { try await probe.write($0) },
                                               progress: { await probe.report($0) })
             check(false, "a failed write must surface an error")
         } catch {}
         checkEqual(await probe.identifiers, ["photo 0", "photo 1"], "stops before later photos")
         checkEqual(await probe.counts, [1], "failed photo is not counted")
         let completed = KeywordWriteProbe()
-        try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
-                                          write: { try await completed.write($0) },
+        try await PhotosKeywordWriter.run(updates, write: { try await completed.write($0) },
                                           progress: { await completed.report($0) })
         checkEqual(await completed.counts, [1, 2, 3], "each confirmed photo advances progress")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "a confirmed Photos keyword batch advances progress by its size", knownBug: nil) {
-        let probe = KeywordWriteProbe()
-        let groups = [[PhotosKeywords.Update(assetIdentifier: "photo 0", keywords: ["general"]),
-                       PhotosKeywords.Update(assetIdentifier: "photo 1", keywords: ["general"])],
-                      [PhotosKeywords.Update(assetIdentifier: "photo 2", keywords: ["explicit"])]]
-        try await PhotosKeywordWriter.run(groups, workerCount: 1,
-                                          write: { try await probe.write($0) },
-                                          progress: { await probe.report($0) })
-        checkEqual(await probe.identifiers, ["photo 0", "photo 1", "photo 2"], "one write confirms each batch")
-        checkEqual(await probe.counts, [2, 3], "progress follows confirmed photos, not events")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "Photos keyword pipelines keep several writes in flight at once", knownBug: nil) {
-        let probe = KeywordWriteProbe(holdWrites: 3)
-        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        let task = Task {
-            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 3,
-                                              write: { try await probe.write($0) },
-                                              progress: { await probe.report($0) })
-        }
-        await probe.waitForInFlight(3)
-        await probe.release()
-        try await task.value
-        checkEqual(await probe.maxInFlight, 3, "three writes overlap instead of queueing one by one")
-        checkEqual(await probe.counts.sorted(), [1, 2, 3], "every confirmed write is reported exactly once")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "a failed Photos write stops new batches after in-flight photos finish", knownBug: nil) {
-        let probe = KeywordWriteProbe(holdWrites: 2, failIdentifiers: ["photo 0"],
-                                      waitForFailureBeforeCompleting: true)
-        let updates = (0..<4).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        let task = Task {
-            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 2,
-                                              write: { try await probe.write($0) },
-                                              progress: { await probe.report($0) })
-        }
-        await probe.waitForInFlight(2)
-        await probe.release()
-        do {
-            try await task.value
-            check(false, "a failed write must surface an error")
-        } catch {}
-        checkEqual(await probe.identifiers.sorted(), ["photo 0", "photo 1"], "later batches never start")
-        checkEqual(await probe.counts, [1], "the sibling that finished in flight is still counted")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "a timed-out Photos write pauses the pipeline, retries once and completes", knownBug: nil) {
-        let probe = KeywordWriteProbe(timeoutOnce: ["photo 0"])
-        let updates = (0..<2).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
-                                          stallCooldown: .milliseconds(10),
-                                          write: { try await probe.write($0) },
-                                          progress: { await probe.report($0) })
-        checkEqual(await probe.identifiers, ["photo 0", "photo 0", "photo 1"], "the stalled batch is retried once, then the job continues")
-        checkEqual(await probe.counts, [1, 2], "the retry confirms the batch")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "a Photos write that times out twice fails with guidance", knownBug: nil) {
-        let probe = KeywordWriteProbe(timeoutAlways: ["photo 0"])
-        let updates = (0..<2).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        do {
-            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 1,
-                                              stallCooldown: .milliseconds(10),
-                                              write: { try await probe.write($0) },
-                                              progress: { await probe.report($0) })
-            check(false, "a second timeout must surface an error")
-        } catch {}
-        checkEqual(await probe.identifiers, ["photo 0", "photo 0"], "two attempts, then the job stops")
-        checkEqual(await probe.counts, [], "nothing is confirmed while Photos never replies")
-    })
-
-    Registry.shared.add(suite: suite, TestCase(name: "a stalled Photos write parks other workers until the retry lands", knownBug: nil) {
-        let probe = KeywordWriteProbe(holdWrites: 1, timeoutOnce: ["photo 0"], releaseHoldsOnTimeout: true)
-        let updates = (0..<3).map { PhotosKeywords.Update(assetIdentifier: "photo \($0)", keywords: ["tag \($0)"]) }
-        let task = Task {
-            try await PhotosKeywordWriter.run(PhotosKeywordWriter.groups(for: updates), workerCount: 2,
-                                              stallCooldown: .seconds(1),
-                                              write: { try await probe.write($0) },
-                                              progress: { await probe.report($0) })
-        }
-        try await task.value
-        let recorded = await probe.identifiers
-        checkEqual(recorded.count, 4, "every batch is attempted exactly once except the retried stall")
-        checkEqual(recorded.filter { $0 == "photo 0" }.count, 2, "the stalled batch is attempted exactly twice")
-        check(recorded.lastIndex(of: "photo 0")! < recorded.firstIndex(of: "photo 2")!,
-              "no new batch starts before the retry lands")
-        checkEqual(await probe.counts.sorted(), [1, 2, 3], "all three batches confirm")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "thumbnail Top reasons follow rankings, group caps and partial reveals", knownBug: nil) {
@@ -634,83 +500,37 @@ func registerTagSummaryTests() {
 }
 
 private actor KeywordWriteProbe {
-    private(set) var identifiers: [String] = []
-    private(set) var counts: [Int] = []
-    private(set) var maxInFlight = 0
-    private(set) var failed: [String] = []
-    private(set) var timeouts: [String] = []
-    private var attempts: [String: Int] = [:]
-    private var inFlight = 0
-    private var heldCount = 0
-    private var released = false
-    private let holdWrites: Int
-    private let failIdentifiers: Set<String>
-    private let waitForFailureBeforeCompleting: Bool
-    private let timeoutOnce: Set<String>
-    private let timeoutAlways: Set<String>
-    private let releaseHoldsOnTimeout: Bool
-    private var heldWaiters: [CheckedContinuation<Void, Never>] = []
-    private var failureWaiters: [CheckedContinuation<Void, Never>] = []
-    private var inFlightWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    var identifiers: [String] = []
+    var counts: [Int] = []
+    let pauseFirst: Bool
+    let failSecond: Bool
+    var firstStarted = false
+    var startWaiter: CheckedContinuation<Void, Never>?
+    var writeWaiter: CheckedContinuation<Void, Never>?
 
-    init(holdWrites: Int = 0, failIdentifiers: Set<String> = [],
-         waitForFailureBeforeCompleting: Bool = false,
-         timeoutOnce: Set<String> = [], timeoutAlways: Set<String> = [],
-         releaseHoldsOnTimeout: Bool = false) {
-        self.holdWrites = holdWrites
-        self.failIdentifiers = failIdentifiers
-        self.waitForFailureBeforeCompleting = waitForFailureBeforeCompleting
-        self.timeoutOnce = timeoutOnce
-        self.timeoutAlways = timeoutAlways
-        self.releaseHoldsOnTimeout = releaseHoldsOnTimeout
+    init(pauseFirst: Bool = false, failSecond: Bool = false) {
+        self.pauseFirst = pauseFirst
+        self.failSecond = failSecond
     }
 
-    func write(_ batch: [PhotosKeywords.Update]) async throws {
-        let batchIds = batch.map(\.assetIdentifier)
-        identifiers.append(contentsOf: batchIds)
-        // A reply timeout precedes any holding: the retried attempt must never park.
-        if let timingOut = batchIds.first(where: { timeoutOnce.contains($0) || timeoutAlways.contains($0) }) {
-            attempts[timingOut, default: 0] += 1
-            if timeoutAlways.contains(timingOut) || attempts[timingOut] == 1 {
-                timeouts.append(timingOut)
-                if releaseHoldsOnTimeout { release() }
-                throw NSError(domain: NSOSStatusErrorDomain, code: Int(errAETimeout))
+    func write(_ update: PhotosKeywords.Update) async throws {
+        identifiers.append(update.assetIdentifier)
+        if pauseFirst && identifiers.count == 1 {
+            await withCheckedContinuation { continuation in
+                writeWaiter = continuation
+                firstStarted = true
+                startWaiter?.resume()
+                startWaiter = nil
             }
         }
-        inFlight += 1
-        maxInFlight = max(maxInFlight, inFlight)
-        let ready = inFlightWaiters.filter { $0.0 <= maxInFlight }
-        inFlightWaiters.removeAll { $0.0 <= maxInFlight }
-        ready.forEach { $0.1.resume() }
-        if !released, heldCount < holdWrites {
-            heldCount += 1
-            await withCheckedContinuation { heldWaiters.append($0) }
-            heldCount -= 1
-        }
-        inFlight -= 1
-        if let failedIdentifier = batchIds.first(where: { failIdentifiers.contains($0) }) {
-            failed.append(failedIdentifier)
-            let waiters = failureWaiters
-            failureWaiters = []
-            waiters.forEach { $0.resume() }
-            throw PhotosMedia.failure("Simulated failure")
-        }
-        if waitForFailureBeforeCompleting, failed.isEmpty {
-            await withCheckedContinuation { failureWaiters.append($0) }
-        }
+        if failSecond && identifiers.count == 2 { throw PhotosMedia.failure("Simulated failure") }
     }
 
-    func waitForInFlight(_ target: Int) async {
-        if maxInFlight >= target { return }
-        await withCheckedContinuation { inFlightWaiters.append((target, $0)) }
+    func waitForFirstWrite() async {
+        if firstStarted { return }
+        await withCheckedContinuation { startWaiter = $0 }
     }
 
-    func release() {
-        released = true
-        let waiters = heldWaiters
-        heldWaiters = []
-        waiters.forEach { $0.resume() }
-    }
-
+    func release() { writeWaiter?.resume(); writeWaiter = nil }
     func report(_ count: Int) { counts.append(count) }
 }

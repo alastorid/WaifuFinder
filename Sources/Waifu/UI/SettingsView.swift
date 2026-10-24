@@ -18,12 +18,21 @@ struct WaifuSettingsView: View {
 private struct GeneralSettingsView: View {
     @ObservedObject private var tagMemory = TagResultMemory.shared
     @State private var showingDeleteTagResults = false
+    @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
 
     var body: some View {
         Form {
             Section("WaifuFinder") {
                 Text("Find and restore the best frames in your videos.")
                 Text("Analysis, grouping, and export controls are available in the main window. Manage restoration models in the Models tab.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Online Visual Search") {
+                Toggle("Google Lens", isOn: $googleLensEnabled)
+                    .toggleStyle(.switch)
+                Text("Send an image to Google when you choose Search with Google Lens from its right-click menu.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -189,10 +198,14 @@ struct ModelSettingsView: View {
                         HStack {
                             Text(entry.model.name).font(.headline)
                             Spacer()
-                            Text(entry.ready ? "Ready" : entry.location == nil ? (entry.pending == nil ? "Not installed" : "Download incomplete") : "Needs attention")
+                            Text(entry.updateAvailable ? "Update available" : entry.ready ? "Ready" : entry.location == nil ? (entry.pending == nil ? "Not installed" : "Download incomplete") : "Needs attention")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Text(entry.model.detail).font(.caption).foregroundStyle(.secondary)
+                        if entry.model == .trufor {
+                            Text("Redistributed with credit under the GRIP-UNINA licence: informational and nonprofit use only, and public results must credit the original authors.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         if entry.model.isNonCommercialRestricted {
                             Text("Non-commercial use only").font(.caption).foregroundStyle(.secondary)
                         }
@@ -227,8 +240,8 @@ struct ModelSettingsView: View {
                         if entry.pending != nil {
                             Button("Discard Download…") { library.discardDownload(entry) }
                         }
-                        if !entry.ready {
-                            Button(entry.pending == nil ? "Download" : "Retry Download") { library.download(entry.model) }.buttonStyle(.borderedProminent)
+                        if entry.model.supportsDownload && (!entry.ready || entry.updateAvailable) {
+                            Button(entry.updateAvailable ? "Update" : entry.pending == nil ? "Download" : "Retry Download") { library.download(entry.model) }.buttonStyle(.borderedProminent)
                         }
                         Button("Choose Existing…") { library.chooseExisting(entry.model) }
                     }.disabled(library.active != nil || library.isDownloadingAll || (library.inUse[entry.model] ?? 0) > 0)

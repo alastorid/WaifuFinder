@@ -102,12 +102,24 @@ final class PhotosMedia: @unchecked Sendable {
     private var albums: [URL: Album] = [:]
     private var items: [URL: Item] = [:]
     private var videoAssets: [URL: VideoAsset] = [:]
+    // Modification dates observed right after our own keyword writes. Photos
+    // bumps an asset's modification date for a keywords-only change; these
+    // baselines let album comparisons ignore exactly those bumps while a later
+    // real edit (a new date past the baseline) is still detected.
+    private var keywordBaselines: [String: Double] = [:]
     // Keep sidebar fetches alive so new albums, folder changes and counts also
     // remain part of PhotoKit's observed results between refreshes.
     private var sidebarCollections: [PHFetchResult<PHCollection>] = []
     private var sidebarAssets: [PHFetchResult<PHAsset>] = []
     private var sidebarSmartAlbums: PHFetchResult<PHAssetCollection>?
 
+
+    init(albums initialAlbums: [Album] = []) {
+        for album in initialAlbums {
+            albums[album.url] = album
+            for item in album.items { items[item.url] = item }
+        }
+    }
 
     static func isPhotos(_ url: URL) -> Bool { url.scheme == "waifu-photos" }
     func album(_ url: URL) -> Album? { lock.withLock { albums[url] } }
@@ -168,6 +180,8 @@ final class PhotosMedia: @unchecked Sendable {
     func resolve(_ url: URL, seconds: Double) -> (URL, Double) {
         guard let album = album(url), let index = Self.itemIndex(offsets: album.offsets, seconds: seconds) else { return (url, seconds) }
         let item = album.items[index]
+        // Incremental deletions leave gaps so surviving frame timestamps stay stable.
+        guard seconds >= item.offset, seconds < item.offset + item.duration else { return (url, seconds) }
         return (item.url, max(0, min(seconds - item.offset, item.duration - 0.000001)))
     }
     static func itemIndex(offsets: [Double], seconds: Double) -> Int? {
@@ -313,7 +327,6 @@ final class PhotosMedia: @unchecked Sendable {
         guard status == .authorized || status == .limited else {
             throw Self.failure("Allow Photos access in System Settings → Privacy & Security → Photos, then try again.")
         }
-        PhotosLibraryChanges.shared.start()
         // A flat fetchAssetCollections(.album) is not the user's sidebar order.
         // Read the ordered root collection list and each folder's child list.
         // Do not apply a sort descriptor or flatten albums out of their folders.
@@ -380,7 +393,7 @@ final class PhotosMedia: @unchecked Sendable {
         }
         guard allowEmpty || !entries.isEmpty else { throw Self.failure("This album contains no accessible photos.") }
         lock.withLock {
-            albums[url] = Album(title: selection.title, collectionIdentifier: collection.localIdentifier,
+            albums[url] = Album(title: collection.localizedTitle ?? selection.title, collectionIdentifier: collection.localIdentifier,
                                 canReorder: collection.canPerform(.rearrangeContent),
                                 items: entries, offsets: entries.map(\.offset), url: url,
                                 fingerprint: Self.fingerprint(entries), fetchResult: fetched)
@@ -396,6 +409,65 @@ final class PhotosMedia: @unchecked Sendable {
         let height: Int
         let duration: Double
     }
+
+    /// A deletion-only snapshot keeps the relative order and content of every
+    /// survivor. Additions, moves and real edits still need the normal refresh.
+    static func removedAssetIDs(from before: [Revision], to after: [Revision],
+                                keywordBaselines: [String: Double]) -> Set<String>? {
+        guard after.count < before.count else { return nil }
+        let retained = Set(after.map(\.identifier))
+        guard revisionsMatch(before.filter { retained.contains($0.identifier) }, after,
+                             keywordBaselines: keywordBaselines) else { return nil }
+        return Set(before.map(\.identifier)).subtracting(retained)
+    }
+
+    /// Adopt the latest membership and observation baseline while keeping the
+    /// source URL, item URLs and timeline positions used by existing results.
+    func applyAlbumDeletions(from refreshedURL: URL, to sourceURL: URL) -> Set<String>? {
+        guard let before = albumRevisions(sourceURL), let after = albumRevisions(refreshedURL),
+              let removed = Self.removedAssetIDs(from: before, to: after,
+                                               keywordBaselines: keywordWriteBaselines()) else { return nil }
+        return lock.withLock {
+            guard let previous = albums[sourceURL], let refreshed = albums[refreshedURL],
+                  previous.collectionIdentifier == refreshed.collectionIdentifier else { return nil }
+            let survivors = previous.items.filter { !removed.contains($0.asset.localIdentifier) }
+            // Analysis caches contain timeline-based IDs. A sparse timeline must
+            // not share a cache with a newly opened, compacted copy of the album.
+            let positions = survivors.map { String($0.offset) }.joined(separator: ",")
+            let positionHash = SHA256.hash(data: Data(positions.utf8)).map { String(format: "%02x", $0) }.joined()
+            albums[sourceURL] = Album(title: refreshed.title, collectionIdentifier: previous.collectionIdentifier,
+                                      canReorder: refreshed.canReorder, items: survivors,
+                                      offsets: survivors.map(\.offset), url: sourceURL,
+                                      fingerprint: refreshed.fingerprint + "-" + positionHash, fetchResult: refreshed.fetchResult)
+            for item in previous.items where removed.contains(item.asset.localIdentifier) {
+                items.removeValue(forKey: item.url)
+                videoAssets.removeValue(forKey: item.url)
+            }
+            return removed
+        }
+    }
+    /// Apply a confirmed PhotoKit deletion to the loaded snapshot without
+    /// fetching the album again or moving any surviving timeline positions.
+    func removeDeletedAssets(_ identifiers: Set<String>, from sourceURL: URL) {
+        guard !identifiers.isEmpty else { return }
+        lock.withLock {
+            guard let previous = albums[sourceURL] else { return }
+            let removed = previous.items.filter { identifiers.contains($0.asset.localIdentifier) }
+            guard !removed.isEmpty else { return }
+            let survivors = previous.items.filter { !identifiers.contains($0.asset.localIdentifier) }
+            let deleted = removed.map { $0.asset.localIdentifier }.sorted().joined(separator: "\n")
+            let hash = SHA256.hash(data: Data(deleted.utf8)).map { String(format: "%02x", $0) }.joined()
+            albums[sourceURL] = Album(title: previous.title, collectionIdentifier: previous.collectionIdentifier,
+                canReorder: previous.canReorder, items: survivors, offsets: survivors.map(\.offset),
+                url: sourceURL, fingerprint: previous.fingerprint + "-deleted-" + hash,
+                fetchResult: previous.fetchResult)
+            for item in removed {
+                items.removeValue(forKey: item.url)
+                videoAssets.removeValue(forKey: item.url)
+            }
+        }
+    }
+
     static func fingerprint(_ revisions: [Revision]) -> String {
         var hash = SHA256()
         for revision in revisions {
@@ -413,6 +485,56 @@ final class PhotosMedia: @unchecked Sendable {
     func cacheSource(_ url: URL, mode: AnalysisMode) -> (path: String, count: UInt64)? {
         guard let album = album(url) else { return nil }
         return ("photos-rendition-v3/\(mode.rawValue)/\(album.fingerprint)", UInt64(album.items.count))
+    }
+
+    /// The fetch results PhotoKit diffs against when the library changes, so a
+    /// change can be attributed to precise assets instead of a wholesale reload.
+    func observedFetchResults() -> [PHFetchResult<PHAsset>] {
+        lock.withLock { albums.values.map(\.fetchResult) + sidebarAssets }
+    }
+
+    /// Snapshot the post-write modification dates for photos our keyword job
+    /// touched, so those keyword-only bumps never read as content changes.
+    /// Recording all attempted identifiers also covers the partial writes of a
+    /// cancelled job: an untouched photo's baseline is simply its current date.
+    func recordKeywordWriteBaselines(for identifiers: [String]) async {
+        guard !identifiers.isEmpty else { return }
+        await Task.detached(priority: .utility) {
+            let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+            var baselines: [String: Double] = [:]
+            fetched.enumerateObjects { asset, _, _ in
+                baselines[asset.localIdentifier] =
+                    (asset.modificationDate ?? asset.creationDate ?? .distantPast).timeIntervalSince1970
+            }
+            self.lock.withLock { self.keywordBaselines.merge(baselines) { _, new in new } }
+        }.value
+    }
+
+    func keywordWriteBaselines() -> [String: Double] { lock.withLock { keywordBaselines } }
+
+    func albumRevisions(_ url: URL) -> [Revision]? {
+        lock.withLock {
+            albums[url]?.items.map { item in
+                Revision(identifier: item.asset.localIdentifier,
+                         modified: (item.asset.modificationDate ?? item.asset.creationDate ?? .distantPast).timeIntervalSince1970,
+                         width: item.asset.pixelWidth, height: item.asset.pixelHeight, duration: item.duration)
+            }
+        }
+    }
+
+    /// Equality for "did the album's photos really change": identifier, geometry
+    /// and duration must match, and a differing modification date only counts as
+    /// equal when it is the bump our own keyword write made — either side may
+    /// hold the pre- or post-write date; the baseline holds the post-write one.
+    static func revisionsMatch(_ a: [Revision], _ b: [Revision], keywordBaselines: [String: Double]) -> Bool {
+        guard a.count == b.count else { return false }
+        return zip(a, b).allSatisfy { left, right in
+            guard left.identifier == right.identifier, left.width == right.width,
+                  left.height == right.height, left.duration == right.duration else { return false }
+            if left.modified == right.modified { return true }
+            guard let baseline = keywordBaselines[left.identifier] else { return false }
+            return max(left.modified, right.modified) == baseline
+        }
     }
 
     static func renditionSize(width: Int, height: Int, maxPixelSize: Int) -> CGSize {

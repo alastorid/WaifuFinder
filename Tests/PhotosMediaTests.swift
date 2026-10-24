@@ -3,6 +3,31 @@ import AVFoundation
 import Photos
 
 func registerPhotosMediaTests() {
+    Registry.shared.add(suite: "Photos media", TestCase(name: "confirmed deletions update the loaded album without replacing surviving photos", knownBug: nil) {
+        let source = URL(string: "waifu-photos://album/confirmed-delete")!
+        let items = (0..<3).map { index in
+            PhotosMedia.Item(asset: DeletedPhotoTestAsset("photo-\(index)"),
+                url: URL(string: "waifu-photos://asset/delete-\(index)")!, offset: Double(index))
+        }
+        let album = PhotosMedia.Album(title: "Delete test", collectionIdentifier: "test-album", canReorder: true,
+            items: items, offsets: items.map(\.offset), url: source, fingerprint: "original",
+            fetchResult: PHFetchResult<PHAsset>())
+        let media = PhotosMedia(albums: [album])
+        media.removeDeletedAssets(["photo-1"], from: source)
+        let survivors = media.album(source)!
+        checkEqual(survivors.url, source, "the workspace source identity stays mounted")
+        checkEqual(survivors.items.map(\.url), [items[0].url, items[2].url], "only the confirmed photo disappears")
+        checkEqual(survivors.offsets, [0, 2], "surviving frame IDs and timestamps remain valid")
+        checkEqual(media.resolve(source, seconds: 2).0, items[2].url, "surviving previews still resolve to their original photo")
+        checkNil(media.item(items[1].url), "deleted media can no longer be requested")
+        check(media.album(source)?.fingerprint != album.fingerprint, "source caches no longer describe the deleted photo")
+        media.removeDeletedAssets(["photo-1"], from: source)
+        checkEqual(media.album(source)?.fingerprint, survivors.fingerprint, "applying the same confirmation twice is harmless")
+        media.removeDeletedAssets(["photo-0", "photo-2"], from: source)
+        checkEqual(media.album(source)?.items.count, 0, "deleting the last photos leaves the same empty album open")
+        check(media.album(source)!.duration > 0, "the empty source remains valid")
+    })
+
     Registry.shared.add(suite: "Photos media", TestCase(name: "album frame timestamps resolve to their owning item", knownBug: nil) {
         let offsets: [Double] = [0, 1, 3.125, 4.125]
         checkEqual(PhotosMedia.itemIndex(offsets: offsets, seconds: 0), 0, "first photo")
@@ -91,4 +116,12 @@ func registerPhotosMediaTests() {
         check(Date().timeIntervalSince(start) < 1, "failed request does not strand the worker")
     })
 
+}
+
+/// PhotoKit metadata only; these fixtures never access or mutate a real library.
+private final class DeletedPhotoTestAsset: PHAsset, @unchecked Sendable {
+    private let identifier: String
+    init(_ identifier: String) { self.identifier = identifier; super.init() }
+    override var localIdentifier: String { identifier }
+    override var mediaType: PHAssetMediaType { .image }
 }

@@ -29,6 +29,12 @@ struct FramePreviewView: View {
     let frame: AnalyzedFrame
     @ObservedObject var session: WaifuSession
 
+    @StateObject private var trufor=TruForPreviewModel()
+    @State private var truforEnabled=false
+    @State private var truforDisplay=TruForDisplay.combined
+    @StateObject private var safire=SafirePreviewModel()
+    @State private var safireEnabled=false
+    @State private var showSafireMask=false
     @State private var image: NSImage?
     @State private var animation: PhotosAnimatedImage?
     /// Keep the previous original visible until the next source frame is ready.
@@ -84,6 +90,11 @@ struct FramePreviewView: View {
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
+                        .googleLensContextMenu {
+                            let pixels = displayedFrameID == frame.id
+                                ? image?.cgImage(forProposedRect: nil, context: nil, hints: nil) : nil
+                            Task { await GoogleLensSearch.search(frame: frame, preferredImage: pixels, in: session) }
+                        }
 
                     if inspectorExpanded, photoInfoURL != nil {
                         Divider()
@@ -103,6 +114,15 @@ struct FramePreviewView: View {
         }
         .task(id: frame.id) { await load(frame) }
         .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
+        .task(id:"\(metadataTaskID)|\(session.thumbnailGeneration)|\(safireEnabled)|\(animation == nil)") {
+            await safire.load(url:photoInfoURL,enabled:safireEnabled && animation==nil)
+        }
+        .task(id:"\(metadataTaskID)|\(session.thumbnailGeneration)|\(truforEnabled)|\(animation == nil)") {
+            await trufor.load(url:photoInfoURL,enabled:truforEnabled && animation==nil,mode:truforDisplay)
+        }
+        .task(id:truforDisplay) { await trufor.display(truforDisplay) }
+        .onChange(of:truforEnabled) { _, enabled in if enabled { safireEnabled=false } }
+        .onChange(of:safireEnabled) { _, enabled in if enabled { truforEnabled=false } }
         .task(id: "\(reading):\(loadID)") {
             showReadingStatus = false
             guard reading else { return }
@@ -252,6 +272,25 @@ struct FramePreviewView: View {
                 traitLine
             }
             Spacer(minLength: 6)
+            if photoInfoURL != nil,animation==nil {
+                if WaifuDistribution.isNonCommercialOnly {
+                    Toggle("TruFor",isOn:$truforEnabled).toggleStyle(.button)
+                        .help("Show TruFor forensic evidence for this photo")
+                    if truforEnabled {
+                        if trufor.loading { ProgressView().controlSize(.small) }
+                        Picker("TruFor display",selection:$truforDisplay) {
+                            ForEach(TruForDisplay.allCases) { Text($0.label).tag($0) }
+                        }.labelsHidden().frame(width:155)
+                    }
+                }
+                Toggle("SAFIRE",isOn:$safireEnabled).toggleStyle(.button)
+                    .help("Show SAFIRE’s forged-area overlay for this photo")
+                if safireEnabled {
+                    if safire.loading { ProgressView().controlSize(.small) }
+                    Picker("SAFIRE display",selection:$showSafireMask) { Text("Overlay").tag(false);Text("Mask").tag(true) }
+                        .pickerStyle(.segmented).frame(width:135)
+                }
+            }
             Button { session.openUncover(at: frame.timeSeconds) } label: {
                 // Marks the *workspace*, not a specific algorithm: it says the
                 // server can do something here. `Reconstruct` marks per
@@ -319,7 +358,8 @@ struct FramePreviewView: View {
                 }
                 .id(animation.identity)
             } else if let image {
-                ZoomableFrameImage(image: image, frameID: displayedFrameID ?? frame.id,
+                ZoomableFrameImage(image: previewImage(image),
+                    frameID: displayedFrameID ?? frame.id,
                                    zoomRatio: $zoom, center: $zoomCenter)
             } else {
                 VStack(spacing: 8) {
@@ -329,6 +369,12 @@ struct FramePreviewView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if safireEnabled,photoInfoURL != nil,!safire.status.isEmpty {
+                Text(safire.status).font(.caption).padding(8).background(.regularMaterial,in:Capsule()).padding(10).allowsHitTesting(false)
+            }
+            if truforEnabled,photoInfoURL != nil,!trufor.status.isEmpty {
+                Text(trufor.status).font(.caption).padding(8).background(.regularMaterial,in:Capsule()).padding(10).allowsHitTesting(false)
             }
             if showReadingStatus {
                 Text("reading…")
@@ -341,6 +387,13 @@ struct FramePreviewView: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+
+    private func previewImage(_ original:NSImage)->NSImage {
+        guard photoInfoURL != nil,displayedFrameID==frame.id else { return original }
+        if truforEnabled,trufor.photoURL==photoInfoURL { return trufor.rendered ?? original }
+        if safireEnabled,safire.photoURL==photoInfoURL { return (showSafireMask ? safire.mask:safire.overlay) ?? original }
+        return original
     }
 
     // MARK: - Loading and zoom

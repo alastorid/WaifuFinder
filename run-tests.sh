@@ -87,7 +87,7 @@ echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $T
 
 echo "==> Running"
 TEST_EXECUTABLE="$BUILD/waifu-tests"
-if [ "${WAIFU_TEST_PGT_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TAGGER_INSTALL:-0}" = "1" ]; then
+if [ "${WAIFU_TEST_PGT_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TAGGER_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_SAFIRE_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TRUFOR_INSTALL:-0}" = "1" ]; then
     # Opt-in release/setup QA uses the real installer and the built app catalog.
     TEST_APP="$BUILD/ModelSetupTests.app"
     mkdir -p "$TEST_APP/Contents/MacOS" "$TEST_APP/Contents/Resources/Runtime"
@@ -95,6 +95,12 @@ if [ "${WAIFU_TEST_PGT_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TAGGER_INSTALL:-0
     cp -R "$ROOT/dist/WaifuFinder.app/Contents/Resources/ModelReleases" "$TEST_APP/Contents/Resources/"
     cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-pgtformer" "$TEST_APP/Contents/Resources/Runtime/"
     cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-wdtagger" "$TEST_APP/Contents/Resources/Runtime/"
+    if [ "${WAIFU_TEST_SAFIRE_INSTALL:-0}" = "1" ]; then
+        cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-safire" "$TEST_APP/Contents/Resources/Runtime/"
+    fi
+    if [ "${WAIFU_TEST_TRUFOR_INSTALL:-0}" = "1" ]; then
+        cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-trufor" "$TEST_APP/Contents/Resources/Runtime/"
+    fi
     cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/mlx.metallib" "$TEST_APP/Contents/Resources/Runtime/"
     ditto "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle" "$TEST_APP/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle"
     cat > "$TEST_APP/Contents/Info.plist" <<'PLIST'

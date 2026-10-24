@@ -1,0 +1,16 @@
+{
+  "repository": "alastorid/SAFIRE-Swift-MLX",
+  "revision": "6422600bd8a8b361ec4869bd597267b7553b5533",
+  "manifestSHA256": "dbddb5618b5df522952702b324db6654a204a6e017fbf1dc3142d3ecb1f06b25",
+  "supportFilesSHA256": {
+    "LICENSE": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+    "APACHE-LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "KMEANS-LICENSE": "63961947e658a5d6f891fef3b15afccb86671d76dfd7d16bb1909b95204caabc",
+    "OPENCV-LICENSE": "fde7392c40ca74de30129c0ddf68c881583ec21babe21b2f455566b82e381a0a",
+    "NOTICE": "253401c35d9fe89db3c4658287a32ff2eea985a95881dd8351475eedd4e1f06d",
+    "README.md": "2a38bd49766de89b736f3970020024afd1212b7fd47f7fd2026fb93bfe92b2f5",
+    "validation.json": "328651946f0e9913ffad70d6fd075e2cdaf2b7ba2f7d82c1f3b5e6beabae86b2",
+    "profiles.json": "e9319dae6863f6ade3244f5f9193405790bbf2b93546070ec4022809125ab9ba"
+  },
+  "pathPrefix": "releases/safire-native-v1-7225d52e9f42b6e6"
+}

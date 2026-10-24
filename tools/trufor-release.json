@@ -1,0 +1,13 @@
+{
+  "repository": "alastorid/TruFor-Swift-MLX",
+  "revision": "80cdfb30d990a115b309793851435b8907ecd648",
+  "manifestSHA256": "10a0aa8489874903a218520c520fb0b2328283bfcce99b6dd46a9fa4303985f4",
+  "supportFilesSHA256": {
+    "LICENSE.txt": "07201e07e3d2c1ac55480037a87734fcccacbb0cd0e25a31e3b89ac7ffadf8b4",
+    "LICENSE_CMX.txt": "687ff4d0ea13200541df7359799a08c2db626094ecacbb8a3fe63ffad177f2a1",
+    "NOTICE": "edf76871234d20978d1eba34235b4d4fe1017fbce7c613597fc6896c2975e856",
+    "README.md": "e175d04250d80716f4838947e112e350b5fa7b53f88db03fa9ad2f2495edfdf5",
+    "validation.json": "44582b6e2af342a5a1489c24a9a70db407543cef68dcf2b147611496376c8d6d"
+  },
+  "pathPrefix": "releases/trufor-native-v1-46b5190799530f2f"
+}

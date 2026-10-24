@@ -1,6 +1,14 @@
 # Repository instructions
 
-## Permission before interactive UI testing
+## Interactive UI testing
+
+The user requested on 2026-10-24 that routine work must not include interactive
+UI tests, now or in future tasks. Do not run them unless the user explicitly
+requests interactive UI testing again. Background builds, automated noninteractive
+tests, rendering, and inference benchmarks may continue normally.
+
+If interactive UI testing is explicitly requested again, the following approval
+requirements still apply:
 
 The user actively shares this computer. Save interactive UI tests as reviewable,
 executable scripts and invoke them through `./run-ui-tests.sh SCRIPT [ARGUMENTS...]`.

@@ -7,15 +7,43 @@ actor PhotosAnalysisCheckpoint {
     let settings: WaifuSettings
     private var completed: [FrameID: AnalyzedFrame] = [:]
 
-    init(sourceURL: URL, settings: WaifuSettings) {
+    init(sourceURL: URL, settings: WaifuSettings, frames: [AnalyzedFrame] = []) {
         self.sourceURL = sourceURL
         self.settings = settings
+        self.completed = Dictionary(uniqueKeysWithValues: frames.map { ($0.id, $0) })
     }
 
     func retain(_ frame: AnalyzedFrame) { completed[frame.id] = frame }
 
     func frames() -> [AnalyzedFrame] {
         completed.values.sorted { ($0.timeSeconds, $0.id.raw) < ($1.timeSeconds, $1.id.raw) }
+    }
+
+    /// Album positions can change after inserts, removals or moves. Only still
+    /// photos with matching revisions can carry their scores into the new timeline.
+    nonisolated static func reusableFrames(_ frames: [AnalyzedFrame],
+        before: [PhotosMedia.Revision], offsetsBefore: [Double],
+        after: [PhotosMedia.Revision], offsetsAfter: [Double],
+        keywordBaselines: [String: Double]) -> [AnalyzedFrame] {
+        guard before.count == offsetsBefore.count, after.count == offsetsAfter.count else { return [] }
+        let oldPositions = Dictionary(uniqueKeysWithValues: offsetsBefore.enumerated().map {
+            (PhotosMedia.frameIndex(seconds: $0.element), $0.offset)
+        })
+        let newPositions = Dictionary(uniqueKeysWithValues: after.enumerated().map { ($0.element.identifier, $0.offset) })
+        return frames.compactMap { frame in
+            guard let oldIndex = oldPositions[frame.id.sampleIndex],
+                  let newIndex = newPositions[before[oldIndex].identifier],
+                  PhotosMedia.revisionsMatch([before[oldIndex]], [after[newIndex]], keywordBaselines: keywordBaselines) else { return nil }
+            let seconds = offsetsAfter[newIndex]
+            return AnalyzedFrame(sampleIndex: PhotosMedia.frameIndex(seconds: seconds), timeSeconds: seconds,
+                artScore: frame.artScore, faceScore: frame.faceScore, faceCount: frame.faceCount,
+                faceAreaFraction: frame.faceAreaFraction, featurePrint: frame.featurePrint,
+                thumbnailKey: frame.thumbnailKey, faceDefinitionScore: frame.faceDefinitionScore,
+                thumbnailAspectRatio: frame.thumbnailAspectRatio, tagProbabilities: frame.tagProbabilities,
+                tagVocabularyFingerprint: frame.tagVocabularyFingerprint, tagRating: frame.tagRating,
+                topTags: frame.topTags, tagGeneralScore: frame.tagGeneralScore,
+                truforScore:frame.truforScore,truforFingerprint:frame.truforFingerprint,truforContentIdentity:frame.truforContentIdentity)
+        }.sorted { $0.timeSeconds < $1.timeSeconds }
     }
 
     /// The merger emits an ordered prefix. Keep its newly grouped results and

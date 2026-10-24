@@ -12,10 +12,14 @@ is lawful in your jurisdiction, are questions for a lawyer. The two open questio
 ## The incompatibility, stated plainly
 
 WaifuFinder's own code is **MIT**, which permits commercial use, sublicensing and resale.
-Almost everything it drives is permissively licensed too. One model is not:
+Almost everything it drives is permissively licensed too. Two models are not:
 
 > **PGTFormer may only be redistributed and used for non-commercial purposes.**
 > Commercial use requires permission from Xidian University or the contributors.
+>
+> **TruFor may be used, reproduced and modified only for informational and nonprofit
+> purposes**, must retain all original notices, and must credit the original authors
+> whenever results made with it are made public.
 
 MIT and "non-commercial only" cannot be reconciled. Attribution does not help, and neither
 does the fact that the files are separable — what the licence restricts is the *use*, not
@@ -51,6 +55,7 @@ So the restriction is enforced at build time instead. See
 | InferKit (CodeFormer formulas) | MIT | Yes | `Runtime/INFERKIT-LICENSE` |
 | **PGTFormer network** | **BSD-style, non-commercial** | **No** | [kepengxu/PGTFormer](https://github.com/kepengxu/PGTFormer) |
 | **PGTFormer weights** | **Undeclared** | **Unknown** | [kepeng/pgtformer-base](https://huggingface.co/kepeng/pgtformer-base) |
+| **TruFor network and weights** | **GRIP-UNINA licence: informational/nonprofit, credit required for public results** | **No** | [grip-unina/TruFor](https://github.com/grip-unina/TruFor) |
 
 Note on the last row: the weights repository declares no licence in its card metadata and
 ships no `LICENSE` file. The only terms available anywhere are the non-commercial `LICENSE`
@@ -102,11 +107,13 @@ copyright applies and nobody has a documented right to redistribute the weights.
 redistributing them, on the Hub and to users. **Ask the author.** Until he confirms, treat
 the weights as unlicensed, which is a weaker position than "non-commercial".
 
-**2. Whether a use is commercial.** The default build offers PGTFormer and must be kept to
-non-commercial use under the upstream code terms. The commercial build excludes that offer
-and is intended for commercial use under the remaining listed licences. A build flag cannot
-change a model's licence or grant rights to unlicensed weights; the PGTFormer weights
-question above still needs an explicit answer before those weights are offered again.
+**2. Whether a use is commercial.** The default build offers PGTFormer and TruFor and must
+be kept to non-commercial use under their upstream terms. The commercial build excludes
+both offers and is intended for commercial use under the remaining listed licences. A
+build flag cannot change a model's licence or grant rights to unlicensed weights; the
+PGTFormer weights question above still needs an explicit answer before those weights are
+offered again. TruFor's licence is explicit but its terms still require a human judgement
+about what counts as industrial or profit-oriented use in a given deployment.
 
 A third, smaller point: the default build is non-commercial, but the repository `LICENSE`
 says MIT, which normally implies the code may be used commercially. The code may; the
@@ -151,3 +158,28 @@ upstream checkpoint it was converted from, so the conversion can be checked agai
 original: the RealESRGAN manifest records `weightsSHA256` and `architectureSHA256`, and the
 PGTFormer manifest records `weightsSHA256` plus per-file fingerprints of both `.mlpackage`
 directories, which the native worker re-verifies on every inference job.
+
+## SAFIRE
+
+The native SAFIRE architecture adaptation retains the upstream SAFIRE/SAM
+Apache-2.0 notices. Converted pretrained weights remain CC BY 4.0, with upstream
+attribution and source/checkpoint identity; they are not relicensed as MIT.
+Fixed-point resampling and clustering adaptations retain their BSD-3-Clause and
+MIT notices. Independently authored WaifuFinder source remains MIT. See
+`Runtime/SAFIRE-NOTICE.md`, the accompanying full license texts, and
+[SAFIRE for Photos](ImageLineage.md). No additional third-party production package
+is introduced; the worker uses the existing pinned MLX stack and Apple frameworks.
+
+## TruFor
+
+TruFor's own licence is explicit, unlike PGTFormer's undeclared weights: it allows
+use, reproduction and modification free of charge **for informational and nonprofit
+purposes only**, forbids industrial or profit-oriented use, requires retaining all
+original notices, and requires crediting the original authors whenever results
+obtained with the software are made public. The redistributed package carries the
+full licence (`LICENSE.txt`), the CMX MIT notice (`LICENSE_CMX.txt`), and a `NOTICE`
+crediting Guillaro, Cozzolino, Sud, Dufour and Verdoliva (CVPR 2023). The converted
+weights are not relicensed as MIT; independently authored WaifuFinder source remains
+MIT. TruFor is offered only in the non-commercial build and is otherwise excluded the
+same way PGTFormer is. See [TruFor for Photos](TruFor.md), `Runtime/TRUFOR-LICENSE.txt`
+and `Runtime/TRUFOR-CMX-LICENSE.txt`.

@@ -29,6 +29,7 @@ actor RemoteConnection {
     private var arrivalOrder: [UInt32] = []
     private var bufferedBytes = 0
     private var activeRequests = 0
+    private var abandonedStreams=Set<UInt32>()
 
     func beginRequest() throws -> UInt32 {
         guard !closed else { throw RemoteError.framing("Connection closed") }
@@ -38,6 +39,15 @@ actor RemoteConnection {
     }
 
     func endRequest() { activeRequests = max(0, activeRequests - 1) }
+
+    /// Cancel just this inference stream; other Tagger/forensic jobs on the
+    /// authenticated connection keep running. Late chunks are discarded.
+    func cancelRequest(_ streamID:UInt32)async {
+        abandonedStreams.insert(streamID)
+        while removeQueued(streamID) != nil { }
+        if let waiting=readers.removeValue(forKey:streamID) { for reader in waiting { reader.resume(returning:nil) } }
+        try? await send(.cancelJob,control:.cancelJob(streamID:streamID))
+    }
 
     private func removeQueued(_ streamID: UInt32) -> RemoteEnvelope? {
         guard let envelope = queues[streamID]?.first else { return nil }
@@ -100,6 +110,7 @@ actor RemoteConnection {
 
     /// The next message on `streamID`, or `nil` once the connection has ended.
     func next(streamID: UInt32) async -> RemoteEnvelope? {
+        if abandonedStreams.contains(streamID) { return nil }
         if let envelope = removeQueued(streamID) { return envelope }
         if closed { return nil }
         return await withCheckedContinuation { continuation in
@@ -180,6 +191,7 @@ actor RemoteConnection {
     }
 
     private func deliver(_ envelope: RemoteEnvelope) async {
+        guard !abandonedStreams.contains(envelope.streamID) else { return }
         // A stream that already has a waiter takes priority; otherwise the frame
         // waits for either that stream's reader or the server's `nextAny`.
         var waiting = readers[envelope.streamID] ?? []

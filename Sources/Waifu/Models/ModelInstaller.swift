@@ -12,7 +12,7 @@ struct ModelRelease: Decodable, Sendable {
 }
 
 enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
-    case seed3 = "seedvr2-3b", seed7 = "seedvr2-7b", flash = "flashvsr", real = "realesrgan", pgt = "pgtformer", tagger = "wd-tagger"
+    case seed3 = "seedvr2-3b", seed7 = "seedvr2-7b", flash = "flashvsr", real = "realesrgan", pgt = "pgtformer", tagger = "wd-tagger", safire = "safire", trufor = "trufor"
     var id: String { rawValue }
     var name: String {
         switch self {
@@ -22,6 +22,8 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .real: "RealESRGAN x2plus"
         case .pgt: "PGTFormer"
         case .tagger: "WD SwinV2 Tagger"
+        case .safire: "SAFIRE"
+        case .trufor: "TruFor"
         }
     }
     var detail: String {
@@ -32,6 +34,8 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .real: "Frame restoration · Core ML FP16 · about 33 MB download"
         case .pgt: "Temporal face restoration · Core ML · about 381 MB"
         case .tagger: "Frame traits · optimized native GPU · about 225 MB"
+        case .safire: "Photos forensics · native Swift/MLX · CC BY 4.0 weights"
+        case .trufor: "Photos forensics · native Swift/MLX · GRIP-UNINA non-commercial weights"
         }
     }
     var releaseName: String? {
@@ -42,14 +46,18 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .real: "realesrgan-release"
         case .pgt: "pgtformer-release"
         case .tagger: "wd-tagger-release"
+        case .safire: "safire-release"
+        case .trufor: "trufor-release"
         }
     }
     /// `true` when this model's upstream licence forbids commercial use.
     ///
-    /// PGTFormer is redistributed under a non-commercial licence; everything else
-    /// WaifuFinder ships is Apache-2.0, BSD-3-Clause or MIT. See `WaifuDistribution`
-    /// for why this is decided at build time rather than at download time.
-    var isNonCommercialRestricted: Bool { self == .pgt }
+    /// PGTFormer and TruFor are redistributed under non-commercial licences that
+    /// travel with the weights; everything else WaifuFinder ships is Apache-2.0,
+    /// BSD-3-Clause or MIT. See `WaifuDistribution` for why this is decided at
+    /// build time rather than at download time.
+    var isNonCommercialRestricted: Bool { self == .pgt || self == .trufor }
+    var supportsDownload:Bool { true }
     /// The models this build is licensed to offer.
     ///
     /// The default build is non-commercial and offers every model. A commercial build
@@ -65,6 +73,8 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .flash: "waifu-flashvsr"
         case .pgt: "waifu-pgtformer"
         case .tagger: "waifu-wdtagger"
+        case .safire: "waifu-safire"
+        case .trufor: "waifu-trufor"
         case .real: nil
         }
     }
@@ -75,7 +85,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .flash: .flashVSR11
         case .real: .realESRGAN
         case .pgt: .pgtFormer
-        case .tagger: nil
+        case .tagger, .safire, .trufor: nil
         }
     }
 }
@@ -87,6 +97,9 @@ extension Notification.Name {
 /// All writes are inside a per-model staging folder; configuration is published last.
 actor ModelInstaller {
     static let shared = ModelInstaller()
+    private let configurationRoot: URL?
+    /// Tests can exercise the real installer without replacing a user's models.
+    init(configurationRoot: URL? = nil) { self.configurationRoot = configurationRoot }
     typealias Progress = @Sendable (String, Double?) -> Void
 
     static func fail(_ message: String) -> NSError {
@@ -118,6 +131,7 @@ actor ModelInstaller {
         }
         guard let name = model.releaseName,
               let url = Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "ModelReleases") else {
+            if model == .safire || model == .trufor { throw fail("The validated \(model.name) checkpoint has not been published in this build’s model catalog yet.") }
             throw fail("The app is missing its model catalog. Reinstall WaifuFinder.")
         }
         return try JSONDecoder().decode(ModelRelease.self, from: Data(contentsOf: url))
@@ -163,7 +177,7 @@ actor ModelInstaller {
         // A PGTFormer upgrade gets its own directory. Keep the old installation
         // usable until all replacement bytes are verified and activation succeeds.
         let destination = Self.installationDirectory(model, release: release, root: root)
-        if (model == .pgt || model == .tagger), FileManager.default.fileExists(atPath: destination.path) {
+        if (model == .pgt || model == .tagger || model == .safire || model == .trufor), FileManager.default.fileExists(atPath: destination.path) {
             try await configure(model, directory: destination, progress: progress)
             return destination
         }
@@ -211,7 +225,7 @@ actor ModelInstaller {
     }
     static func installationDirectory(_ model: ManagedModel, release: ModelRelease, root: URL) -> URL {
         let name = model == .tagger ? "wd-tagger-native-v2"
-            : model == .pgt ? model.rawValue + "-" + String(release.revision.prefix(12)) : model.rawValue
+            : (model == .pgt || model == .safire || model == .trufor) ? model.rawValue + "-" + String(release.revision.prefix(12)) : model.rawValue
         return root.appendingPathComponent(name, isDirectory: true)
     }
     /// The `fileSHA256` map a release manifest must publish.
@@ -240,6 +254,15 @@ actor ModelInstaller {
             _ = try NativeSpatialUpscaler(modelURL: directory)
             return
         }
+        if model == .trufor {
+            guard WaifuDistribution.isNonCommercialOnly else { throw Self.fail("TruFor is restricted to informational and nonprofit use.") }
+            _ = try TruForConfiguration.validate(directory)
+            for (name,hash) in try Self.hashes(directory) {
+                progress("Setting up TruFor · verifying \(name)",nil)
+                guard try Self.digest(Self.checkedFile(directory,name,hash))==hash else { throw Self.fail("Missing or damaged TruFor file: \(name)") }
+            }
+            return
+        }
         let release = try Self.release(model)
         guard try Self.digest(directory.appendingPathComponent("manifest.json")) == release.manifestSHA256 else {
             throw Self.fail("This folder does not match the supported \(model.name) release.")
@@ -255,6 +278,7 @@ actor ModelInstaller {
         if model == .tagger {
             _ = try WDTaggerBackend(directory: directory)
         }
+        if model == .safire { _ = try SafireConfiguration.validate(directory) }
         if model == .real {
             _ = try NativeSpatialUpscaler(modelURL: directory.appendingPathComponent("model.mlmodelc"))
         }
@@ -273,8 +297,14 @@ actor ModelInstaller {
                 arguments: ["--validate", "--weights", directory.appendingPathComponent("model.safetensors").path],
                 log: log, label: "WD Tagger setup")
         }
+        if model == .safire || model == .trufor {
+            guard let worker = model == .trufor ? TruForConfiguration.executable : SafireConfiguration.executable else { throw Self.fail("Missing native SAFIRE runtime.") }
+            let log = FileManager.default.temporaryDirectory.appendingPathComponent("safire-setup-\(UUID().uuidString).log")
+            defer { try? FileManager.default.removeItem(at:log) }
+            try await UncoverProcess().run(executable:worker.path,arguments:["--validate","--model",directory.path],log:log,label:"SAFIRE setup")
+        }
         try Task.checkCancellation()
-        let configRoot = SeedVR2Configuration.configurationURL.deletingLastPathComponent()
+        let configRoot = configurationRoot ?? SeedVR2Configuration.configurationURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: configRoot, withIntermediateDirectories: true)
         let configName: String
         switch model {
@@ -283,11 +313,13 @@ actor ModelInstaller {
         case .pgt: configName = "pgtformer.json"
         case .real: configName = "realesrgan-model.txt"
         case .tagger: configName = "wd-tagger-model.txt"
+        case .safire: configName = "safire-model.txt"
+        case .trufor: configName = "trufor-model.txt"
         }
         let configURL = configRoot.appendingPathComponent(configName)
         let previous = try? Data(contentsOf: configURL)
         do {
-            if model == .tagger {
+            if model == .tagger || model == .safire || model == .trufor {
                 try Data(directory.path.utf8).write(to: configURL, options: .atomic)
             } else if model == .real {
                 let actual = directory.pathExtension == "mlmodelc" ? directory : directory.appendingPathComponent("model.mlmodelc")

@@ -18,12 +18,35 @@ aborts unless WAIFU_HF_ALLOW_NONCOMMERCIAL=1 acknowledges the restriction; make
 it public afterwards only if your distribution is non-commercial. RealESRGAN is
 BSD 3-Clause and is published publicly.
 """
+from __future__ import annotations
+
 import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 BUNDLES = [
+    {
+        "directory": "SAFIRE-Swift-MLX", "release": "safire-release.json",
+        "support": ["LICENSE", "APACHE-LICENSE", "KMEANS-LICENSE", "OPENCV-LICENSE", "NOTICE", "README.md", "validation.json", "profiles.json"],
+        "tags": ["safetensors", "mlx", "metal", "apple-silicon", "waifufinder", "image-forensics", "image-segmentation"],
+        "library_name": "mlx", "license": "cc-by-4.0", "license_name": None, "license_note": None,
+        "private": False, "acknowledgement": None,
+    },
+    {
+        "directory": "TruFor-Swift-MLX", "release": "trufor-release.json",
+        "support": ["LICENSE.txt", "LICENSE_CMX.txt", "NOTICE", "README.md", "validation.json"],
+        "tags": ["safetensors", "mlx", "metal", "apple-silicon", "waifufinder", "image-forensics", "image-forgery-detection"],
+        # GRIP-UNINA's TruFor licence permits informational and nonprofit use only,
+        # and requires crediting the original authors whenever results are made
+        # public. SPDX has no identifier for it, so the card declares "other" plus a
+        # slug; the full terms travel in LICENSE.txt, LICENSE_CMX.txt and NOTICE,
+        # not in card metadata.
+        "library_name": "mlx", "license": "other",
+        "license_name": "grip-unina-trufor-non-commercial",
+        "license_note": "Informational and nonprofit use only; retain all notices and credit GRIP-UNINA whenever results are made public.",
+        "private": False, "acknowledgement": None,
+    },
     {
         "directory": "WD-SwinV2-Tagger-v3-CoreML",
         "release": "wd-tagger-coreml-release.json",
@@ -71,7 +94,11 @@ BUNDLES = [
 
 
 def digest(path: Path) -> str:
-    return hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
+    with path.open("rb") as handle:
+        value = hashlib.sha256()
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            value.update(chunk)
+        return value.hexdigest()
 
 
 def card(bundle, directory: Path, repository: str) -> str:

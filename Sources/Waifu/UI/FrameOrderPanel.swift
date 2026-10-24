@@ -119,6 +119,9 @@ struct FrameOrderPanel: View {
             signalRow(.definition)
             signalRow(.art)
             ratingSection
+            if session.photosAlbumURL != nil, WaifuDistribution.isNonCommercialOnly {
+                ForensicPanelSection(session: session, job: session.forensic) { signalRow(.trufor) }
+            }
         }
     }
 

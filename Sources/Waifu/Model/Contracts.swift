@@ -141,6 +141,15 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
     /// Sum of the highest 15 general probabilities above the saved threshold.
     var tagGeneralScore: Float?
 
+    /// Official TruFor detection-head sigmoid, never a mask-area heuristic.
+    /// Missing means not analyzed. Provenance prevents reuse across changed pixels/models.
+    var truforScore: Float?
+    var truforFingerprint: String?
+    var truforContentIdentity: String?
+    var validTruForScore: Float? {
+        truforScore.flatMap { $0.isFinite && (0...1).contains($0) ? $0 : nil }
+    }
+
     /// Whether this frame already has usable tagger output, including partial
     /// results restored from an older analysis snapshot.
     var hasTaggingResult: Bool {
@@ -162,7 +171,8 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
          tagVocabularyFingerprint: UInt64? = nil,
          tagRating: TagRating? = nil,
          topTags: [String]? = nil,
-         tagGeneralScore: Float? = nil) {
+         tagGeneralScore: Float? = nil,
+         truforScore: Float? = nil, truforFingerprint: String? = nil, truforContentIdentity: String? = nil) {
         self.id = FrameID(sampleIndex: sampleIndex)
         self.timeSeconds = timeSeconds
         self.artScore = artScore
@@ -179,6 +189,7 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
         self.tagRating = tagRating
         self.topTags = topTags
         self.tagGeneralScore = tagGeneralScore
+        self.truforScore=truforScore;self.truforFingerprint=truforFingerprint;self.truforContentIdentity=truforContentIdentity
     }
 
     /// A significant subject face, or a small face measured by definition mode.

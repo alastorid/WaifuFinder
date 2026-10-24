@@ -229,6 +229,26 @@ func registerGridThumbnailStageTests() {
         checkEqual(snapshot.navigation.neighbour(of: frames[3].id, by: -1)?.id, frames[2].id, "ungrouped Photos chunks retain their original row")
         checkNil(snapshot.navigation.neighbour(of: frames[2].id, by: -1), "stop at the ungrouped row's start")
     })
+    Registry.shared.add(suite: suite, TestCase(name: "group strips keep the section gap while ungrouped photo rows sit one pixel apart", knownBug: nil) {
+        let frames = (0..<8).map(stageFrame)
+        let rows = [FrameRow(group: FrameGroupID(raw: "g"), frames: Array(frames.prefix(3))),
+                    FrameRow(group: nil, frames: Array(frames.suffix(5)))]
+        let snapshot = GridStageSnapshot.make(stageInput(1, frames, generation: UUID(), grouped: true, rows: rows))
+        checkEqual(snapshot.rows.count, 4, "the group is one strip and the ungrouped photos chunk into flat rows")
+        checkEqual(snapshot.rows[0].spacing, CGFloat(12), "group strips keep the section gap below them")
+        checkEqual(snapshot.rows.dropFirst().map(\.spacing), [CGFloat](repeating: 1, count: 3),
+                   "ungrouped photo rows sit one pixel apart like the flat grid")
+        var top: CGFloat = 1
+        for row in snapshot.rows {
+            checkEqual(row.originY, top, "row origins accumulate each row's own gap")
+            top += row.height + row.spacing
+        }
+        checkEqual(snapshot.contentHeight, top - (snapshot.rows.last?.spacing ?? 1) + 1,
+                   "the content ends one pixel below the last row")
+        let flat = GridStageSnapshot.make(stageInput(2, frames, generation: UUID()))
+        checkEqual(flat.rows.map(\.spacing), [CGFloat](repeating: 1, count: 4),
+                   "the flat grid keeps one-pixel gaps everywhere")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "zoom walks the cell-width ladder and commits the zoomed layout animated", knownBug: nil) {
         let pixels = try ImageFixture.cgImage(width: 16, height: 16)
         await Task { @MainActor in

@@ -3,8 +3,12 @@ import AppKit
 
 struct CrystalOrbComparisonView: View {
     @ObservedObject var model: WaifuCrystalOrbModel
+    var session: WaifuSession? = nil
     @ObservedObject private var navigation: CrystalOrbNavigation
-    init(model: WaifuCrystalOrbModel) { self.model = model; self.navigation = model.navigation }
+    private let forensic: LineageOverlayConfiguration?
+    init(model: WaifuCrystalOrbModel, session: WaifuSession? = nil, forensic: LineageOverlayConfiguration? = nil) {
+        self.model = model; self.session = session; self.navigation = model.navigation; self.forensic = forensic
+    }
     @Environment(\.displayScale) private var backing
     var body: some View {
         GeometryReader { outer in
@@ -23,11 +27,16 @@ struct CrystalOrbComparisonView: View {
                 }
             } else if let query = model.query {
                 Image(decorative: query.image, scale: 1).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .googleLensContextMenu(isAvailable: session != nil) {
+                        if let session {
+                            Task { await GoogleLensSearch.search(image: query.image, in: session) }
+                        }
+                    }
             }
         }.background(Color.black.opacity(0.94))
     }
     private func paneView(_ kind: String, pair: WaifuCrystalOrbModel.Pair, scale: CGFloat) -> some View {
-        CrystalOrbInspectionPane(model: model, pair: pair, kind: kind, scale: scale)
+        CrystalOrbInspectionPane(model: model, pair: pair, kind: kind, scale: scale, session: session, forensic:forensic)
     }
 }
 
@@ -36,10 +45,15 @@ private struct CrystalOrbInspectionPane: View {
     let pair: WaifuCrystalOrbModel.Pair
     let kind: String
     let scale: CGFloat
+    let session: WaifuSession?
     @ObservedObject private var navigation: CrystalOrbNavigation
-    init(model: WaifuCrystalOrbModel, pair: WaifuCrystalOrbModel.Pair, kind: String, scale: CGFloat) {
-        self.model = model; self.pair = pair; self.kind = kind; self.scale = scale; self.navigation = model.navigation
+    private let forensic: LineageOverlayConfiguration?
+    init(model: WaifuCrystalOrbModel, pair: WaifuCrystalOrbModel.Pair, kind: String, scale: CGFloat,
+         session: WaifuSession? = nil, forensic: LineageOverlayConfiguration? = nil) {
+        self.model = model; self.pair = pair; self.kind = kind; self.scale = scale; self.session = session
+        self.navigation = model.navigation; self.forensic = forensic
     }
+    @State private var blinkCandidate = true
     @State private var dragCenter: CGPoint?
     @State private var dragRegistration: CrystalOrbRegistration?
     @State private var dragStart: CGPoint?
@@ -50,6 +64,13 @@ private struct CrystalOrbInspectionPane: View {
         if kind == "A" { return "TARGET A" }
         if kind == "B" { return "CANDIDATE B" }
         return model.mode == .swipe ? "TARGET A ← Swipe → CANDIDATE B" : (model.showCandidate != model.holdingToggle ? "CANDIDATE B" : "TARGET A")
+    }
+    private var lensSearchUsesCandidate: Bool {
+        if kind == "A" { return false }
+        if kind != "Mixed" { return true }
+        if model.mode == .toggle { return model.showCandidate != model.holdingToggle }
+        if model.mode == .blink { return blinkCandidate }
+        return true
     }
     var body: some View {
         GeometryReader { geometry in
@@ -72,6 +93,12 @@ private struct CrystalOrbInspectionPane: View {
                         model.zoom = zoom
                         model.center(on: CGPoint(x: anchor.x - (anchor.x - center.x) / ratio, y: anchor.y - (anchor.y - center.y) / ratio))
                     })
+                if let forensic, kind == "B" || (kind == "Mixed" && model.mode == .toggle && model.showCandidate != model.holdingToggle) || (kind == "Mixed" && model.mode == .swipe) || (kind == "Mixed" && model.mode == .alpha) || (kind == "Mixed" && model.mode == .blink && blinkCandidate) {
+                    LineageEvidenceOverlay(configuration:forensic,viewport:viewport,alignment:pair.alignment)
+                        .mask(alignment:.trailing) {
+                            Rectangle().frame(width:kind == "Mixed" && model.mode == .swipe ? viewport.size.width*(1-model.swipe) : viewport.size.width)
+                        }
+                }
                 HStack(spacing: 6) {
                     if model.mode == .toggle {
                         Button(title) { model.showCandidate.toggle() }.buttonStyle(.plain).font(.caption.weight(.medium))
@@ -91,6 +118,20 @@ private struct CrystalOrbInspectionPane: View {
                 if model.showOverview { overview(viewport).frame(width: 120, height: 85).padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing) }
             }.coordinateSpace(name: "orb-pane-" + kind).clipped()
         }.frame(minWidth: 80, minHeight: 70)
+        .googleLensContextMenu(isAvailable: session != nil) {
+            if let session {
+                let image = lensSearchUsesCandidate ? pair.candidate : pair.target
+                Task { await GoogleLensSearch.search(image: image, in: session) }
+            }
+        }
+        .task(id:model.mode) {
+            blinkCandidate = true
+            guard model.mode == .blink else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for:.milliseconds(650)) } catch { return }
+                blinkCandidate.toggle()
+            }
+        }
     }
     @ViewBuilder private func pixels(_ viewport: CrystalOrbViewport) -> some View {
         if kind == "Δ" {
@@ -101,6 +142,11 @@ private struct CrystalOrbInspectionPane: View {
                 } else { raster(difference, mask: false, viewport: viewport) }
             }
             else { source(candidate: true, viewport: viewport) }
+        } else if kind == "Mixed", model.mode == .alpha {
+            source(candidate:false,viewport:viewport)
+            source(candidate:true,viewport:viewport).opacity(model.opacity)
+        } else if kind == "Mixed", model.mode == .blink {
+            source(candidate:blinkCandidate,viewport:viewport)
         } else if kind == "Mixed", model.mode == .swipe {
             source(candidate: true, viewport: viewport)
             source(candidate: false, viewport: viewport).mask(alignment: .leading) { Rectangle().frame(width: viewport.size.width * model.swipe) }

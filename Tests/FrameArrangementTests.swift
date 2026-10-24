@@ -138,7 +138,7 @@ func registerFrameArrangementTests() {
                    [SortTerm(key: .minimalVisualDistance, ascending: true)],
                    "visual distance is the only signal on by default")
         checkEqual(FrameSortKey.allCases,
-                   [.minimalVisualDistance, .time, .face, .definition, .art, .ratingGeneral, .ratingSensitive,
+                   [.minimalVisualDistance, .time, .face, .definition, .art, .trufor, .ratingGeneral, .ratingSensitive,
                     .ratingQuestionable, .ratingExplicit, .tagGeneralScore],
                    "control order matches sort precedence")
     })
