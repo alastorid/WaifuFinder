@@ -979,6 +979,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard let url = urls.first else { return }
         Diag.trace(.analysis, message: "load source photos=\(PhotosMedia.shared.album(url)?.items.count ?? 0)")
         closeUncover()
+        forensic.cancel()
         cancelTagging(keepingCompletedResults: false)
         cancel()
         clearResults()
@@ -1132,6 +1133,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func clearPhotosAlbum() {
         guard photosAlbumURL != nil else { return }
         closeUncover()
+        forensic.cancel()
         cancelTagging(keepingCompletedResults: false)
         cancel()
         clearResults()

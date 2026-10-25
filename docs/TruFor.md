@@ -60,8 +60,8 @@ Adopted, each measured:
   memory-bounding evaluations survive. This removed most of the per-request
   graph-construction overhead (1.79 s → 1.46 s at 1024×768 on a quiet M3).
 - **FP16 weights and activations** with FP32 islands — every LayerNorm, every
-  BN including the DnCNN BN rows, and the whole detection head. FP16 is the
-  default; `WAIFU_TRUFOR_PRECISION=fp32` is the strict validation path.
+  BN including the DnCNN BN rows, and the whole detection head. FP16 remains an explicit worker benchmark option; production uses FP32,
+  which passes the strict validation gate.
   Measured against the official FP32 reference: detection score within 0.002,
   anomaly and reliability maps within 0.012, Noiseprint++ relative RMS 0.087,
   and unchanged masks at the 0.5 threshold. The strict path re-passes the
@@ -99,10 +99,10 @@ foreground load on a shared Mac, so the paired ratios are the reliable claim.
 
 | Configuration | Median | Ratio |
 | --- | ---: | ---: |
-| M3 FP16 default (compiled, tile 1024) | 1.458 s | 0.919 |
-| M3 FP32 strict validation path | 1.586 s | 1.000 |
-| M4 FP16 default (independently built) | 1.021 s | 0.922 |
-| M4 FP32 strict validation path | 1.108 s | 1.000 |
+| M3 FP16 experiment (compiled, tile 1024) | 1.458 s | 0.919 |
+| M3 FP32 production path | 1.586 s | 1.000 |
+| M4 FP16 experiment (independently built) | 1.021 s | 0.922 |
+| M4 FP32 production path | 1.108 s | 1.000 |
 
 The FP16/FP32 ratio reproduces across both devices (0.919 / 0.922). On a quiet
 M3 earlier the same day the configured path measured 1.30 s against the
@@ -127,3 +127,23 @@ worker validates the weights before activation. A clean download through the rea
 installer returned bit-identical detection scores to the locally converted
 package, and the encrypted-loopback test compares local and remote evidence on
 the published weights (`WAIFU_TEST_TRUFOR_INSTALL=1 ./run-tests.sh --only "TruFor integration"`).
+
+## Review corrections (2026-10-25)
+
+Production now uses FP32 for both scalar scores and evidence. The previous FP16
+default did not pass the published strict spatial/score gates (especially the
+Noiseprint residual). The app pins worker precision to FP32, cache identities
+include the execution revision, and remote capabilities require
+`trufor-fp32-v2`, so old workers and old precision results cannot silently mix.
+The immutable weights package and its artifact revision remain unchanged.
+FP16 timing figures above describe an experiment, not the current default.
+Compiled graphs retain at most four photo geometries.
+
+Noninteractive regression tests now execute the actual Metal outline renderer
+on portrait and landscape maps, compare every pixel against clamped morphology,
+and reopen the scalar cache through a separate reader. This caught invalid Metal
+casts and colliding buffer bindings that prevented overlays from rendering,
+a width-only coordinate clamp,
+and scalar cache records with zero analysis width that the shared cache reader
+rejected on reopen. Source changes also cancel forensic jobs immediately; changes
+to the current album snapshot cancel stale work before refresh.

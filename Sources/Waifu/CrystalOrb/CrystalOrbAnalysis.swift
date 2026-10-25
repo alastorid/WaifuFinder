@@ -38,7 +38,7 @@ actor CrystalOrbAnalysis {
         let width = Int(rect.width), height = Int(rect.height)
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         pixels.withUnsafeMutableBytes {
-            CrystalOrbDifferenceRenderer.context.render(image, toBitmap: $0.baseAddress!, rowBytes: width * 4,
+            CrystalOrbDifferenceRenderer.context.value.render(image, toBitmap: $0.baseAddress!, rowBytes: width * 4,
                 bounds: rect, format: .RGBA8, colorSpace: CrystalOrbDifferenceRenderer.color)
         }
         // CIContext writes bitmap rows top-to-bottom even though bounds are in
@@ -137,8 +137,8 @@ actor CrystalOrbAnalysis {
         case .blue: value = Double(delta[2])
         case .luminance: value = (luma * 255).rounded()
         }
-        guard let ag = CrystalOrbDifferenceRenderer.context.createCGImage(difference.target, from: rect, format: .RGBA8, colorSpace: CrystalOrbDifferenceRenderer.color),
-              let bg = CrystalOrbDifferenceRenderer.context.createCGImage(difference.candidate, from: rect, format: .RGBA8, colorSpace: CrystalOrbDifferenceRenderer.color) else { throw CrystalOrbImageSource.failure }
+        guard let ag = CrystalOrbDifferenceRenderer.context.value.createCGImage(difference.target, from: rect, format: .RGBA8, colorSpace: CrystalOrbDifferenceRenderer.color),
+              let bg = CrystalOrbDifferenceRenderer.context.value.createCGImage(difference.candidate, from: rect, format: .RGBA8, colorSpace: CrystalOrbDifferenceRenderer.color) else { throw CrystalOrbImageSource.failure }
         return CrystalOrbPixel(point: p, targetPoint: difference.alignment.source(p, candidate: false), candidatePoint: difference.alignment.source(p, candidate: true),
             a: av, b: bv, delta: delta, luma: luma, significant: value > difference.settings.tolerance, targetGrid: ag, candidateGrid: bg)
     }

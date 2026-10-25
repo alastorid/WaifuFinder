@@ -298,10 +298,10 @@ actor ModelInstaller {
                 log: log, label: "WD Tagger setup")
         }
         if model == .safire || model == .trufor {
-            guard let worker = model == .trufor ? TruForConfiguration.executable : SafireConfiguration.executable else { throw Self.fail("Missing native SAFIRE runtime.") }
-            let log = FileManager.default.temporaryDirectory.appendingPathComponent("safire-setup-\(UUID().uuidString).log")
+            guard let worker = model == .trufor ? TruForConfiguration.executable : SafireConfiguration.executable else { throw Self.fail("Missing native \(model.name) runtime.") }
+            let log = FileManager.default.temporaryDirectory.appendingPathComponent("\(model.rawValue)-setup-\(UUID().uuidString).log")
             defer { try? FileManager.default.removeItem(at:log) }
-            try await UncoverProcess().run(executable:worker.path,arguments:["--validate","--model",directory.path],log:log,label:"SAFIRE setup")
+            try await UncoverProcess().run(executable:worker.path,arguments:["--validate","--model",directory.path],log:log,label:"\(model.name) setup")
         }
         try Task.checkCancellation()
         let configRoot = configurationRoot ?? SeedVR2Configuration.configurationURL.deletingLastPathComponent()

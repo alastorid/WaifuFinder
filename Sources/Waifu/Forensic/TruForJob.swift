@@ -24,6 +24,7 @@ private actor TruForWorkQueue {
     private var scores:[String:Float]=[:]
     private var generation=UUID()
     private var operation:Task<Void,Never>?
+    private var starting=false
     var remaining:Int { max(0,total-scored) }
     var localAvailable:Bool { TruForConfiguration.load() != nil }
     var remoteClients:[RemoteClient] { RemoteInferencePool.shared.entries.map(\.client).filter(\.offersTruFor) }
@@ -31,7 +32,13 @@ private actor TruForWorkQueue {
     var available:Bool { localAvailable || remotely }
     func refresh(session:WaifuSession)async {
         guard let url=session.photosAlbumURL,let album=PhotosMedia.shared.album(url) else { cancel();source=nil;photos=[];scores=[:];total=0;scored=0;return }
-        if progress.isRunning,source==url { return }
+        if progress.isRunning,source==url {
+            let current=album.items.compactMap { $0.isStill ? $0.assetCacheKey:nil }
+            if current==photos.map(\.assetKey) { return }
+            // Edits, deletion and reordered membership invalidate the job's
+            // snapshot; its partial scalar cache remains reusable by identity.
+            cancel()
+        }
         if source != url { cancel();source=url;scores=[:];photos=[] }
         let token=UUID();generation=token;checking=true
         defer { if generation==token { checking=false } }
@@ -40,16 +47,18 @@ private actor TruForWorkQueue {
         }.value
         guard !Task.isCancelled,generation==token else { return }
         do {
-            let cached=try await TruForScoreMemory.shared.read(candidates,fingerprint:TruForConfiguration.weightsSHA)
+            let cached=try await TruForScoreMemory.shared.read(candidates,fingerprint:TruForConfiguration.scoreFingerprint)
             guard !Task.isCancelled,generation==token,session.photosAlbumURL==url else { return }
             photos=candidates;scores=cached;total=candidates.count;scored=cached.count
-            session.applyForensicScores(cached,photos:candidates,fingerprint:TruForConfiguration.weightsSHA,source:url)
+            session.applyForensicScores(cached,photos:candidates,fingerprint:TruForConfiguration.scoreFingerprint,source:url)
         } catch { if generation==token { message=error.localizedDescription } }
     }
     func start(session:WaifuSession,includeLocal:Bool)async {
-        guard !progress.isRunning else { return }
+        guard !progress.isRunning,!starting else { return }
+        starting=true
+        defer { starting=false }
         await refresh(session:session)
-        guard let source,session.photosAlbumURL==source,available else { return }
+        guard !Task.isCancelled,!progress.isRunning,let source,session.photosAlbumURL==source,available else { return }
         let targets=photos.filter{scores[$0.contentIdentity]==nil}
         guard !targets.isEmpty else { return }
         let clients=remoteClients,includeThisMac=localAvailable && (clients.isEmpty || includeLocal)
@@ -78,7 +87,7 @@ private actor TruForWorkQueue {
                                     guard case .scores(let returned)=output else { throw ModelInstaller.fail("Unexpected TruFor score response") };values=returned
                                 }
                                 guard values.count==batch.count else { throw ModelInstaller.fail("Incomplete TruFor batch") }
-                                for (i,photo) in batch.enumerated() { try await TruForScoreMemory.shared.remember(photo,score:values[i],fingerprint:TruForConfiguration.weightsSHA) }
+                                for (i,photo) in batch.enumerated() { try await TruForScoreMemory.shared.remember(photo,score:values[i],fingerprint:TruForConfiguration.scoreFingerprint) }
                                 try Task.checkCancellation()
                                 await self.accept(batch,values:values,session:session,source:source,token:token,elapsed:Date().timeIntervalSince(started))
                             }
@@ -95,7 +104,7 @@ private actor TruForWorkQueue {
         var updates:[String:Float]=[:]
         for (i,photo) in batch.enumerated() { scores[photo.contentIdentity]=values[i];updates[photo.contentIdentity]=values[i] }
         scored=scores.count;message=nil;progress.processed+=batch.count;progress.elapsed=elapsed
-        session.applyForensicScores(updates,photos:batch,fingerprint:TruForConfiguration.weightsSHA,source:source)
+        session.applyForensicScores(updates,photos:batch,fingerprint:TruForConfiguration.scoreFingerprint,source:source)
     }
     func cancel() { operation?.cancel();operation=nil;generation=UUID();progress.isRunning=false;checking=false }
 }

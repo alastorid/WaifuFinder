@@ -9,9 +9,11 @@ actor TruForScoreMemory {
         disk=TagResultDiskCache(fileURL:fileURL ?? FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Waifu/TruFor/scores-v1.bin"))
     }
     static func identity(_ photo:TruForPhoto,fingerprint:String)->TagResultCacheIdentity {
-        .init(sourcePath:"trufor-score-v1/\(fingerprint)/\(TruForConfiguration.preprocessing)/\(photo.assetKey.identifier)",
+        .init(sourcePath:"trufor-score-v1/\(TruForConfiguration.execution)/\(fingerprint)/\(TruForConfiguration.preprocessing)/\(photo.assetKey.identifier)",
             sourceSize:(UInt64(photo.assetKey.pixelWidth)<<32)|UInt64(photo.assetKey.pixelHeight),
-            sourceModifiedMilliseconds:photo.assetKey.modifiedMilliseconds,analysisWidth:0,vocabularyFingerprint:0)
+            // The shared cache reader requires a nonzero analysis width. One
+            // denotes a scalar here; native photo dimensions are in sourceSize.
+            sourceModifiedMilliseconds:photo.assetKey.modifiedMilliseconds,analysisWidth:1,vocabularyFingerprint:0)
     }
     func read(_ photos:[TruForPhoto],fingerprint:String)async throws->[String:Float] {
         let identities=photos.map{Self.identity($0,fingerprint:fingerprint)}

@@ -97,5 +97,30 @@
       "fp32": "identical error magnitudes to M3 (score 3.81e-06, cross-device determinism holds)",
       "fp16": "score delta 6.9e-04, anomaly 3.2e-02, noiseprint relRMS 0.236 \u2014 different fp16 rounding trajectory, inside the documented envelope"
     }
+  },
+  "review20261025": {
+    "productionPrecision": "fp32",
+    "executionCapability": "trufor-fp32-v2",
+    "weightsArtifactUnchanged": true,
+    "defaultCompiledScoreAbsoluteError": 3.7997961044311523e-06,
+    "defaultCompiledAnomalyMaximumError": 4.145503044128418e-05,
+    "defaultCompiledReliabilityMaximumError": 2.4497509002685547e-05,
+    "defaultCompiledNoiseprintMaximumError": 0.00025855470448732376,
+    "referenceGeometry": [
+      129,
+      161
+    ],
+    "note": "FP16 figures in optimizationRound are historical experiments; they do not describe current production precision.",
+    "regressions": {
+      "passed": 471,
+      "failed": 0,
+      "optionalSkipped": 11
+    },
+    "additionalTruForRun": {
+      "passed": 9,
+      "failed": 0,
+      "realInstallerAndEncryptedLoopbackPassed": true
+    },
+    "releaseBuildAndSignaturePassed": true
   }
 }

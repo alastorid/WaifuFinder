@@ -127,7 +127,7 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
                     sessionID: sessionID, tagger: tagger, uncover: uncover,
                     safire: SafireConfiguration.load().map { .init(available:true,modelFingerprint:$0.fingerprint,
                         runtimeRevision:SafireSpatialResult.runtimeRevision,preprocessingVersion:SafireSpatialResult.preprocessingVersion) },
-                    trufor:TruForConfiguration.load().map{.init(available:true,modelFingerprint:$0.fingerprint,runtimeRevision:TruForConfiguration.runtime,preprocessingVersion:TruForConfiguration.preprocessing)},
+                    trufor:TruForConfiguration.load().map{.init(available:true,modelFingerprint:$0.fingerprint,runtimeRevision:TruForConfiguration.execution,preprocessingVersion:TruForConfiguration.preprocessing)},
                     vision: VisionCapability(available: true))
     }
 }

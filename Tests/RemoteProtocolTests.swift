@@ -1297,7 +1297,7 @@ func registerTruForLoopbackTests() {
         catalog.capabilities={ version,name,session in
             var value=await base(version,name,session)
             if let fingerprint {
-                value.trufor = .init(available:true,modelFingerprint:fingerprint,runtimeRevision:runtime ?? TruForConfiguration.runtime,preprocessingVersion:preprocessing ?? TruForConfiguration.preprocessing)
+                value.trufor = .init(available:true,modelFingerprint:fingerprint,runtimeRevision:runtime ?? TruForConfiguration.execution,preprocessingVersion:preprocessing ?? TruForConfiguration.preprocessing)
             }
             return value
         }
@@ -1311,7 +1311,7 @@ func registerTruForLoopbackTests() {
     Registry.shared.add(suite:"TruFor remote",TestCase(name:"evidence and score batches cross an encrypted loopback unchanged",knownBug:nil) {
         try await Task { @MainActor in
             let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
-            let pair=try LoopbackPair(catalog:catalog(TruForConfiguration.weightsSHA,TruForConfiguration.runtime,TruForConfiguration.preprocessing),key:Array(repeating:0x64,count:32))
+            let pair=try LoopbackPair(catalog:catalog(TruForConfiguration.weightsSHA,TruForConfiguration.execution,TruForConfiguration.preprocessing),key:Array(repeating:0x64,count:32))
             defer { pair.tearDown() }
             guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
             let evidence=try await pair.client.truforEvidence(png)
@@ -1325,13 +1325,45 @@ func registerTruForLoopbackTests() {
             checkEqual(scores,[0.11,0.22],"score batches keep their order")
         }.value
     })
+    Registry.shared.add(suite:"TruFor remote",TestCase(name:"canceling evidence keeps the connection available for another job",knownBug:nil) {
+        try await Task { @MainActor in
+            let probe=CancellationProbe()
+            var service=catalog(TruForConfiguration.weightsSHA,TruForConfiguration.execution,TruForConfiguration.preprocessing)
+            service.trufor={ request in
+                if request.evidence {
+                    probe.start()
+                    do { try await Task.sleep(for:.seconds(30)) }
+                    catch { probe.cancel();throw error }
+                    return .evidence(stub)
+                }
+                return .scores([0.25])
+            }
+            let pair=try LoopbackPair(catalog:service,key:Array(repeating:0x67,count:32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let work=Task { try await pair.client.truforEvidence(png) }
+            let startDeadline=Date().addingTimeInterval(3)
+            while !probe.started,Date()<startDeadline { try await Task.sleep(for:.milliseconds(10)) }
+            check(probe.started,"server began evidence before cancellation")
+            work.cancel()
+            let result=await work.result
+            if case .success=result { check(false,"canceled evidence must not return a result") }
+            let cancelDeadline=Date().addingTimeInterval(3)
+            while !probe.cancelled,Date()<cancelDeadline { try await Task.sleep(for:.milliseconds(10)) }
+            check(probe.cancelled,"cancel reaches only the active evidence request")
+            check(pair.client.status.isConnected,"cancel does not stop the authenticated connection")
+            checkEqual(try await pair.client.truforScores([png]),[0.25],"a later score job works on the same connection")
+        }.value
+    })
     Registry.shared.add(suite:"TruFor remote",TestCase(name:"a mismatched fingerprint, runtime or preprocessing is never offered",knownBug:nil) {
         try await Task { @MainActor in
             let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
             for (fingerprint,runtime,preprocessing,reason) in [
-                ("0"+String(TruForConfiguration.weightsSHA.dropFirst()),TruForConfiguration.runtime,TruForConfiguration.preprocessing,"weights revision"),
+                ("0"+String(TruForConfiguration.weightsSHA.dropFirst()),TruForConfiguration.execution,TruForConfiguration.preprocessing,"weights revision"),
                 (TruForConfiguration.weightsSHA,"trufor-native-v0",TruForConfiguration.preprocessing,"runtime revision"),
-                (TruForConfiguration.weightsSHA,TruForConfiguration.runtime,"trufor-native-rgb-div128-v1","preprocessing revision"),
+                (TruForConfiguration.weightsSHA,TruForConfiguration.execution,"trufor-native-rgb-div128-v1","preprocessing revision"),
+                (TruForConfiguration.weightsSHA,TruForConfiguration.runtime,TruForConfiguration.preprocessing,"legacy FP16 execution"),
             ] {
                 let pair=try LoopbackPair(catalog:catalog(fingerprint,runtime,preprocessing),key:Array(repeating:0x65,count:32))
                 defer { pair.tearDown() }
@@ -1372,7 +1404,7 @@ func registerTruForNativeIntegrationTests() {
             let base=catalog.capabilities
             catalog.capabilities={ version,name,session in
                 var value=await base(version,name,session)
-                value.trufor = .init(available:true,modelFingerprint:configuration.fingerprint,runtimeRevision:TruForConfiguration.runtime,preprocessingVersion:TruForConfiguration.preprocessing)
+                value.trufor = .init(available:true,modelFingerprint:configuration.fingerprint,runtimeRevision:TruForConfiguration.execution,preprocessingVersion:TruForConfiguration.preprocessing)
                 return value
             }
             catalog.trufor={ request in

@@ -42,10 +42,10 @@ actor TruForEvidenceRenderer {
                 case 0u: color=float3(a,a*a*0.8f,0.0f);break;
                 case 1u: color=float3(r);break;
                 case 2u: {
-                    float center=step(0.5f,a),low=1.0f,high=0.0f;
+                    float low=1.0f,high=0.0f;
                     for (int y=-1;y<=1;y++) for (int x=-1;x<=1;x++) {
                         int2 around=int2(position)+int2(x,y);
-                        around=clamp(around,int2(0),int2(width)-1);
+                        around=clamp(around,int2(0),int2(dimensions)-1);
                         float mask=step(0.5f,anomaly[around.y*width+around.x]);
                         low=min(low,mask);high=max(high,mask);
                     }
@@ -55,9 +55,9 @@ actor TruForEvidenceRenderer {
                 case 3u: color=mix(photo.read(position).rgb,mix(float3(0.6f,0.25f,1.0f),float3(1.0f,0.2f,0.0f),r),a*0.65f);break;
                 default: { float n=clamp(0.5f+noise[index]*contrast,0.0f,1.0f);color=float3(n); }
             }
-            output[index*4u+0u]=unsigned char(clamp(color.r,0.0f,1.0f)*255.0f);
-            output[index*4u+1u]=unsigned char(clamp(color.g,0.0f,1.0f)*255.0f);
-            output[index*4u+2u]=unsigned char(clamp(color.b,0.0f,1.0f)*255.0f);
+            output[index*4u+0u]=uchar(clamp(color.r,0.0f,1.0f)*255.0f);
+            output[index*4u+1u]=uchar(clamp(color.g,0.0f,1.0f)*255.0f);
+            output[index*4u+2u]=uchar(clamp(color.b,0.0f,1.0f)*255.0f);
             output[index*4u+3u]=255u;
         }
         """
@@ -75,8 +75,13 @@ actor TruForEvidenceRenderer {
             context.draw(original,in:CGRect(x:0,y:0,width:width,height:height));return true
         }
         guard drew else { throw ModelInstaller.fail("Could not scale the photo for TruFor evidence") }
-        func buffer(_ values:[Float])->MTLBuffer { device.makeBuffer(bytes:values, length:pixels*4,options:.storageModeShared)! }
-        let anomaly=buffer(evidence.anomaly),reliability=buffer(evidence.reliability),noise=buffer(evidence.noiseprint)
+        func buffer(_ values:[Float])throws->MTLBuffer {
+            guard let buffer=device.makeBuffer(bytes:values,length:pixels*4,options:.storageModeShared) else {
+                throw ModelInstaller.fail("Not enough GPU memory to render TruFor evidence")
+            }
+            return buffer
+        }
+        let anomaly=try buffer(evidence.anomaly),reliability=try buffer(evidence.reliability),noise=try buffer(evidence.noiseprint)
         guard let output=device.makeBuffer(length:pixels*4,options:.storageModeShared),
               let photo=device.makeTexture(descriptor:MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm,width:width,height:height,mipmapped:false)) else { throw ModelInstaller.fail("TruFor evidence renderer unavailable") }
         rgba.withUnsafeBytes { data in photo.replace(region:MTLRegion(origin:MTLOrigin(x:0,y:0,z:0),size:MTLSize(width:width,height:height,depth:1)),mipmapLevel:0,withBytes:data.baseAddress!,bytesPerRow:width*4) }
@@ -84,9 +89,9 @@ actor TruForEvidenceRenderer {
         encoder.setComputePipelineState(pipeline)
         encoder.setTexture(photo,index:0)
         encoder.setBuffer(anomaly,offset:0,index:0)
-        encoder.setBuffer(reliability,offset:0,index:0)
-        encoder.setBuffer(noise,offset:0,index:0)
-        encoder.setBuffer(output,offset:0,index:0)
+        encoder.setBuffer(reliability,offset:0,index:1)
+        encoder.setBuffer(noise,offset:0,index:2)
+        encoder.setBuffer(output,offset:0,index:3)
         var selection=UInt32(TruForDisplay.allCases.firstIndex(of:mode)!);encoder.setBytes(&selection,length:MemoryLayout<UInt32>.size,index:4)
         let rms=sqrt(evidence.noiseprint.reduce(0.0){$0+Double($1)*Double($1)}/Double(evidence.noiseprint.count))
         var contrast=Float(1/max(1e-6,6*rms));encoder.setBytes(&contrast,length:MemoryLayout<Float>.size,index:5)
@@ -126,7 +131,7 @@ actor TruForEvidenceRenderer {
             let remote=RemoteInferencePool.shared.entries.map(\.client).first(where: \.offersTruFor)
             let map=try await SafireJobWait.run(onWaiting:{self.status="TruFor · waiting for another model job"}) {
                 if local != nil {
-                    let value=try await TruForBackend.shared.submit(images:[png],evidence:true,cacheKey:TruForConfiguration.weightsSHA+"|"+photo.contentIdentity)
+                    let value=try await TruForBackend.shared.submit(images:[png],evidence:true,cacheKey:TruForConfiguration.scoreFingerprint+"|"+photo.contentIdentity)
                     guard case .evidence(let result)=value else { throw ModelInstaller.fail("Missing TruFor evidence") };return result
                 }
                 if let remote { return try await remote.truforEvidence(png) }

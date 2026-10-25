@@ -1,5 +1,11 @@
 # WIP handoff — session record (2026-10-25)
 
+**Review correction:** the FP16-default instructions below are historical.
+Production now pins FP32 (`trufor-fp32-v2` execution capability) and separates its
+scalar cache from the old precision. See `TruFor.md` review corrections. Metal
+renderer and persistent scalar-cache bugs have also been fixed; follow current
+regression results rather than assuming the earlier completion claim.
+
 Everything described here is **uncommitted work on `main`**. The commit decision
 belongs to the repository owner. This note exists so a fresh session can resume
 without re-deriving any of it.
@@ -109,3 +115,69 @@ runtime in `Runtime/Sources/TruForMLX` + `WaifuTruFor`, publisher
 - If the official TruFor checkpoint is ever re-converted, bump
   `TruForConfiguration.weightsSHA` and re-run the whole verification chain
   (publisher asserts the pinned source SHA).
+
+## ANE feasibility sweep (2026-10-25, measured on this M3)
+
+User question: "can we remodel any of our models into ANE to run on ANE?"
+Answer settled with measurements; do not re-derive. Repo was not modified
+(read-only probes; downloaded weights noted below).
+
+**Verdicts per model**
+
+- **RealESRGAN x2plus — already on ANE.** Conv-dense, fixed tiles;
+  0.175→0.050 s/image with hardware-counter confirmation (`docs/Uncover.md`).
+  The one proven ANE win, and the archetype: ANE loves conv-dense fixed-shape
+  CNNs.
+- **WD SwinV2 tagger — feasible but fails the accuracy gate; keep native
+  MLX.** Published `WDTagger.mlpackage` under `.cpuAndNeuralEngine`:
+  Core ML places the real compute on ANE (all 24 SDPA, 100 linear, 53
+  layer_norm, patch conv, sigmoid head = 951 ops ANE-preferred; 1,322
+  plumbing ops "unknown"). Batch-8 on this M3: cpuAndGPU 12.5 fps / 693 MB,
+  cpuAndNE 15.2 fps / 120 MB, cpuOnly 7.7 fps. ANE ≈ native MLX speed
+  (14.5–15.5 fps on M3) at 5.8× less memory than cpuAndGPU. Blocker: against
+  one torch fp32 reference, ANE mean Δp 2.1–2.6e-3 vs GPU 4.9e-4 (~5× worse);
+  per-image top-15 worst 8/15 (uniform noise) and 2/15 (patterns) vs GPU's
+  11 and 8. Gate is `MIN_TOP15_OVERLAP = 12` (`tools/convert-wd-tagger.py`).
+  Core ML has no per-op placement/precision pinning, so "SDPA on GPU, rest on
+  ANE" cannot be forced; re-conversion experiments have uncertain payoff and
+  no speed win over the native path. Not worth redoing.
+- **PGTFormer — already rejected** (recorded in
+  `docs/pgtformer-optimization-benchmark.json` under "ANE"): fp32 fell back to
+  CPU (1,059+ CPU-preferred ops), fp16 ANE compile exceeded the 6 GB budget
+  (6.21 GB observed). `Runtime/Sources/WaifuPGTFormer/ComputeProfiling.swift`
+  holds the reusable MLComputePlan probe pattern.
+- **SAFIRE — poor fit.** ViT-B window+global attention (the op mix that
+  degrades on ANE); already 26–33 ms/image median; porting the compiled MLX
+  graph to Core ML is large work for no measured gap.
+- **TruFor — poor fit.** Measured FP32 islands (all BN, LayerNorms, detection
+  head) are load-bearing for the forensic gates (1e-5 strict score error);
+  ANE compute paths are fp16/W8A8 only, no fp32.
+- **SeedVR2 / FlashVSR — categorical no.** 4-bit quantized MLX weights,
+  dynamic shapes/tiles, temporal control flow; ANE is fixed-shape fp16/W8A8,
+  no branching.
+
+**Gotchas a fresh session must not re-derive**
+
+- Degenerate-input artifact: pure-black or flat/pattern frames produce
+  near-tied tag probabilities, so ANY numeric difference reshuffles top-15 —
+  even `cpuOnly` vs `cpuAndGPU` disagreed on the synthetic pattern frames.
+  First ANE measurement (0/15) was this artifact, not ANE breakage. Adjudicate
+  with the canonical uniform-noise draw (`np.random.default_rng(20261013)`,
+  integers 0–255) and judge configs only against the SAME reference run in
+  the same session.
+- Torch-reference drift: the release recorded mean Δp 1.06e-5 / top15 15/15
+  for cpuAndGPU; today's torch 2.14 + current timm reference gives cpuAndGPU
+  mean 4.9e-4 / worst 11 on the same package and input. The reference moved,
+  not the package — absolute cross-time comparisons are meaningless.
+- ANE cold compile is ~150 s per load (ane d caches per signature); an app
+  integration would need the fingerprint+OS-keyed compiled-model cache that
+  PGTFormer already uses (`~/Library/Caches/Waifu/PGTFormerCompiled`).
+- Original upstream weights downloaded for the torch-reference setup
+  (`SmilingWolf/wd-swinv2-tagger-v3` model.safetensors, plus the /tmp probe
+  scripts, the benchmark's compiled .mlmodelc copies, and the python
+  e5bundlecache) were all removed in the same session's housekeeping;
+  `tools/convert-wd-tagger.py` re-downloads the weights on demand.
+- Probe scripts were /tmp throwaways (now deleted); the method survives in
+  the pointers above (ComputeProfiling pattern + converter's
+  `build_model`/`Tagger` + top-15 metric). The H15G (M3) ANE identity appears
+  in Core ML compiler logs; the pasted M4 article covers H16G only.

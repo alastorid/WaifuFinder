@@ -138,7 +138,6 @@ public final class SAFIREModel {
             for x in 0..<1024 where x < 256 || x >= 768 { mask[y*1024+x] = 0 }
         }
         // The FFT branch stays FP32 in every precision mode.
-        let dt: DType = precision == .fp16 ? .float16 : .float32
         highpass = MLXArray(mask,[1,1024,1024,1])
         let edt: DType = precision == .fp16 ? .float16 : .float32
         let ddt: DType

@@ -12,7 +12,10 @@ struct CrystalOrbDifferenceSettings: Sendable, Equatable {
     var display: Display = .color
 }
 
-struct CrystalOrbDifference: Sendable {
+/// `CIImage` is an immutable recipe and every property is a `let`; the macOS 15
+/// SDK simply does not annotate it `Sendable`, so the conformance is unchecked
+/// rather than dropping the value-type semantics callers rely on.
+struct CrystalOrbDifference: @unchecked Sendable {
     let id = UUID()
     let measurementID: UUID
     let alignment: CrystalOrbAlignment
@@ -36,7 +39,11 @@ enum CrystalOrbDifferenceRenderer {
     // absolute channel differences in [0,1], quantized to 8-bit for statistics.
     // Luminance here is sRGB luma Y' (Rec.709 weights), not linear-light luminance.
     static let color = CGColorSpace(name: CGColorSpace.sRGB)!
-    static let context = CIContext(options: [.workingColorSpace: color, .outputColorSpace: color, .cacheIntermediates: false])
+    /// CIContext rendering is thread-safe and a `let` initializes exactly once;
+    /// the holder keeps that judgment in one place across SDKs that disagree
+    /// about annotating the type itself.
+    final class SharedContext: @unchecked Sendable { let value = CIContext(options: [.workingColorSpace: color, .outputColorSpace: color, .cacheIntermediates: false]) }
+    static let context = SharedContext()
 
     static func source(_ image: CGImage, alignment: CrystalOrbAlignment, candidate: Bool) -> (CIImage, CIImage) {
         let native = CGRect(x: 0, y: 0, width: image.width, height: image.height)
@@ -53,7 +60,7 @@ enum CrystalOrbDifferenceRenderer {
                        settings: CrystalOrbDifferenceSettings = .init()) throws -> CrystalOrbDifference {
         // A new material must not inherit same-sized zero tiles cached by a
         // previous comparison. This only drops CI intermediates, never sources.
-        context.clearCaches()
+        context.value.clearCaches()
         let alignment = declared ?? CrystalOrbAlignment(target: CGSize(width: target.width, height: target.height), candidate: CGSize(width: candidate.width, height: candidate.height))
         let a = source(target, alignment: alignment, candidate: false)
         let b = source(candidate, alignment: alignment, candidate: true)
@@ -65,7 +72,7 @@ enum CrystalOrbDifferenceRenderer {
         return try visualize(alignment: alignment, a: a.0, b: b.0, am: a.1, bm: b.1, raw: raw, luminance: luminance, overlap: overlap, union: union, settings: settings)
     }
     static func remap(_ input: CrystalOrbDifference, settings: CrystalOrbDifferenceSettings) throws -> CrystalOrbDifference {
-        context.clearCaches()
+        context.value.clearCaches()
         return try visualize(alignment: input.alignment, a: input.target, b: input.candidate, am: input.targetMask, bm: input.candidateMask,
                       raw: input.raw, luminance: input.luminance, overlap: input.overlap, union: input.union, settings: settings, measurementID: input.measurementID)
     }
@@ -97,7 +104,7 @@ enum CrystalOrbDifferenceRenderer {
         var peak = [Float](repeating: 0, count: 4)
         if settings.autoStretch {
             let maximum = validMetric.applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: CIVector(cgRect: extent)])
-            peak.withUnsafeMutableBytes { context.render(maximum, toBitmap: $0.baseAddress!, rowBytes: 16, bounds: CGRect(x: 0,y: 0,width: 1,height: 1), format: .RGBAf, colorSpace: color) }
+            peak.withUnsafeMutableBytes { context.value.render(maximum, toBitmap: $0.baseAddress!, rowBytes: 16, bounds: CGRect(x: 0,y: 0,width: 1,height: 1), format: .RGBAf, colorSpace: color) }
         }
         let stretch: Double = settings.autoStretch && Double(peak[0]) > (settings.tolerance + 0.01)/255 ? 1 / Double(peak[0]) : 1
         let gain = Float(settings.gain * stretch)
@@ -134,7 +141,7 @@ enum CrystalOrbDifferenceRenderer {
     static func preview(_ image: CIImage, extent: CGRect) throws -> CGImage {
         let scale = min(1, 1600 / max(extent.width, extent.height))
         let rect = CGRect(x: 0, y: 0, width: ceil(extent.width * scale), height: ceil(extent.height * scale))
-        guard let result = context.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: rect, format: .RGBA8, colorSpace: color) else { throw CrystalOrbImageSource.failure }
+        guard let result = context.value.createCGImage(image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)), from: rect, format: .RGBA8, colorSpace: color) else { throw CrystalOrbImageSource.failure }
         return result
     }
 }

@@ -79,7 +79,7 @@ do {
             for geluFlag in [false,true] {
                 for residualFlag in [false,true] {
                     var row=[Float]((0..<channels).map { Float(($0*37)%91)/31-1.5 })
-                    var res=[Float]((0..<channels).map { Float(($0*53)%77)/29-1.3 })
+                    let res=[Float]((0..<channels).map { Float(($0*53)%77)/29-1.3 })
                     let weight=[Float]((0..<channels).map { Float(($0%13)-6)/7 })
                     let bias=[Float]((0..<channels).map { Float(($0%9)-4)/11 })
                     let x=MLXArray(row,[1,channels])

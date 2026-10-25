@@ -18,17 +18,15 @@ public final class TruForModel {
     public static let preprocessing="trufor-native-rgb-div256-v1"
     public static let sourceSHA="ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844"
     public enum Precision:String { case fp32,fp16 }
-    /// FP16 is the measured default: FP16 weights and activations with FP32
-    /// islands where reductions or tiny affine heads need them (every LayerNorm,
-    /// every BN, the DnCNN BN affines, and the whole detection head). Measured
-    /// deviation against the official FP32 reference: score ≤ 0.002, anomaly and
-    /// reliability ≤ 0.012, Noiseprint++ relative RMS 0.087. Set
-    /// `WAIFU_TRUFOR_PRECISION=fp32` for the strict validation path, which passes
-    /// the published 1e-5 score gate.
+    /// Production defaults to the FP32 path validated against the official
+    /// detection score and spatial outputs. FP16 remains an explicit benchmark
+    /// experiment: its Noiseprint residual and localization exceed strict gates.
     public let precision:Precision
     private var weights:[String:MLXArray]
     private var fuseParts:[String:[MLXArray]]=[:]
     private var compiled:[String:@Sendable ([MLXArray])->[MLXArray]]=[:]
+    private var compiledOrder:[String]=[]
+    private let compiledLimit=4
     public let device:String
     public let queryRows:Int
     public let noiseTile:Int
@@ -38,7 +36,7 @@ public final class TruForModel {
         queryRows=Int(ProcessInfo.processInfo.environment["WAIFU_TRUFOR_QUERY_ROWS"] ?? "512") ?? 512
         noiseTile=Int(ProcessInfo.processInfo.environment["WAIFU_TRUFOR_NOISE_TILE"] ?? "1024") ?? 1024
         guard [0,128,256,512,1024].contains(queryRows),[128,256,512,1024].contains(noiseTile) else { throw TruForError.invalid("Unsupported profile override") }
-        precision=Precision(rawValue:ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PRECISION"] ?? "") ?? .fp16
+        precision=Precision(rawValue:ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PRECISION"] ?? "") ?? .fp32
         let file=directory.appendingPathComponent("model.safetensors")
         let meta=try JSONSerialization.jsonObject(with:Data(contentsOf:directory.appendingPathComponent("architecture.json"))) as? [String:Any]
         guard meta?["sourceSHA256"] as? String == Self.sourceSHA,meta?["preprocessingVersion"] as? String == Self.preprocessing else { throw TruForError.invalid("Expected the verified official TruFor checkpoint") }
@@ -298,8 +296,13 @@ public final class TruForModel {
         } else {
             let key="\(rgbC.dim(0))x\(rgbC.dim(1))x\(rgbC.dim(2))"
             let graph: @Sendable ([MLXArray])->[MLXArray]
-            if let cached=compiled[key] { graph=cached }
-            else { graph=compile { [unowned self] arrays in forwardCore(arrays[0],arrays[1],phased:false) };compiled[key]=graph }
+            if let cached=compiled[key] {
+                graph=cached;compiledOrder.removeAll{$0==key};compiledOrder.append(key)
+            } else {
+                while compiledOrder.count>=compiledLimit { compiled.removeValue(forKey:compiledOrder.removeFirst()) }
+                graph=compile { [unowned self] arrays in forwardCore(arrays[0],arrays[1],phased:false) }
+                compiled[key]=graph;compiledOrder.append(key)
+            }
             let outputs=graph([rgbC,np]);eval(outputs)
             score=outputs[0];out=outputs[2];conf=outputs[3]
         }

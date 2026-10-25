@@ -5,6 +5,10 @@ struct TruForConfiguration:Sendable {
     static let sourceSHA="ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844"
     static let weightsSHA="3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c"
     static let runtime="trufor-native-v1"
+    // Separate execution compatibility from the immutable weights package.
+    // Older workers used FP16 under the same weight/preprocessing identity.
+    static let execution="trufor-fp32-v2"
+    static var scoreFingerprint:String { LineageIdentity.hash(weightsSHA+"|"+execution) }
     static let preprocessing="trufor-native-rgb-div256-v1"
     let directory:URL
     var fingerprint:String { Self.weightsSHA }
@@ -42,7 +46,7 @@ struct TruForSpatial:Sendable {
     let noiseprint:[Float]
     var byteCount:Int { width*height*12+20 }
     func validate()throws {
-        guard width>=32,height>=32,width*height<=24_000_000,score.isFinite,(0...1).contains(score),
+        guard width>=32,height>=32,width<=32768,height<=32768,width*height<=24_000_000,score.isFinite,(0...1).contains(score),
               anomaly.count==width*height,reliability.count==anomaly.count,noiseprint.count==anomaly.count,
               anomaly.allSatisfy({$0.isFinite && (0...1).contains($0)}),reliability.allSatisfy({$0.isFinite && (0...1).contains($0)}),noiseprint.allSatisfy(\.isFinite) else { throw ModelInstaller.fail("Invalid TruFor evidence") }
     }

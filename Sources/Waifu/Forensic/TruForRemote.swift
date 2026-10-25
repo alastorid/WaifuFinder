@@ -49,7 +49,7 @@ extension RemoteServerSession {
     }
 }
 extension RemoteClient {
-    var offersTruFor:Bool { WaifuDistribution.isNonCommercialOnly && status.isConnected && capabilities?.trufor?.available==true && capabilities?.trufor?.modelFingerprint==TruForConfiguration.weightsSHA && capabilities?.trufor?.runtimeRevision==TruForConfiguration.runtime && capabilities?.trufor?.preprocessingVersion==TruForConfiguration.preprocessing }
+    var offersTruFor:Bool { WaifuDistribution.isNonCommercialOnly && status.isConnected && capabilities?.trufor?.available==true && capabilities?.trufor?.modelFingerprint==TruForConfiguration.weightsSHA && capabilities?.trufor?.runtimeRevision==TruForConfiguration.execution && capabilities?.trufor?.preprocessingVersion==TruForConfiguration.preprocessing }
     func truforScores(_ images:[Data])async throws->[Float] {
         let result=try await trufor(images,evidence:false)
         guard case .scores(let scores)=result else { throw RemoteError.framing("Unexpected TruFor evidence") };return scores

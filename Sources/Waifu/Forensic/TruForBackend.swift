@@ -12,6 +12,10 @@ private final class TruForWorker:@unchecked Sendable {
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         let incoming=Pipe(),outgoing=Pipe();input=incoming.fileHandleForWriting;output=outgoing.fileHandleForReading
         process.executableURL=executable;process.arguments=["--model",configuration.directory.path,"--serve"];process.qualityOfService = .utility
+        // A diagnostic shell override must not silently alter persisted app scores.
+        var environment=ProcessInfo.processInfo.environment
+        environment["WAIFU_TRUFOR_PRECISION"]="fp32"
+        process.environment=environment
         process.standardInput=incoming;process.standardOutput=outgoing
         FileManager.default.createFile(atPath:root.appendingPathComponent("worker.log").path,contents:nil)
         process.standardError=try FileHandle(forWritingTo:root.appendingPathComponent("worker.log"))

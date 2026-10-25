@@ -181,7 +181,7 @@ func registerLineageSourceTests() {
     Registry.shared.add(suite:"Image Lineage",TestCase(name:"native resampling supports a smaller parent without treating dates alone as proof",knownBug:nil) {
         let source=try lineageTexture(),unrelated=try lineageTexture(1)
         let ci=CIImage(cgImage:source).transformed(by:CGAffineTransform(scaleX:2,y:2))
-        let child=CrystalOrbDifferenceRenderer.context.createCGImage(ci,from:ci.extent)!
+        let child=CrystalOrbDifferenceRenderer.context.value.createCGImage(ci,from:ci.extent)!
         let assessor=LineageSourceAssessor(),early=Date(timeIntervalSince1970:100),late=Date(timeIntervalSince1970:200)
         let proof=try await assessor.assessPixels(parent:source,child:child,parentID:"small",childID:"large",parentDate:early,childDate:late)
         checkEqual(proof?.parentID,"small","lower resolution parent permitted")
