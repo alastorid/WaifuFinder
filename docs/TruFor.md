@@ -22,8 +22,14 @@ all three:
 - TruFor is offered only in the non-commercial build, decided at compile time by
   `WaifuDistribution` — the same gate as PGTFormer, so a commercial build never
   ships the offer.
-- The model card on the Hub declares `grip-unina-trufor-non-commercial`; the
+- The model card on the Hub declares `grip-unina-trufor-nonprofit`; the
   weights are not relicensed, and WaifuFinder's own integration code remains MIT.
+- On 2026-10-25 a TruFor collaborator confirmed in
+  [grip-unina/TruFor#36](https://github.com/grip-unina/TruFor/issues/36) that the
+  pretrained weights are covered by the same licence as the code, which restricts use
+  to nonprofit purposes, and that all redistributions retain the original licence and
+  remain subject to its terms, including the nonprofit-use restriction — the terms the
+  published package travels with.
 
 ## Conversion
 

@@ -15,9 +15,11 @@ without re-deriving any of it.
 **Image Lineage / SAFIRE** (Photos forensics, Git-style ancestry graph): complete
 and previously delivered. Sources in `Sources/Waifu/Lineage/`, native runtime in
 `Runtime/Sources/SAFIREMLX` + `WaifuSAFIRE`, docs in `docs/ImageLineage.md`.
-Published package: `alastorid/SAFIRE-Swift-MLX`. Not installed locally — the
-"published SAFIRE installs…" loopback test skips until the user installs the
-model through Settings → Models.
+Published package: `alastorid/SAFIRE-Swift-MLX` @ revision
+`6422600bd8a8b361ec4869bd597267b7553b5533`. The package is installed and
+configured in the 2026-10-25 development workspace. The opt-in installer test
+still depends on being explicitly requested; see `docs/Native-model-status.md`
+for the current version, parity and performance summary.
 
 **TruFor forensic scores** (Photos-only, second forensic model): complete,
 verified, optimized. Feature doc: `docs/TruFor.md`; measured evidence:
@@ -30,20 +32,27 @@ runtime in `Runtime/Sources/TruForMLX` + `WaifuTruFor`, publisher
 - **Distribution**: `alastorid/TruFor-Swift-MLX` @ revision
   `80cdfb30d990a115b309793851435b8907ecd648`, immutable path
   `releases/trufor-native-v1-46b5190799530f2f`, public, card licence
-  `grip-unina-trufor-non-commercial`. The user explicitly authorized
-  redistribution under the GRIP-UNINA licence (credit + licence compatibility).
+  `grip-unina-trufor-nonprofit`. The user explicitly authorized
+  redistribution under the GRIP-UNINA licence (credit + licence compatibility),
+  and on 2026-10-25 a TruFor collaborator confirmed in
+  [grip-unina/TruFor#36](https://github.com/grip-unina/TruFor/issues/36) that the
+  pretrained weights are covered by the same licence as the code, which restricts
+  use to nonprofit purposes, and that all redistributions retain the original
+  licence and remain subject to its terms, including the nonprofit-use
+  restriction.
   Weights stay `isNonCommercialRestricted` (commercial builds exclude them).
 - **Verified**: clean anonymous download with per-file hash checks; bit-identical
   native inference from the downloaded copy; opt-in installer loopback test
   passes: `WAIFU_TEST_TRUFOR_INSTALL=1 ./run-tests.sh --only "TruFor integration"`
   (needs `dist/` built first). Suite: 465 passed / 0 failed / 11 fixture skips.
-- **Runtime profile (measured, paired)**: per-shape MLX compile with the noise
-  body outside the compiled graph; FP16 weights+activations by default with FP32
-  islands (all LayerNorms, all BN incl. DnCNN rows, detection head);
-  `linear_fuse` kernels pre-sliced at load; noise tile default 1024. Ratios:
-  FP16/FP32 = 0.919 (M3) / 0.922 (M4); quiet-machine M3 1.79 s → 1.30 s; M4
-  1.43 s → 1.02 s.
-- **FP16 measured deviations** vs official FP32 reference (516×644 fixture):
+- **Runtime profile (measured, paired)**: production pins FP32 after the FP16
+  experiment failed the strict score/spatial parity gates. The worker compiles
+  per-shape graphs with the noise body outside the compiled graph, pre-slices
+  `linear_fuse` weights and uses a 1024-pixel noise tile. Current warm 1024×768
+  timings are 1.586 s (M3) / 1.108 s (M4); the earlier native FP32 path measured
+  1.79 s / 1.43 s. FP16 measurements are historical only. RAM was not compared
+  against upstream PyTorch. See `docs/TruFor.md`.
+- **Historical FP16 measured deviations** vs official FP32 reference (516×644 fixture):
   score ≤ 0.002 (M3) / 0.0007 (M4), anomaly ≤ 0.012 (M3) / 0.032 (M4),
   noiseprint relRMS 0.087 (M3) / 0.236 (M4), masks identical at 0.5. FP32 strict
   path passes the 1e-5 score gate on both devices (score err 3.81e-06, identical
@@ -109,9 +118,9 @@ runtime in `Runtime/Sources/TruForMLX` + `WaifuTruFor`, publisher
   `Tests/GoogleLensSearchTests.swift` / `Tests/GroupRowNavigationTests.swift`
   belong to earlier work in this tree — untouched here, but they ride along in
   any commit.
-- Fixture-gated skips (SAFIRE/TruFor installs, Image Lineage photographic
-  fixtures, real video inference) resolve when the user installs models and
-  supplies fixtures; the TruFor opt-in test is proven green.
+- Optional installer and fixture suites can still be skipped unless explicitly
+  enabled and supplied with the required fixtures. The published SAFIRE and
+  TruFor install tests have passed; see `docs/ImageLineage.md` and `docs/TruFor.md`.
 - If the official TruFor checkpoint is ever re-converted, bump
   `TruForConfiguration.weightsSHA` and re-run the whole verification chain
   (publisher asserts the pinned source SHA).

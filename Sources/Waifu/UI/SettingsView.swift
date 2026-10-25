@@ -207,7 +207,8 @@ struct ModelSettingsView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if entry.model.isNonCommercialRestricted {
-                            Text("Non-commercial use only").font(.caption).foregroundStyle(.secondary)
+                            Text(entry.model == .trufor ? "Nonprofit use only" : "Non-commercial use only")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         if let location = entry.location {
                             Text("\(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file)) · \(library.isManaged(entry) ? "App managed" : "External folder")")

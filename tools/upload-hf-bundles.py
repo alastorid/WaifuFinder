@@ -43,7 +43,7 @@ BUNDLES = [
         # slug; the full terms travel in LICENSE.txt, LICENSE_CMX.txt and NOTICE,
         # not in card metadata.
         "library_name": "mlx", "license": "other",
-        "license_name": "grip-unina-trufor-non-commercial",
+        "license_name": "grip-unina-trufor-nonprofit",
         "license_note": "Informational and nonprofit use only; retain all notices and credit GRIP-UNINA whenever results are made public.",
         "private": False, "acknowledgement": None,
     },

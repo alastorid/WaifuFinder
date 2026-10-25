@@ -35,7 +35,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .pgt: "Temporal face restoration · Core ML · about 381 MB"
         case .tagger: "Frame traits · optimized native GPU · about 225 MB"
         case .safire: "Photos forensics · native Swift/MLX · CC BY 4.0 weights"
-        case .trufor: "Photos forensics · native Swift/MLX · GRIP-UNINA non-commercial weights"
+        case .trufor: "Photos forensics · native Swift/MLX · GRIP-UNINA nonprofit weights"
         }
     }
     var releaseName: String? {
@@ -52,8 +52,8 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
     }
     /// `true` when this model's upstream licence forbids commercial use.
     ///
-    /// PGTFormer and TruFor are redistributed under non-commercial licences that
-    /// travel with the weights; everything else WaifuFinder ships is Apache-2.0,
+    /// PGTFormer's non-commercial licence and TruFor's informational/nonprofit
+    /// licence travel with the weights; everything else WaifuFinder ships is Apache-2.0,
     /// BSD-3-Clause or MIT. See `WaifuDistribution` for why this is decided at
     /// build time rather than at download time.
     var isNonCommercialRestricted: Bool { self == .pgt || self == .trufor }
@@ -127,7 +127,8 @@ actor ModelInstaller {
         // so plainly beats reporting a corrupt catalog, which would send the user
         // looking for a bug that does not exist.
         if model.isNonCommercialRestricted, !WaifuDistribution.isNonCommercialOnly {
-            throw fail("\(model.name) is not offered in a commercial build of WaifuFinder, because its licence permits non-commercial use only.")
+            let terms = model == .trufor ? "informational and nonprofit use" : "non-commercial use"
+            throw fail("\(model.name) is not offered in a commercial build of WaifuFinder, because its licence permits \(terms) only.")
         }
         guard let name = model.releaseName,
               let url = Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "ModelReleases") else {

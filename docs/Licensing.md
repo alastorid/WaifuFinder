@@ -59,7 +59,12 @@ So the restriction is enforced at build time instead. See
 
 Note on the last row: the weights repository declares no licence in its card metadata and
 ships no `LICENSE` file. The only terms available anywhere are the non-commercial `LICENSE`
-in the author's GitHub repository. See [What needs a human](#what-needs-a-human).
+in the author's GitHub repository. On 2026-10-25 a TruFor collaborator confirmed in
+[issue #36](https://github.com/grip-unina/TruFor/issues/36) that the pretrained weights
+(`trufor.pth.tar`) are covered by the same licence as the code, which restricts use to
+nonprofit purposes, and that all redistributions retain the original licence and remain
+subject to its terms, including the nonprofit-use restriction — the terms the published
+WaifuFinder package carries. See [What needs a human](#what-needs-a-human).
 
 Apache-2.0 is the only licence here carrying an express patent grant and a
 "must include NOTICE" obligation for derivative works. MIT and BSD-3-Clause carry no
@@ -108,7 +113,8 @@ redistributing them, on the Hub and to users. **Ask the author.** Until he confi
 the weights as unlicensed, which is a weaker position than "non-commercial".
 
 **2. Whether a use is commercial.** The default build offers PGTFormer and TruFor and must
-be kept to non-commercial use under their upstream terms. The commercial build excludes
+be kept to non-commercial use (PGTFormer) and informational, nonprofit use (TruFor) under
+their upstream terms. The commercial build excludes
 both offers and is intended for commercial use under the remaining listed licences. A
 build flag cannot change a model's licence or grant rights to unlicensed weights; the
 PGTFormer weights question above still needs an explicit answer before those weights are

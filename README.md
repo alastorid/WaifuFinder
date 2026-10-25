@@ -10,6 +10,10 @@ Find the best frames in a long video.
 Public release builds include PGTFormer and are for non-commercial use. See
 [the licensing notes](docs/Licensing.md) for the model terms and the separate commercial build.
 
+For the pinned WD Tagger, TruFor and SAFIRE versions, reference parity and
+measured speed/memory comparisons, see the
+[native model status summary](docs/Native-model-status.md).
+
 The pre-squash commit hash record is backed up in a [private GitHub archive](https://github.com/alastorid/waifufinder-history-archive/blob/main/secret%20commit%20hash.md); access requires authorization to the private repository.
 
 ## SAFIRE for Photos
