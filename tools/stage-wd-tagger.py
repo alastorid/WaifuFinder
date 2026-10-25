@@ -51,7 +51,7 @@ def main():
         'All 24 attention blocks use native SDPA with rank-four queries and masks.\n'
         'The label CSV retains the original output-head order.\n')
     (target / 'README.md').write_text('# WD SwinV2 Tagger v3 — Core ML\n\n'
-        'Native fixed-batch tagger for WaifuFinder, converted from '
+        'Native fixed-batch tagger for [WaifuFinder](https://github.com/alastorid/WaifuFinder), converted from '
         '[SmilingWolf/wd-swinv2-tagger-v3](https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3).\n\n'
         '`WDTagger.mlpackage` accepts RGB float32 [8,3,448,448] values in 0–255 '
         'and returns sigmoid probabilities [8,10861]. Use CPU and GPU compute units. '
@@ -62,7 +62,7 @@ def main():
         'Resize longest side to at most 1024, center on a white square and resize '
         'bicubically to 448 before inference. Duplicate the last frame to pad tails.\n\n'
         '`wd-tagger-labels.csv` is in exact output order: 4 rating, 8,106 general, '
-        '2,751 character heads. WaifuFinder emits only general tags at threshold 0.35 '
+        '2,751 character heads. [WaifuFinder](https://github.com/alastorid/WaifuFinder) emits only general tags at threshold 0.35 '
         'and the winning rating. `validation.json` records original PyTorch parity. '
         '`manifest.json` pins every model member and labels by SHA-256. '
         'The app compiles the package locally at installation.\n\n'

@@ -96,7 +96,7 @@ cat > "$REAL/README.md" <<'README'
 # Real-ESRGAN x2plus — optimized Core ML
 
 Self-contained framewise 2× upscaler for
-[WaifuFinder](https://github.com/alastorid/WaifuFinder). WaifuFinder downloads
+[WaifuFinder](https://github.com/alastorid/WaifuFinder). [WaifuFinder](https://github.com/alastorid/WaifuFinder) downloads
 these files directly: no Python, no source checkpoint, no conversion step.
 
 ## Contents

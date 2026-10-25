@@ -4,7 +4,7 @@
   "preprocessingVersion": "trufor-native-rgb-div256-v1",
   "sourceSHA256": "ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844",
   "convertedWeightsSHA256": "3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c",
-  "distribution": "alastorid/TruFor-Swift-MLX @ 80cdfb30d990a115b309793851435b8907ecd648, immutable path releases/trufor-native-v1-46b5190799530f2f, grip-unina-trufor-non-commercial",
+  "distribution": "alastorid/TruFor-Swift-MLX @ 80cdfb30d990a115b309793851435b8907ecd648, immutable path releases/trufor-native-v1-46b5190799530f2f, grip-unina-trufor-non-commercial (public)",
   "referenceParity": {
     "fixture": "native-resolution odd geometry 516x644, official forward math, all four fusion stages",
     "singlePath": {
@@ -44,5 +44,58 @@
     "nativeValidation": "waifu-trufor --validate passed on the downloaded copy",
     "bitIdenticalInference": true,
     "optInInstallerLoopbackTest": "WAIFU_TEST_TRUFOR_INSTALL=1 passed: real installer download, isolated activation, identical evidence across encrypted loopback"
+  },
+  "optimizationRound": {
+    "date": "2026-10-24",
+    "method": "phase profiling (WAIFU_TRUFOR_PROFILE), paired interleaved A/B runs, parity gates before adoption",
+    "adopted": [
+      "per-shape MLX compile of the forward graph with the noise body outside the compiled graph (memory-bounding evals preserved)",
+      "decoder linear_fuse kernel pre-sliced into four contiguous per-part weights at load",
+      "FP16 weights and activations by default with FP32 islands: every LayerNorm, every BN including the DnCNN BN rows, and the whole detection head; WAIFU_TRUFOR_PRECISION=fp32 keeps the strict validation path",
+      "noise tile default 512 -> 1024 (measured ~3-9% at 1024x768, per-tile evals bound memory)"
+    ],
+    "rejected": [
+      "custom direct 3x3 conv Metal kernel: measured 92-96 ms per layer versus 26 ms for MLX implicit-GEMM FP16 (weight reuse does not amortize at 64 channels); removed",
+      "joint batching beyond the 1M-pixel worker envelope: measured 1.364 s/img versus 1.304 s/img single at 1024x768; envelope reverted",
+      "query chunk removal and chunk size changes: neutral in paired runs (ratio 0.992)"
+    ],
+    "fp16Deviations": {
+      "fixture": "official reference fixture, 516x644",
+      "scoreAbsoluteDelta": 0.0019,
+      "anomalyMaxDelta": 0.0118,
+      "reliabilityMaxDelta": 0.0093,
+      "noiseprintRelativeRMS": 0.0875,
+      "maskIoUAt0.5": 1.0
+    },
+    "fp32ParityAfterRefactor": {
+      "status": "passed",
+      "scoreMaxAbsError": 3.8e-06,
+      "gate": "1e-5",
+      "note": "same error magnitudes as the pre-refactor report"
+    },
+    "benchmarks": {
+      "method": "warm worker, complete inference, medians; absolute clocks vary with foreground load, so paired ratios are the reliable claim",
+      "m3Paired": {
+        "fp16Tile1024": 1.458,
+        "fp32Strict": 1.586,
+        "ratio": 0.919
+      },
+      "m3QuietSession": {
+        "beforeOptimizationFp32": 1.79,
+        "afterFp16Configured": 1.3,
+        "ratio": 1.38
+      },
+      "evidence1024x768": "within 3% of the score path",
+      "m4Paired": {
+        "fp16Configured": 1.021,
+        "fp32Strict": 1.108,
+        "ratio": 0.922,
+        "beforeOptimizationFp32": 1.43
+      }
+    },
+    "m4Parity": {
+      "fp32": "identical error magnitudes to M3 (score 3.81e-06, cross-device determinism holds)",
+      "fp16": "score delta 6.9e-04, anomaly 3.2e-02, noiseprint relRMS 0.236 \u2014 different fp16 rounding trajectory, inside the documented envelope"
+    }
   }
 }

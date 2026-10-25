@@ -9,8 +9,8 @@ public struct SAFIREPrediction {
 
 extension SAFIREModel {
     /// PyTorch align_corners=False interpolation for BHWC tensors, with clamped
-    /// boundary samples. Also used to sample the exact nearest-downsampled binary
-    /// mask for the encoder-feature pooling step.
+    /// boundary samples. Also used for the representative probability maps; the
+    /// fused mask post-processing kernel mirrors this arithmetic exactly.
     public static func resize(_ x: MLXArray,height:Int,width:Int) -> MLXArray {
         let h=x.dim(1), w=x.dim(2)
         let ys=(0..<height).map { max(0,min(Float(h-1),(Float($0)+0.5)*Float(h)/Float(height)-0.5)) }
@@ -29,53 +29,39 @@ extension SAFIREModel {
     /// Clustering initialization is deterministic (upstream uses random seeds).
     public func predict(_ normalized:MLXArray,clusters:Int=3) throws -> SAFIREPrediction {
         guard (2...8).contains(clusters) else { throw SAFIREError.invalid("Expected 2…8 source partitions") }
+        var mark=Date()
         let embedding=try encode(normalized)
-        var masks:[MLXArray]=[], features:[[Float]]=[], qualities:[Float]=[], areas:[Int]=[]
-        for start in stride(from:0,to:256,by:diagnostics.promptBatch) {
-            let end=min(256,start+diagnostics.promptBatch)
-            var coords: [Float] = []
-            for i in start..<end { coords.append(Float(i%16)*64+32); coords.append(Float(i/16)*64+32) }
-            let result=try decode(embedding:embedding,points:MLXArray(coords,[end-start,2]))
-            // Keep full-mask thresholding, areas and feature pooling resident
-            // on the GPU for the decoder batch. One completion fence per batch
-            // replaces the per-prompt scalar reads and feature readback fences.
-            let batch=end-start
-            let full=Self.resize(result.masks.reshaped(batch,256,256,1),height:1024,width:1024)
-            let mask:MLXArray=full .> Float(0)
-            let areaTensor=sum(mask.asType(.int32),axes:[1,2,3])
-            let samples=mask[0...,MLXSlice.stride(by:16),MLXSlice.stride(by:16),0].asType(.float32).reshaped(batch,64,64,1)
-            let counts=sum(samples,axes:[1,2,3])
-            let pooled=sum(embedding*samples,axes:[1,2])/maximum(counts.reshaped(batch,1),MLXArray(Float(1)))
-            eval(result.quality,areaTensor,counts,pooled)
-            let quality=result.quality.asArray(Float.self)
-            let batchAreas=areaTensor.asArray(Int32.self),batchCounts=counts.asArray(Float.self)
-            let batchFeatures=pooled.asArray(Float.self)
-            for j in 0..<batch where batchAreas[j]>0 && batchCounts[j]>0 {
-                masks.append(result.masks[j])
-                features.append(Array(batchFeatures[(j*256)..<((j+1)*256)]))
-                qualities.append(quality[j]);areas.append(Int(batchAreas[j]))
-            }
+        record("encode.total",mark,embedding); mark=Date()
+        let (masks,areas,counts,features,qualities)=gridPredictions(embedding:embedding)
+        mark=Date()
+        var keptFeatures:[[Float]]=[],keptQualities:[Float]=[],keptAreas:[Int]=[],kept:[Int]=[]
+        for j in 0..<256 where areas[j]>0 && counts[j]>0 {
+            kept.append(j)
+            keptFeatures.append(features[j]);keptQualities.append(qualities[j]);keptAreas.append(Int(areas[j]))
         }
-        guard features.count >= 2 else { throw SAFIREError.invalid("SAFIRE produced fewer than two usable region masks") }
+        guard keptFeatures.count >= 2 else { throw SAFIREError.invalid("SAFIRE produced fewer than two usable region masks") }
         func representatives(_ count:Int) -> [Int] {
-            let assignments=SAFIREClustering.cosine(features,k:count)
+            let assignments=SAFIREClustering.cosine(keptFeatures,k:count)
             return Set(assignments).sorted().compactMap { label in
-                assignments.indices.filter({assignments[$0]==label}).max(by:{qualities[$0] < qualities[$1]})
+                assignments.indices.filter({assignments[$0]==label}).max(by:{keptQualities[$0] < keptQualities[$1]})
             }
         }
         let binary=representatives(2), multi=representatives(clusters).sorted()
+        stageRecorder?("clustering",Date().timeIntervalSince(mark),Memory.activeMemory,Memory.peakMemory); mark=Date()
         guard !binary.isEmpty,!multi.isEmpty else { throw SAFIREError.invalid("No source partition survived clustering") }
-        func probability(_ i:Int) -> MLXArray {
-            sigmoid(Self.resize(masks[i].reshaped(1,256,256,1),height:1024,width:1024)).reshaped(1024,1024)
+        func probability(_ position:Int) -> MLXArray {
+            let mask=masks[kept[position]]
+            return sigmoid(Self.resize(mask.reshaped(1,256,256,1),height:1024,width:1024)).reshaped(1024,1024)
         }
         let partitions=argMax(stacked(multi.map(probability),axis:0),axis:0).asType(.uint16)
         let probabilities:MLXArray
         if binary.count == 2 {
-            let foreground=areas[binary[0]] > areas[binary[1]] ? binary[1] : binary[0]
+            let foreground=keptAreas[binary[0]] > keptAreas[binary[1]] ? binary[1] : binary[0]
             let background=foreground == binary[0] ? binary[1] : binary[0]
             probabilities=(probability(foreground)+1-probability(background))/2
         } else { probabilities=probability(binary[0]) }
         eval(probabilities,partitions)
+        stageRecorder?("probabilityAssembly",Date().timeIntervalSince(mark),Memory.activeMemory,Memory.peakMemory)
         return .init(probabilities:probabilities.asArray(Float.self),partitions:partitions.asArray(UInt16.self),selectedPrompts:binary)
     }
 }

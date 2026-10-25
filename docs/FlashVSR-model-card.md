@@ -28,9 +28,9 @@ records source revisions, source checksums, every parameter mapping and converte
 checksums. Model parameters and architecture follow the authors' Tiny Streaming path.
 
 This is a **custom Swift runtime format**. It is not a drop-in checkpoint for Python
-MLX, Transformers, Diffusers or the author's CUDA scripts. Use the matching WaifuFinder worker.
+MLX, Transformers, Diffusers or the author's CUDA scripts. Use the matching [WaifuFinder](https://github.com/alastorid/WaifuFinder) worker.
 No Python interpreter or PyTorch is required for inference. The offline converter and
-numerical oracle remain available in the WaifuFinder source repository.
+numerical oracle remain available in the [WaifuFinder](https://github.com/alastorid/WaifuFinder) source repository.
 
 ## Contents
 
@@ -40,7 +40,7 @@ projection, Tiny Conditional Decoder and prompt. The Full-model Wan VAE is not i
 
 ## Use
 
-On Apple Silicon with macOS 15 or newer, run setup from the current WaifuFinder source
+On Apple Silicon with macOS 15 or newer, run setup from the current [WaifuFinder](https://github.com/alastorid/WaifuFinder) source
 repository. It downloads the pinned converted release, verifies its checksums and
 reuses files already installed. No original checkpoints or Python conversion are needed:
 
@@ -70,7 +70,7 @@ against the pinned official BF16 graph. Projection/DiT used CPU PyTorch, the dec
 used PyTorch MPS, and CUDA sparse dispatch was replaced with equivalent masked SDPA.
 This is not a measured CUDA comparison. Every visible frame passed preset tolerances
 of mean absolute error <0.025 in [-1,1] and correlation >0.99. Detailed intermediate
-metrics and native reports are in WaifuFinder's `docs/flashvsr-validation.json`.
+metrics and native reports are in [WaifuFinder](https://github.com/alastorid/WaifuFinder)'s `docs/flashvsr-validation.json`.
 
 Measured peak physical footprint was about 3.8 GB for a 128×128 output ROI and 4.3 GB
 for a 159×253 ROI padded to 256×256. These are small-region measurements, not full-frame
@@ -80,7 +80,7 @@ system swap. Whole-region attention is preserved; spatial DiT tiling is not used
 
 Only native 4× is validated. HDR, non-square pixels, long clips, scene-cut quality and
 large whole-frame inference are unverified. Reconstruction can invent details.
-Aggregate similarity does not imply pixelwise identity. Consult WaifuFinder's documentation
+Aggregate similarity does not imply pixelwise identity. Consult [WaifuFinder](https://github.com/alastorid/WaifuFinder)'s documentation
 for supported geometry and interval limits.
 
 ## Provenance and license

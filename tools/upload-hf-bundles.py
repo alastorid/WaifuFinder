@@ -122,7 +122,7 @@ def card(bundle, directory: Path, repository: str) -> str:
     lines.extend([
         "---",
         "",
-        f"Published by WaifuFinder. `manifest.json` pins {len(manifest['fileSHA256'])} model files by SHA-256;",
+        f"Published by [WaifuFinder](https://github.com/alastorid/WaifuFinder). `manifest.json` pins {len(manifest['fileSHA256'])} model files by SHA-256;",
         "the app verifies every one of them, plus the licence, attribution and validation files,",
         "before installation.",
         "",

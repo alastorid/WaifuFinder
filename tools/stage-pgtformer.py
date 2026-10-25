@@ -109,7 +109,7 @@ against a 0.002 limit. Timings depend on hardware and system load.
 `PGTEncoder.mlpackage` and `PGTDecoder.mlpackage` contain the models.
 `manifest.json` pins every model file by SHA-256 and records the conversion.
 `validation.json` contains qualification results. `LICENSE` and `NOTICE` contain
-upstream terms and attribution. WaifuFinder pins the release and verifies all files.
+upstream terms and attribution. [WaifuFinder](https://github.com/alastorid/WaifuFinder) pins the release and verifies all files.
 
 ## Provenance and licence
 

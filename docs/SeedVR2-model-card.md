@@ -50,7 +50,7 @@ Setup verifies pinned hashes and resumes interrupted downloads. The worker uses 
 physical-memory budget of the smaller of 6 GB and half installed RAM. Streaming is
 selected automatically for 7B, 8 GB Macs and single-pass 3B jobs. Repeated 3B passes on
 larger Macs keep weights resident to avoid reloading. `--stream-weights` also enables it manually.
-The release targets WaifuFinder's native loader, not Diffusers or an unchanged image loader.
+The release targets [WaifuFinder](https://github.com/alastorid/WaifuFinder)'s native loader, not Diffusers or an unchanged image loader.
 See `validation.json` for measured runtime, memory, pixel differences and test scope.
 Measurements on a 16 GB M3 with a bounded process budget do not establish zero swap on
 an actual 8 GB machine. Generated details and spatial tiling can differ from the source.
@@ -91,6 +91,6 @@ Implementation credit: [mflux](https://github.com/filipstrand/mflux),
 [Swift reference port](https://github.com/xocialize/seedvr2-mlx-swift).
 
 Model weights and embedding retain Apache-2.0; `LICENSE`, `NOTICE` and upstream model
-cards are included. WaifuFinder adds packed projection fusion, sharding, checksums and
+cards are included. [WaifuFinder](https://github.com/alastorid/WaifuFinder) adds packed projection fusion, sharding, checksums and
 native video runtime optimizations. These are derivatives of the named authors' models,
 not independently trained models. Runtime source retains its separate MIT/upstream notices.

@@ -42,12 +42,42 @@ would need silent resizing; geometry outside the validated envelope is an error.
 `Runtime/Sources/TruForMLX` implements the full architecture in Swift and MLX:
 the Noiseprint++ DnCNN body, the CMX Mit-B2 encoder with FRM rectification and
 FFM fusion, both decode heads, and the official detection head. Input conversion
-uses a fused Metal kernel. Large images run the noise body in 512-px tiles with a
-17-px halo, which reproduces the exact receptive field without materializing the
-whole intermediate. Attention chunks queries into fixed rows so memory stays
-bounded on any input size. The worker exposes three paths over one identical
+uses a fused Metal kernel. Large images run the noise body in 1024-px tiles with
+a 17-px halo, which reproduces the exact receptive field without materializing
+the whole intermediate. The worker exposes three paths over one identical
 forward: batch scores (up to four images when their combined area fits the
-validated batch envelope), single-image evidence, and a warm `--serve` protocol.
+1M-pixel batch envelope), single-image evidence, and a warm `--serve` protocol.
+
+## Measured optimization
+
+The runtime is tuned by the same method as the WD Tagger kernel review: phase
+profiling, paired interleaved runs, and parity gates before anything ships.
+
+Adopted, each measured:
+
+- **Per-shape compiled forward.** The serve path compiles the whole graph per
+  input geometry with the noise body outside the compiled graph, so its
+  memory-bounding evaluations survive. This removed most of the per-request
+  graph-construction overhead (1.79 s → 1.46 s at 1024×768 on a quiet M3).
+- **FP16 weights and activations** with FP32 islands — every LayerNorm, every
+  BN including the DnCNN BN rows, and the whole detection head. FP16 is the
+  default; `WAIFU_TRUFOR_PRECISION=fp32` is the strict validation path.
+  Measured against the official FP32 reference: detection score within 0.002,
+  anomaly and reliability maps within 0.012, Noiseprint++ relative RMS 0.087,
+  and unchanged masks at the 0.5 threshold. The strict path re-passes the
+  published gates (score ≤ 1e-5) after the refactor.
+- **Decoder kernels pre-sliced** into four contiguous per-part weights at load,
+  removing a strided weight read from every decode pass.
+- **Noise tile 1024** (from 512), worth several percent at 1024×768; per-tile
+  evaluations keep large-image memory bounded.
+
+Measured and rejected: a custom direct 3×3 conv Metal kernel for the DnCNN
+(92–96 ms per layer versus 26 ms for MLX's implicit-GEMM FP16 — weight reuse
+does not amortize at 64 channels); joint batching beyond the 1M-pixel envelope
+(1.36 s per image versus 1.30 s single); attention query-chunk changes
+(neutral, ratio 0.992). MLX's conv is already within about 1.5× of this
+device's compute bound for these shapes, so the body is not memory-bound and
+the removed kernel was not competitive.
 
 ## Reference validation
 
@@ -64,16 +94,25 @@ score and spatial validation is refused.
 ## Measured performance
 
 Warm worker, 1024×768, complete inference including decode, forward and result
-serialization; medians of three runs. Cold start adds about 0.19 s of model load.
+serialization; medians of paired interleaved runs. Absolute clocks vary with
+foreground load on a shared Mac, so the paired ratios are the reliable claim.
 
-| Host | Single image | Batch of four (per-image fallback) |
-| --- | --- | --- |
-| M3 | 1.79 s | 7.19 s ≈ 4 × 1.8 s |
-| M4 (`thefreebao.local`, independently built) | 1.43 s | 5.72 s |
+| Configuration | Median | Ratio |
+| --- | ---: | ---: |
+| M3 FP16 default (compiled, tile 1024) | 1.458 s | 0.919 |
+| M3 FP32 strict validation path | 1.586 s | 1.000 |
+| M4 FP16 default (independently built) | 1.021 s | 0.922 |
+| M4 FP32 strict validation path | 1.108 s | 1.000 |
 
-Images whose combined area exceeds the batch envelope predict per image rather
-than trading memory for batching; small-image batches run as one fused forward.
-These measurements do not establish a globally fastest configuration and do not
+The FP16/FP32 ratio reproduces across both devices (0.919 / 0.922). On a quiet
+M3 earlier the same day the configured path measured 1.30 s against the
+pre-optimization 1.79 s (about 1.38×); on the M4 the configured path measures
+1.02 s against the pre-optimization 1.43 s (about 1.40×). The M4 FP32 outputs
+match the M3 FP32 outputs at the same error magnitudes, so cross-device
+determinism holds for the strict path. Evidence mode is within 3% of the score
+path. Images whose combined area exceeds the batch envelope
+predict per image; small-image batches run as one fused forward. These
+measurements do not establish a globally fastest configuration and do not
 guarantee a busy machine's timing.
 
 ## Distribution and verification

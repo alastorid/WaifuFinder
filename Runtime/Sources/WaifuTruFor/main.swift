@@ -42,7 +42,7 @@ func run(_ model:TruForModel,paths:[String],output:String,evidence:Bool)throws {
         try data.write(to:URL(fileURLWithPath:output),options:.atomic);start=mark("serialize",start)
     } else {
         let scores:[Float]
-        if images.allSatisfy({$0.1==images[0].1 && $0.2==images[0].2}),images.count*images[0].1*images[0].2<=24_000_000 {
+        if images.allSatisfy({$0.1==images[0].1 && $0.2==images[0].2}),images.count*images[0].1*images[0].2<=1_048_576 {
             scores=try model.predict(concatenated(images.map{$0.0},axis:0),evidence:false).score.asArray(Float.self)
         } else { scores=try images.map{try model.predict($0.0,evidence:false).score.item(Float.self)} }
         start=mark("predict+\(paths.count)",start)

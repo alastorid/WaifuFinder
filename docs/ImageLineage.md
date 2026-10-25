@@ -83,11 +83,51 @@ clustering means. Deterministic farthest-first initialization makes comparisons
 reproducible. Fused Metal preprocessing matches the official OpenCV uint8 linear
 square-resize convention. Oriented top-left masks remain registered to the photo.
 
-FP32 is retained for numerical and localization parity. The worker prepares
-convolution weights once, caches compiled decoder batches, chunks global
-relative-position attention, validates GPU resources and remains warm for 60
-seconds. Per-device profiles have measured provenance and conservative fallbacks.
-The allocator budget is 2 GiB with a 128 MiB cache; it is not a hard process cap.
+FP32 is retained for numerical and localization parity. Measured against the
+offline PyTorch oracle on the deterministic gradient fixture, every dumped
+tensor — encoder blocks, embedding, decoder masks, quality and both automatic
+maps — stays inside the predeclared FP32 tolerances
+(`docs/ImageLineage-native-validation.json`). A prepared FP16 checkpoint and
+mixed-precision scopes were built and measured for this work; they reached
+1–2% relative RMS on encoder activations and about 0.6% partition-map
+disagreement, far outside the 0.9999 partition-agreement bar, so FP16 remains
+a benchmark-only path (`WAIFU_SAFIRE_PRECISION=fp16`) and the FP32 original
+stays the shipping precision.
+
+The automatic 256-prompt path runs as compiled fixed-shape chunks of 4 prompts
+with unbatched shared first-layer keys, relative-position tables and the 16×16
+prompt tokens gathered once at load, and the dense positional encoding folded
+into the cross-attention q/k projections. Window-attention encoder blocks
+compile individually while the four global-attention blocks stay eager so each
+relative-position tile fences before the next; the 50 MB bias tiles come from a
+fused outer-sum Metal kernel writing at streaming rate (bitwise-exact against
+the broadcast add), and the 2×2 stride-2 transposed convolutions run as fused
+FP32 GEMM kernels with bias, pixel shuffle and LayerNorm/GELU in one pass
+(1.4–2.6× the MLX pipeline per stage; `WAIFU_SAFIRE_UPSCALE=mlx` reverts).
+Compiled whole-block replays accumulated every bias/score tile and peaked at
+~2 GiB, which is why those fences stay eager. Weights load once into their
+runtime layout and stay GPU-resident (the previous worker kept a ~430 MB
+CPU-side duplicate outside the Metal allocator's accounting). Measured worker
+memory is unchanged from the pre-optimization build: 924 MB against 924 MB
+maximum RSS, paired on the same machine. Fused one-pass Metal
+kernels replace MLX's generic LayerNorm/GELU primitives (which measured 6 GB/s
+on these channel-last shapes), a per-prompt hypernet dot kernel replaces a
+batched N=1 matmul, and 2×2 stride-2 transposed convolutions run as per-pixel
+GEMMs with a pixel shuffle. Mask areas, stride-16 feature samples and pooled embeddings are
+produced by a fused resize/threshold/sample/area kernel — no full-resolution
+FP32/bool intermediate is ever written. A scalar oracle backs every kernel
+(`--check-preprocessing`, `--check-fused`, `--check-maskpost`). Per-device
+profiles carry measured provenance and conservative fallbacks
+(`docs/ImageLineage-native-benchmark.json`). The allocator budget is 2 GiB with
+a 128 MiB cache; it is not a hard process cap.
+
+Interactive region exploration uses explicitly versioned worker ops:
+`{"op":"encode"}` holds up to two GPU-resident embeddings in a bounded
+least-recently-used cache, and `{"op":"decode"}` reruns only the decoder with
+new prompts (measured 16 ms for two points and 110 ms for sixteen after the
+one-time compiled-graph trace, 29 ms for four points including worker
+inter-process and file overhead). Requests without `op` keep the original
+one-shot inference contract.
 
 GPU batch mask areas and feature pooling replace per-prompt scalar/readback
 fences. Internal worker output, encrypted spatial responses and mask caches use

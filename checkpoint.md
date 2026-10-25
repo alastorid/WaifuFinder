@@ -1548,3 +1548,99 @@ so a future runtime asset cannot fail the same way silently.
 this tagger work landed and still points at the Core ML repository, which is untouched and
 still resolves; deleting the release broke no user. The native path ships in the next
 release.
+
+## SAFIRE native GPU optimization campaign — 2026-10-24/25
+
+**Result: full automatic inference 3.43 s → 2.10 s paired (1.61×) on M3, oracle parity
+20/20 tensors intact, maximum RSS unchanged (924 MB vs 924 MB).** Evidence lives in
+`docs/ImageLineage-native-benchmark.json` (paired rounds, stage medians, memory) and
+`docs/ImageLineage-native-validation.json`; per-agent reports in
+`.native-runtime/agent-{a,b,c}-report.md`. The runtime revision stays `safire-native-v1`
+and SFM1 is byte-identical, so the app needs no changes.
+
+**Where the time goes now** (stage medians, M3): decode grid ~1.35 s, encoder ~0.75 s,
+readback 0.04 s, probability assembly 0.065 s. The decode GEMMs run at MLX's ~1.7 TFLOP/s
+FP32 rate with fused epilogues; that is the measured, understood frontier.
+
+**What shipped, and the reason each survives:**
+
+- *Grid decode restructure*: the 256 automatic prompts run as compiled fixed-shape chunks
+  of 4 with precomputed prompt tokens, init-time relative-position tables, the dense
+  positional encoding folded into cross-attention q/k projections, unbatched shared
+  first-layer keys (per-head 2-D matmuls avoid `[C,4096,256]` broadcasts, which MLX
+  materializes on both sides), and one GPU→CPU readback for the whole grid. This replaced
+  64 small compiled calls with per-batch scalar readback fences.
+- *Fused FP32 upscale GEMM kernels* (`SAFIREUpscale`): each 2×2 stride-2 transposed conv
+  is one kernel — bias + pixel-shuffle + LayerNorm/GELU folded into the GEMM epilogue.
+  1.4–2.6× the MLX pipeline per stage; +7.3–8.6 % end-to-end, 6/6 paired rounds. The
+  pixel shuffle is pure epilogue address arithmetic because the pre-transformed
+  `[in,(kh,kw,out)]` weight column order already makes each output pixel's channels a
+  contiguous block. `WAIFU_SAFIRE_UPSCALE=mlx` reverts; `--check-upscale` is the oracle
+  (max deviation 9.5e-07).
+- *Fused relative-position bias outer-sum* (`SAFIREBias`): the 50 MB attention-bias tiles
+  stream from the two L1-resident table rows (MLX's broadcast add measured ~26 GB/s).
+  Bitwise-exact SDPA outputs; `encode.total` 0.790 → 0.776 s. Chunked-global paths also
+  compute the rel-pos terms as batched matmuls (the einsum lowering measured slower for
+  the same 25 MFLOP); window paths keep einsum inside their compiled graphs.
+- *Fused LayerNorm/GELU and mask-project kernels* (`SAFIRENorm`): MLX's generic
+  LayerNorm measured 6 GB/s on these channel-last shapes and erf-GELU ~3 GB/s; the one-
+  pass kernels fix both. `SAFIREMaskPost` produces thresholded areas, stride-16 samples
+  and pooled-feature inputs in one pass — no full-resolution FP32/bool intermediate ever
+  exists. The exact-erf GELU uses the Abramowitz–Stegun 7.1.26 polynomial (1.5e-7 max
+  error, an order below the parity tolerances); no tanh-approximation GELU anywhere.
+- *Memory shape*: the encoder compiles per-block (window) and stays eager (global) so the
+  per-tile eval fences survive; a compiled whole-encoder or whole-global-block replay
+  accumulates every 50 MB bias/score tile and peaked at ~2 GiB. Weights materialize once
+  into runtime layout and stay GPU-resident. Every reduction kernel pads its threadgroup
+  to a power of two (channel counts 768 break naive tree reductions) and barriers between
+  the mean read and the shared-memory overwrite.
+
+**Why FP32 ships — the quantization question is closed with measurements.** The oracle
+tolerances (relativeRMS ≤ 2e-4, maskIoU ≥ 0.999, partition agreement ≥ 0.9999) were swept
+across every FP16 scope: all-FP16 0.9938; encoder-only 0.9919; weights-only 0.9993;
+decoder-only 0.7286; transformer-only 0.9971; tail-only 0.7254. Two findings worth
+keeping: the fp32→fp16→fp32 weight round trip is *not* equivalent to native FP16 (it
+degrades every encoder tensor), and the FP16 upscaling tail is structurally wrong, not
+merely imprecise — mask logits relRMS 1.51 while the IoU-quality head on the same queries
+stays at 6.5e-4. Even the best FP16 point misses the bar by 30× the pixel budget.
+Structural FPs that passed parity (fused keys q/k GEMM) measured as timing washes and
+were rejected. FP32 is the parity-bound optimum, proven rather than assumed.
+
+**Memory accounting lesson:** MLX's `Memory.peakMemory` is the Metal allocator's
+high-water mark and *excludes* CPU-resident arrays. `loadArrays` defaults to the CPU
+stream, so the old worker carried ~430 MB of weights in CPU buffers invisible to that
+metric — comparing 723 MB (old, Metal-only) against 1472 MB (new) was apples-to-oranges.
+Judge worker memory by maximum RSS (`/usr/bin/time -l`): 924 MB before, 924 MB after.
+
+**MLX 0.31.2 traps that cost real time** (they will bite again): never `eval()` inside a
+`compile{}` closure (tracer crash); compiled replays erase eval fences, so anything
+needing fencing stays eager; `MLXFast.metalKernel`'s `grid:` is total threads, not
+threadgroup count; `threads_per_threadgroup.x` inside generated kernels returns 1 (pass
+sizes as template constants); scalar int inputs arrive as `constant int&`; Metal kernel
+binaries cache by source string; `Load::eval_gpu` does not exist, so safetensors loads
+always start on the CPU stream.
+
+**Apple Neural Engine: contract-blocked before it is performance-blocked.** ML Programs
+compute in FP16 internally (no FP32 ANE), so an ANE port lands in the already-rejected
+precision regime. The model is also ANE-unshaped: the FFT high-pass branch has no ANE
+op, the decomposed relative-position attention and our four fused kernels have no Core
+ML equivalents, and the port would reintroduce exactly the passes we removed. If the
+parity bar were ever relaxed, ANE is the upside (a ViT-B encoder at 1024² is ANE-shaped;
+plausibly 0.2–0.4 s vs our 0.78 s GPU, ~1.6–2× end-to-end), and the Core ML packaging
+infrastructure already exists for the repo's other models.
+
+**SME (M4+): no for this workload.** SME is a CPU extension and the pipeline is
+GPU-resident; offloading GEMMs would pay activation round trips and duplicate the op
+library. The ceiling from the Jena M4 microbenchmarks: ~2.0 TFLOPS FP32 single P-core,
+~2.3 with all threads (one SME unit per cluster) — comparable to what MLX FP32 GEMM
+already achieves on the *slower* M3 GPU (1.68), and well under M4's GPU. Critically, the
+reduced-precision FMOPA variants run at the same GFLOPS as FP32 (halved throughput
+offsets the widening), so SME offers no FP16 dividend even in principle; only INT8 gains
+(2×) and INT8 is further below the parity bar than FP16. M3 has no SME at all.
+
+**Remaining measured frontier:** simdgroup-MMA Metal GEMMs (≤10 %, high effort —
+documented with bandwidth arithmetic in the agent reports) and MLX SDPA for the global
+attention chunks (a competitive custom flash kernel needs MMA-class work for a ~2 %
+ceiling; three designs were built, oracle-verified, and measured 2.6× slower). The M4
+profile is marked `conservative-unmeasured-grid-inheritance`: the archived M4 evidence
+predates this graph revision and needs re-measurement on M4 hardware.
