@@ -59,7 +59,7 @@ enum DropRetry {
     /// Runs `load` until it returns non-nil or the attempts run out. Nil means
     /// every attempt failed, or the surrounding task was cancelled while
     /// waiting between attempts.
-    static func value<T>(from load: () async -> T?, delays: [TimeInterval] = delays) async -> T? {
+    static func value<T>(from load: @MainActor () async -> T?, delays: [TimeInterval] = delays) async -> T? {
         for attempt in 0...delays.count {
             if attempt > 0 {
                 do { try await Task.sleep(for: .seconds(delays[attempt - 1])) }

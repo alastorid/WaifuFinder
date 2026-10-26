@@ -153,13 +153,15 @@ func registerCrystalOrbInspectionTests() {
         checkClose(inverse.y,source.y,tolerance: 0.000001,"rotation preserves exact inverse Y")
     })
     Registry.shared.add(suite: suite, TestCase(name: "viewport tile cache is bounded by visual identity and never returns another material", knownBug: nil) {
-        let black = CIImage(color: .black).cropped(to: CGRect(x: 0,y: 0,width: 32,height: 32))
-        let white = CIImage(color: .white).cropped(to: black.extent)
+        let canvas = CGSize(width: 32, height: 32)
+        func source(_ color: CIColor) -> CIImage {
+            CIImage(color: color).cropped(to: CGRect(origin: .zero, size: canvas))
+        }
         let renderer = CrystalOrbViewportRenderer()
-        let first = try await renderer.render(image: black,canvas: black.extent.size,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "black")
-        let revisit = try await renderer.render(image: black,canvas: black.extent.size,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "black")
+        let first = try await renderer.render(image: source(.black),canvas: canvas,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "black")
+        let revisit = try await renderer.render(image: source(.black),canvas: canvas,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "black")
         check(first === revisit,"repeated native viewport reuses the cached raster")
-        let other = try await renderer.render(image: white,canvas: black.extent.size,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "white")
+        let other = try await renderer.render(image: source(.white),canvas: canvas,viewport: CGSize(width: 16,height: 16),scale: 1,pan: .zero,backing: 2,identity: "white")
         check(other !== first,"new identity cannot receive a stale material")
         let raw = CrystalOrbAnalysis.bytes(CIImage(cgImage: other),rect: CGRect(x: 0,y: 0,width: 32,height: 32))
         checkEqual(Array(raw.prefix(4)),[255,255,255,255],"the correct new pixels are present")
