@@ -774,7 +774,7 @@ public struct SAFIREProfile: Codable {
             || environment["WAIFU_SAFIRE_FP16_SCOPE"] != nil
         let provenance: String
         if overridden { provenance="benchmark-override" }
-        else if device.name == "Apple M4" { provenance="conservative-unmeasured-grid-inheritance" }
+        else if device.name == "Apple M4" { provenance="measured-m4-rows256-chunk16" }
         else if device.name == "Apple M3" { provenance="measured-m3-rows256-chunk4" }
         else { provenance="conservative-unmeasured-fallback" }
         return .init(device:device.name,provenance:provenance,queryRows:rows,promptBatch:batch,precision:precision,
@@ -795,17 +795,19 @@ public struct SAFIREProfile: Codable {
             maximumThreadgroupBytes:device.maxThreadgroupMemoryLength)
     }
     /// M3 paired sweep (2026-10-24): 256-row global-attention chunks beat
-    /// 128 rows 3/3 interleaved rounds (2.304–2.310s vs 2.331–2.341s) — half
-    /// the SDPA dispatches per global block. M4 inherits conservatively.
+    /// 128 rows 3/3 interleaved rounds. On M4, a five-sample sweep also favored
+    /// 256 rows over 128 for prompt chunks of 4 and 8 (see benchmark report).
     private static func defaultQueryRows(device:String) -> String {
         "256"
     }
     private static func defaultPromptBatch(device:String) -> String {
-        // M3 measured chunk sweep (2026-10-24, warm worker, gradient fixture,
-        // eager global blocks + compiled window blocks): chunk 4 runs 2.28s at
-        // a 1110 MB MLX peak; larger chunks only grow the upscale working set.
-        // M4 has not been measured on this graph revision and inherits the
-        // same chunk, unmeasured.
-        "4"
+        // M3 measured chunk 4 as the best memory/speed balance. On M4, current
+        // runtime v2 was remeasured 2026-10-25: chunk 4 had 1.620s median,
+        // chunk 8 1.520s, and chunk 16 1.479s. Three interleaved 8/16 rounds
+        // confirmed a 3.2% gain at chunk 16 with no measured peak-footprint
+        // increase and 99.7157% partition agreement on the reference fixture.
+        // Keep the smaller M3 default; select the measured M4 profile.
+        if device == "Apple M4" { return "16" }
+        return "4"
     }
 }

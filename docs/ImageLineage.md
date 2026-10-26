@@ -154,6 +154,19 @@ and 3.511 seconds and 1.12 CPU seconds after (about 31% less worker CPU time).
 The original separate M3 JSON baseline was 4.305 seconds. These diagnostics do
 not establish a globally fastest configuration or guarantee a busy machine’s timing.
 
+The current `safire-native-v2` profile was remeasured on the M4 Mac mini against
+the saved official FP32 gradient reference. The selected 256-row/16-prompt profile
+had a **1.479 s** median over five warm requests. Three interleaved rounds found
+it **3.2% faster** than 256/8 (1.477 s vs 1.525 s median per round), with median
+worker CPU time 0.58 s vs 0.67 s. Peak worker memory footprint was about **1.623 GB**
+for chunks 4, 8 and 16, with no measured increase at 16. Against the official FP32
+reference, M4 FP32 reproduced partitions at 99.9997%; the selected transformer-FP16
+path measured **99.7157%** partition pixel agreement and **0.999293 mask IoU**.
+Minimum individual source-region IoU was 0.9874, so some small region labels can
+change. This is one synthetic fixture, not dataset-level forensic accuracy. The
+M4-specific default and full sample data are in
+[`ImageLineage-native-benchmark.json`](ImageLineage-native-benchmark.json).
+
 No Python, Torch, ONNX or OpenCV runtime is shipped. Production uses the already
 pinned MLX Swift/core, Swift Numerics and Apple frameworks. The offline PyTorch
 oracle and its audited permissive dependencies never enter the app or package.

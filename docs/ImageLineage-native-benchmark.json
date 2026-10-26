@@ -367,6 +367,48 @@
     "partitionPixelAgreement": 0.9971,
     "parityNote": "The 0.9971 result comes from the earlier measured transformer-FP16 / tail-FP32 experiment on this fixture; it was accepted for runtime v2. Real-photo dataset accuracy is unmeasured."
   },
+  "m4CurrentRevisionProfileSelection": {
+    "runtimeRevision": "safire-native-v2",
+    "sourceCommit": "4748183",
+    "device": "Apple M4",
+    "platform": "macOS-26.4.1-arm64-arm-64bit",
+    "sourceCheckpointSHA256": "65bdf6880380162d57f77d71b3fd367c3f16aebca316f942a821da16e9225b12",
+    "convertedWeightsSHA256": "88477a26fe3f6c5e4569ecb4b7b73b6db6a92adac093dd66641ee2e464dde62f",
+    "fixture": "Tests/Fixtures/WDTagger/rgb-gradient.png",
+    "scope": "Full 1024x1024 warm SFM1 inference; each profile used a fresh worker with one warmup request excluded, followed by five timed requests. Three interleaved three-sample rounds compared 256 query rows with prompt chunks 8 and 16.",
+    "profileSweep": [
+      { "queryRows": 256, "promptBatch": 4, "medianSeconds": 1.619938708, "samples": [1.538813917, 1.624597042, 1.620073417, 1.619938708, 1.611866875], "medianWorkerCPUSeconds": 0.80 },
+      { "queryRows": 128, "promptBatch": 4, "medianSeconds": 1.647372084, "samples": [1.617492375, 1.647372084, 1.653664750, 1.657443250, 1.644333833], "medianWorkerCPUSeconds": 0.80 },
+      { "queryRows": 256, "promptBatch": 8, "medianSeconds": 1.519989750, "samples": [1.527321167, 1.450178125, 1.530365416, 1.519989750, 1.513449458], "medianWorkerCPUSeconds": 0.65 },
+      { "queryRows": 128, "promptBatch": 8, "medianSeconds": 1.564732334, "samples": [1.481878250, 1.568358417, 1.573320083, 1.564732334, 1.560048334], "medianWorkerCPUSeconds": 0.67 },
+      { "queryRows": 256, "promptBatch": 16, "medianSeconds": 1.478664625, "samples": [1.464155916, 1.478916958, 1.472902125, 1.478664625, 1.481832333], "medianWorkerCPUSeconds": 0.58 }
+    ],
+    "pairedChunk8Vs16": {
+      "rounds": [
+        { "chunk8MedianSeconds": 1.525489917, "chunk16MedianSeconds": 1.477331000, "speedupPercent": 3.16 },
+        { "chunk8MedianSeconds": 1.520005166, "chunk16MedianSeconds": 1.476764417, "speedupPercent": 2.84 },
+        { "chunk8MedianSeconds": 1.528473542, "chunk16MedianSeconds": 1.476459667, "speedupPercent": 3.40 }
+      ],
+      "medianSpeedupPercent": 3.16,
+      "medianWorkerCPUSeconds": { "chunk8": 0.67, "chunk16": 0.58 },
+      "sameProbabilitiesForChunk8And16": true,
+      "partitionAgreementChunk8To16": 0.999802590
+    },
+    "peakMemory": {
+      "measurement": "/usr/bin/time -l, one complete warm worker request, task maximum resident size and peak memory footprint",
+      "chunk4": { "maximumResidentBytes": 837271552, "peakMemoryFootprintBytes": 1623228560 },
+      "chunk8": { "maximumResidentBytes": 838680576, "peakMemoryFootprintBytes": 1622918560 },
+      "chunk16": { "maximumResidentBytes": 839467008, "peakMemoryFootprintBytes": 1623147792 },
+      "note": "The measured peak footprint stayed about 1.623 GB across these three chunk sizes. This is a worker measurement on a 16 GB Mac, not a whole-system memory guarantee."
+    },
+    "parityAgainstSavedOfficialFP32Reference": {
+      "reference": "safire-gradient-reference/automatic.safetensors; upstream SAFIRE revision ec2af6af8c789fb6359493a3e352f89c6fd8107f, Torch 2.8.0 CPU",
+      "m4FP32": { "maximumAbsoluteProbabilityError": 0.000004292, "probabilityRelativeRMS": 0.000001715, "maskIoU": 1.0, "partitionPixelAgreement": 0.999997139, "minimumSourceIoU": 0.999987218 },
+      "m4TransformerFP16Chunk16": { "maximumAbsoluteProbabilityError": 0.001006126, "probabilityRelativeRMS": 0.000673714, "maskIoU": 0.999292933, "partitionPixelAgreement": 0.997157097, "minimumSourceIoU": 0.987441281 },
+      "note": "The selected M4 output reaches the documented 99.71% global partition-agreement threshold and mask IoU 0.999. Its minimum individual source-region IoU is lower, so labels for some small regions can change. This single synthetic gradient fixture does not establish dataset-level forensic accuracy."
+    },
+    "selectedProfile": { "device": "Apple M4", "queryRows": 256, "promptBatch": 16, "provenance": "measured-m4-rows256-chunk16" }
+  },
   "agentRounds": {
     "agent-a": "decoder FP16 rejected at every scope (best 0.9971 vs 0.9999 gate; tail FP16 catastrophic 0.7254); fused keys q/k GEMM: wash \u2014 rejected. Report: .native-runtime/agent-a-report.md",
     "agent-b": "fused rel-pos bias outer-sum kernel shipped (bitwise-exact, encode.total 0.790\u21920.776s, 5/6 rounds); per-chunk compile and flash kernel rejected with measurements. Report: .native-runtime/agent-b-report.md",

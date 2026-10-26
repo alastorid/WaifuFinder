@@ -266,18 +266,19 @@ Model-required 512-pixel face resizing does not alter true 1× source preparatio
 
 ## Environment notes for agents
 
-- Build and test with `./build.sh` and `./run-tests.sh` from the repository root; there is
-  no Xcode project and no dependency manager. SwiftPM cannot build this package on the
-  target machine (`swift package dump-package` fails to link `libPackageDescription`), so
-  `Package.swift` exists for IDE navigation only and there is no `swift build` /
-  `swift test`.
-- `run-tests.sh` compiles the production sources **except**
+- Build the app with `./build.sh`; it is compiled directly with `swiftc`, and the root
+  `Package.swift` is for IDE navigation because SwiftPM cannot load it with the target
+  machine's Command Line Tools. Isolated native workers under `Runtime/` use SwiftPM and
+  pinned dependencies; prepare that clone-local toolchain workaround with
+  `tools/native-toolchain/prepare.sh` (or `tools/setup-development.sh`).
+- Test the app with `./run-tests.sh`. It compiles the production sources **except**
   `Sources/Waifu/App/WaifuFinderApp.swift` (it owns `@main`) together with every file under
   `Tests/` into one throwaway executable. The suite is a hand-rolled harness, not XCTest or
   Swift Testing; see `Tests/README.md`.
 - Sample video: `sample-video.mp4` — 1920×1080, 29.97 fps, 84,067
   frames, 46.75 min, 2.86 GB. **Never read the whole file.** Decoding
-  it is the app's job, not yours.
+  it is the app's job, not yours. This is a scale reference; recorded validation does not
+  include a complete analysis of the full 46.75-minute clip.
 
 Uncover source navigation: `sourceTimeline` stores actual asset presentation times,
 with media cursor timestamps mapped through container edit lists. `seekSource(index:)`

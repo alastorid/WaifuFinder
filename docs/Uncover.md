@@ -1,9 +1,10 @@
 # Uncover Waifu
 
 An isolated editing mode for a focused video moment: **select → degrade → reconstruct →
-compare → export**. This document incorporates the supplied multi-frame design. The
-implementation and verification status live in `checkpoint.md`; requirements below are
-not claims that every configuration has passed real inference.
+compare → export**. This document records the design and current limits. Historical model
+validation is in [`native-uncover-validation.json`](native-uncover-validation.json). The
+current actual-low-resolution SeedVR2 plus learned Core ML x2 path still needs real
+inference and quality validation; the older recorded SeedVR2 runs predate that path.
 
 ## Processing contract
 

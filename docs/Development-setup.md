@@ -34,6 +34,15 @@ are separate user data; a Git clone does not restore them.
 The existing [release workflow](../.github/workflows/release.yml) also builds from
 a checkout using only a cache of downloadable Swift package sources.
 
+## Swift 6 build notes
+
+The app and native workers treat compiler warnings as errors. Keep whitespace around
+operators when the right side begins with a dot (`value == .case`, `value = .init`).
+Use Metal compute pipelines for custom image kernels rather than GLSL `CIColorKernel`
+source; copy through `withUnsafeMutableBytes` instead of deprecated `Data(bytes:count:)`.
+Worker-specific MLX graph and Metal-kernel rules are recorded in
+[`Runtime/README.md`](../Runtime/README.md).
+
 ## Restore model bundles for offline development
 
 The standard-library downloader requires Python 3.9 or later and curl. It restores

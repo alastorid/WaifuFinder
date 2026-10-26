@@ -66,9 +66,10 @@ within each cluster, and lets you browse, compare and export the survivors. It i
 for the case where the interesting material is scattered through an hour of footage and
 watching the whole thing to find it is not an option.
 
-The reference case is a 46.75-minute 1080p clip — 84,067 frames at 29.97 fps — every
-frame of which is processed in Full mode. While processing, the grid is replaced by
-a progress screen; results appear after grouping finishes.
+The reference case is a 46.75-minute 1080p clip — 84,067 frames at 29.97 fps — which
+Full mode processes frame by frame. It defines the intended workload; a full analysis
+of this entire clip is not part of the recorded end-to-end validation. While processing,
+the grid is replaced by a progress screen; results appear after grouping finishes.
 
 ## Remote inference
 
@@ -253,10 +254,12 @@ alias after remounting; the release workflow runs this check before packaging.
 ./run-tests.sh --strict         # also exit non-zero when a known bug still fails
 ```
 
-SwiftPM does not work on the target machine (`swift package dump-package` fails to link
-`libPackageDescription`), and neither XCTest nor Swift Testing can run, so the suite is a
-hand-rolled harness. `run-tests.sh` compiles the production sources — everything except
-the `@main` scaffold — together with everything under `Tests/` into one throwaway
+The app is built directly with `swiftc`; the root `Package.swift` is for IDE navigation
+because SwiftPM cannot load it with the target machine's Command Line Tools. Native model
+workers under `Runtime/` use SwiftPM with the clone-local workaround prepared by
+`tools/native-toolchain/prepare.sh`. App regression cases use a hand-rolled harness rather
+than XCTest or Swift Testing. `run-tests.sh` compiles the production sources — everything
+except the `@main` scaffold — together with everything under `Tests/` into one throwaway
 executable. Because the production code is compiled in, **a failing case means the real
 code misbehaved**; there is no mock to drift out of sync.
 
@@ -552,8 +555,9 @@ memory pressure but cannot guarantee zero system swap when other apps are busy.
 Reconstruction may generate details that differ from the original. The previous Python
 adapter is retained as a reference/legacy fallback only when native inference is not
 configured; a failed native job never silently falls back to it.
-See [`docs/Uncover.md`](docs/Uncover.md) for the design and [`checkpoint.md`](checkpoint.md)
-for the exact configurations and verification results.
+See [`docs/Uncover.md`](docs/Uncover.md) for the design and
+[`docs/native-uncover-validation.json`](docs/native-uncover-validation.json) for the
+recorded configurations, verification results and limits.
 
 ### SeedVR2 7B. Tested under 4 GB.
 
@@ -713,9 +717,8 @@ waifu/
 └── Tests/                   # hand-rolled harness + one file per suite
 ```
 
-[`checkpoint.md`](checkpoint.md) carries the working notes: the reasons behind the
-non-obvious decisions, the platform traps that cost time here, and what is and is not
-verified.
+The engine/UI contract is in [`docs/API.md`](docs/API.md). Current subsystem details and
+validation live in the model and feature documents under `docs/`.
 
 ## Requirements
 

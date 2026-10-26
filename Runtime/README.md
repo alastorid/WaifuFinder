@@ -6,6 +6,19 @@ temporal results at that size. The app then applies a separate framewise Core ML
 restore ROI dimensions. Production inference and video IO do not invoke Python, PyAV or
 ffmpeg; AVFoundation continues to own source extraction and export in the app.
 
+## MLX 0.31.x implementation notes
+
+- `MLX.compile` closures trace lazy operations. Do not call `eval()` inside one, and do not
+  rely on eager evaluation fences surviving compiled replays. Keep explicit evaluations
+  between long-running stages when they bound intermediate lifetimes.
+- The array form of `compile` supports multiple inputs and outputs:
+  `compile { arrays in ... } -> ([MLXArray]) -> [MLXArray]`.
+- `MLXFast.metalKernel` takes the Metal function body; MLX generates the signature and
+  names output buffers `out`. Template arguments are limited to Bool, Int and DType.
+  Pass runtime sizes explicitly or bake other constants into the source.
+- `threads_per_threadgroup` in generated kernels is not a reliable way to recover a
+  requested size. Pass tile dimensions as constants, and treat `grid` as total threads.
+
 Build/configure from the repository root:
 
 ```sh
@@ -59,7 +72,7 @@ and keeps its previous successful result.
 
 Validation uses the native planning/tile self-test, the existing Swift test harness,
 explicit real model integration tests, and side-by-side comparisons with preserved Python
-proofs. See `docs/native-uncover-validation.json` and `checkpoint.md` for results and limits.
+proofs. See `docs/Uncover.md` and `docs/native-uncover-validation.json` for results and limits.
 
 ## FlashVSR 1.1
 
