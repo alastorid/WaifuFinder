@@ -181,14 +181,22 @@ actor TagSummaryComputer {
 
     private func summary(_ totals: Totals, vocabulary: TagVocabulary, frameCount: Int) throws -> TagSummary {
         try Task.checkCancellation()
-        let tags = vocabulary.generalIndices.indices.filter { totals.present[$0] > 0 }.map { column in
-            TagSummary.Tag(index: vocabulary.generalIndices[column], matchingFrames: totals.present[column],
-                           scoredFrames: totals.scored[column],
-                           mean: totals.scored[column] > 0
-                            ? (Double(totals.sums[column]) / 255
-                               + Double(totals.cutoffEqual[column]) * (Double(TagProbabilityCodec.storageThreshold) - 1.0 / 255)
-                               + Double(totals.cutoffAbove[column]) * (Double(TagProbabilityCodec.storageThreshold.nextUp) - 89.0 / 255))
-                                / Double(totals.scored[column]) : nil)
+        var tags: [TagSummary.Tag] = []
+        let equalCorrection: Double = Double(TagProbabilityCodec.storageThreshold) - 1.0 / 255
+        let aboveCorrection: Double = Double(TagProbabilityCodec.storageThreshold.nextUp) - 89.0 / 255
+        for column in vocabulary.generalIndices.indices where totals.present[column] > 0 {
+            let scored: Int = totals.scored[column]
+            let mean: Double?
+            if scored > 0 {
+                let quantizedSum: Double = Double(totals.sums[column]) / 255
+                let equalAdjustment: Double = Double(totals.cutoffEqual[column]) * equalCorrection
+                let aboveAdjustment: Double = Double(totals.cutoffAbove[column]) * aboveCorrection
+                mean = (quantizedSum + equalAdjustment + aboveAdjustment) / Double(scored)
+            } else {
+                mean = nil
+            }
+            tags.append(TagSummary.Tag(index: vocabulary.generalIndices[column],
+                matchingFrames: totals.present[column], scoredFrames: scored, mean: mean))
         }
         return TagSummary(frameCount: frameCount, tags: tags, gpuChunks: totals.gpuChunks)
     }
