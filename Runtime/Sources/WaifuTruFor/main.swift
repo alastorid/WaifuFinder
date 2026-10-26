@@ -89,7 +89,7 @@ do {
     if let input=option("--dump-input"),let output=option("--output") {
         let decoded=try image(input);try save(arrays:["input":try decoded.0.materialize()],url:URL(fileURLWithPath:output))
     }
-    else if CommandLine.arguments.contains("--validate") { print("TruFor native weights verified · \(model.device)") }
+    else if CommandLine.arguments.contains("--validate") { print("TruFor native weights verified · \(model.precision.rawValue) · \(model.device)") }
     else if let input=option("--activations"),let output=option("--output") {
         let inputURL=URL(fileURLWithPath:input)
         let fileSize=try inputURL.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? Int.max

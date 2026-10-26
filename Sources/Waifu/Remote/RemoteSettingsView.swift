@@ -20,7 +20,7 @@ struct RemoteSettingsView: View {
                 serverSection
                 Divider()
                 Text("Inference servers").font(.headline)
-                Text("Tagging balances queued batches across connected servers with matching tag labels. Hold Option when starting to include this Mac. The primary server also provides Uncover.")
+                Text("Tagging balances queued batches across connected servers with matching tag labels. Hold Option when starting to include this Mac. SAFIRE and TruFor photo analysis use connected compatible servers. The primary server also provides Uncover.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(pool.entries.filter { !$0.client.manualAddress.isEmpty && $0.id != addingID }) { entry in
                     RemoteServerCard(client: entry.client,
@@ -58,7 +58,7 @@ struct RemoteSettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Serve inference from this Mac").font(.headline)
-                    Text("Run tagging and Uncover on this Mac for another WaifuFinder to borrow.")
+                    Text("Share installed tagging, Uncover, SAFIRE and TruFor models with another WaifuFinder.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -242,6 +242,12 @@ private struct RemoteClientSettingsView: View {
                     .imageScale(.small)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.name).font(.callout.weight(.medium))
+                    if server.offersSafire || server.offersTruFor {
+                        Text([server.offersSafire ? "SAFIRE" : nil,
+                              server.offersTruFor && WaifuDistribution.isNonCommercialOnly ? "TruFor" : nil]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                     Text("\(server.address) · \(server.appVersion)").font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                 }

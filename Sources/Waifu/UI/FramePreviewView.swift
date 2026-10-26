@@ -29,15 +29,21 @@ struct FramePreviewView: View {
     let frame: AnalyzedFrame
     @ObservedObject var session: WaifuSession
 
+    @ObservedObject private var inferencePool=RemoteInferencePool.shared
     @StateObject private var trufor=TruForPreviewModel()
     @State private var truforEnabled=false
     @State private var truforDisplay=TruForDisplay.combined
     @StateObject private var safire=SafirePreviewModel()
     @State private var safireEnabled=false
     @State private var showSafireMask=false
+    @State private var evidenceInput: PreviewEvidenceInput?
+    @State private var evidenceRetry = UUID()
+    @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @State private var image: NSImage?
     @State private var animation: PhotosAnimatedImage?
     /// Keep the previous original visible until the next source frame is ready.
+    @State private var displayedSourceURL: URL?
+    @State private var displayedIsOriginal = false
     @State private var displayedFrameID: FrameID?
     @State private var note: String?
     @State private var reading = false
@@ -63,6 +69,7 @@ struct FramePreviewView: View {
     /// the workspace's key so one expand/collapse icon rules every right panel,
     /// including the Crystal Orb's inspector.
     @AppStorage("rightPanelExpanded") private var inspectorExpanded = true
+    @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
 
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
@@ -72,6 +79,7 @@ struct FramePreviewView: View {
             ?? session.cachedThumbnailData(forKey: frame.thumbnailKey).flatMap(NSImage.init(data:))
         _image = State(initialValue: initial)
         _displayedFrameID = State(initialValue: initial == nil ? nil : frame.id)
+        _displayedSourceURL = State(initialValue: initial == nil ? nil : session.video?.url)
     }
 
     var body: some View {
@@ -90,35 +98,54 @@ struct FramePreviewView: View {
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .layoutPriority(1)
-                        .googleLensContextMenu {
-                            let pixels = displayedFrameID == frame.id
-                                ? image?.cgImage(forProposedRect: nil, context: nil, hints: nil) : nil
-                            Task { await GoogleLensSearch.search(frame: frame, preferredImage: pixels, in: session) }
+                        .contextMenu {
+                            if let photoInfoURL {
+                                Button("Open in Photos.app") { PhotosAppIntegration.reveal(photoInfoURL) }
+                                Divider()
+                            }
+                            Button("Fit") { zoom = 1; zoomCenter = CGPoint(x: 0.5, y: 0.5) }
+                            if googleLensEnabled {
+                                Button("Search with Google Lens") {
+                                    let pixels = displayedFrameID == frame.id
+                                        ? image?.cgImage(forProposedRect: nil, context: nil, hints: nil) : nil
+                                    Task { await GoogleLensSearch.search(frame: frame, preferredImage: pixels, in: session) }
+                                }
+                            }
                         }
 
                     if inspectorExpanded, photoInfoURL != nil {
                         Divider()
                             .frame(maxHeight: .infinity)
-                        PhotoMetadataInspectorView(metadata: photoMetadata,
+                        VStack(spacing: 0) {
+                            if animation == nil {
+                                evidenceControls
+                                Divider()
+                            }
+                            PhotoMetadataInspectorView(metadata: photoMetadata,
                                                    isLoading: metadataLoading,
                                                    errorMessage: metadataError,
                                                    tags: metadataFrameID == frame.id ? orderedTopTags : metadataTags,
                                                    rating: metadataFrameID == frame.id ? frame.tagRating?.rawValue.capitalized : metadataRating)
-                            .frame(maxHeight: .infinity)
-                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+                        }
+                        .frame(width: truforEnabled ? 740 : safireEnabled ? 490 : 350, alignment: .topLeading)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(24)
         }
-        .task(id: frame.id) { await load(frame) }
-        .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
-        .task(id:"\(metadataTaskID)|\(session.thumbnailGeneration)|\(safireEnabled)|\(animation == nil)") {
-            await safire.load(url:photoInfoURL,enabled:safireEnabled && animation==nil)
+        .task(id: "\(metadataTaskID)|\(session.thumbnailGeneration)|\(downloadFromICloud)") {
+            await load(frame)
+            await preloadNeighbours(of: frame)
         }
-        .task(id:"\(metadataTaskID)|\(session.thumbnailGeneration)|\(truforEnabled)|\(animation == nil)") {
-            await trufor.load(url:photoInfoURL,enabled:truforEnabled && animation==nil,mode:truforDisplay)
+        .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
+        .task(id:"\(metadataTaskID)|\(evidenceInput?.id.uuidString ?? "")|\(evidenceRetry)|\(safireEnabled)|\(animation == nil)") {
+            await safire.load(url:photoInfoURL,enabled:safireEnabled && animation==nil,input:evidenceInput)
+        }
+        .task(id:"\(metadataTaskID)|\(evidenceInput?.id.uuidString ?? "")|\(evidenceRetry)|\(truforEnabled)|\(animation == nil)") {
+            await trufor.load(url:photoInfoURL,enabled:truforEnabled && animation==nil,mode:truforDisplay,input:evidenceInput)
         }
         .task(id:truforDisplay) { await trufor.display(truforDisplay) }
         .onChange(of:truforEnabled) { _, enabled in if enabled { safireEnabled=false } }
@@ -272,25 +299,6 @@ struct FramePreviewView: View {
                 traitLine
             }
             Spacer(minLength: 6)
-            if photoInfoURL != nil,animation==nil {
-                if WaifuDistribution.isNonCommercialOnly {
-                    Toggle("TruFor",isOn:$truforEnabled).toggleStyle(.button)
-                        .help("Show TruFor forensic evidence for this photo")
-                    if truforEnabled {
-                        if trufor.loading { ProgressView().controlSize(.small) }
-                        Picker("TruFor display",selection:$truforDisplay) {
-                            ForEach(TruForDisplay.allCases) { Text($0.label).tag($0) }
-                        }.labelsHidden().frame(width:155)
-                    }
-                }
-                Toggle("SAFIRE",isOn:$safireEnabled).toggleStyle(.button)
-                    .help("Show SAFIRE’s forged-area overlay for this photo")
-                if safireEnabled {
-                    if safire.loading { ProgressView().controlSize(.small) }
-                    Picker("SAFIRE display",selection:$showSafireMask) { Text("Overlay").tag(false);Text("Mask").tag(true) }
-                        .pickerStyle(.segmented).frame(width:135)
-                }
-            }
             Button { session.openUncover(at: frame.timeSeconds) } label: {
                 // Marks the *workspace*, not a specific algorithm: it says the
                 // server can do something here. `Reconstruct` marks per
@@ -308,12 +316,67 @@ struct FramePreviewView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .frame(width: 46)
             Button { zoom = min(16, zoom * 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
-            Button("Fit") { zoom = 1; zoomCenter = CGPoint(x: 0.5, y: 0.5) }
             Button("Close") { session.previewFrame = nil }
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.primary)
         .padding(.vertical, 8)
+    }
+
+    private var evidenceControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Photo analysis").font(.headline)
+            if WaifuDistribution.isNonCommercialOnly {
+                HStack(spacing: 8) {
+                    Toggle(isOn: $truforEnabled) {
+                        Text("TruFor").remoteMark(!inferencePool.truforClients.isEmpty)
+                    }
+                    .toggleStyle(.checkbox).fixedSize()
+                    if truforEnabled {
+                        TruForDisplayButtons(selection: $truforDisplay)
+                        evidenceStatus(trufor.status, model: "TruFor", loading: trufor.loading)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            HStack(spacing: 8) {
+                Toggle(isOn: $safireEnabled) {
+                    Text("SAFIRE").remoteMark(!inferencePool.safireClients.isEmpty)
+                }
+                .toggleStyle(.checkbox).fixedSize()
+                if safireEnabled {
+                    Picker("SAFIRE display", selection: $showSafireMask) {
+                        Text("Overlay").tag(false)
+                        Text("Mask").tag(true)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().frame(width: 120)
+                    evidenceStatus(safire.status, model: "SAFIRE", loading: safire.loading)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func evidenceStatus(_ status: String, model: String, loading: Bool) -> some View {
+        let label = status.replacingOccurrences(of: model + " · ", with: "")
+            .replacingOccurrences(of: model + " ", with: "")
+            .replacingOccurrences(of: "detection score ", with: "")
+            .components(separatedBy: " · ").first ?? ""
+        let preview = evidenceInput.map { !$0.isOriginal } == true
+        let detail = status + (preview ? " · Using the available preview; results may differ from the original." : "")
+        return HStack(spacing: 5) {
+            if loading || (evidenceInput == nil && reading) { ProgressView().controlSize(.mini) }
+            if !label.isEmpty {
+                Text("- " + label + (preview ? " · preview" : ""))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            if !loading, status.contains("unavailable") {
+                Button("Retry") { evidenceRetry = UUID() }.buttonStyle(.borderless).fixedSize()
+            }
+        }
+        .help(detail)
     }
 
     private var traitLine: some View {
@@ -370,12 +433,6 @@ struct FramePreviewView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            if safireEnabled,photoInfoURL != nil,!safire.status.isEmpty {
-                Text(safire.status).font(.caption).padding(8).background(.regularMaterial,in:Capsule()).padding(10).allowsHitTesting(false)
-            }
-            if truforEnabled,photoInfoURL != nil,!trufor.status.isEmpty {
-                Text(trufor.status).font(.caption).padding(8).background(.regularMaterial,in:Capsule()).padding(10).allowsHitTesting(false)
-            }
             if showReadingStatus {
                 Text("reading…")
                     .font(.caption)
@@ -406,6 +463,8 @@ struct FramePreviewView: View {
         let request = UUID()
         loadID = request
         note = nil
+        let keepingCurrent = displayedFrameID == target.id && displayedSourceURL == source
+        evidenceInput = nil
         reading = true
         showReadingStatus = false
         animation = nil
@@ -417,32 +476,52 @@ struct FramePreviewView: View {
             }
         }
 
-        // Paint the target thumbnail before awaiting its original, including
-        // navigation to a different photo while the overlay stays mounted.
+        // A load can restart for the same photo when thumbnail caches refresh.
+        // Only replace its displayed pixels with a sharper rendition. A new
+        // target must still get its own thumbnail, regardless of resolution.
         let identity = session.thumbnailGeneration.uuidString + ":" + target.thumbnailKey
+        let current = keepingCurrent ? image.flatMap(PhotosMedia.renditionPixels) : nil
         if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity) {
-            image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
-            displayedFrameID = target.id
-        } else if let data = await session.thumbnailData(for: target), let thumbnail = NSImage(data: data) {
+            if PreviewPhotoSource.isSharper(pixels, than: current) {
+                image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
+                displayedFrameID = target.id
+                displayedSourceURL = source
+                displayedIsOriginal = false
+            }
+        } else if let data = await session.thumbnailData(for: target),
+                  let thumbnail = NSImage(data: data), let pixels = PhotosMedia.renditionPixels(thumbnail) {
             guard !Task.isCancelled, loadID == request, session.previewFrame?.id == target.id else { return }
-            image = thumbnail
-            displayedFrameID = target.id
+            if PreviewPhotoSource.isSharper(pixels, than: current) {
+                image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
+                displayedFrameID = target.id
+                displayedSourceURL = source
+                displayedIsOriginal = false
+            }
         }
         do {
             if let photoURL = PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) {
-                let preview = try await PhotosMedia.shared.previewContent(photoURL)
+                let cached = displayedFrameID == target.id && displayedSourceURL == source
+                    ? image.flatMap(PhotosMedia.renditionPixels) : nil
+                let preview = try await PreviewPhotoSource.load(
+                    original: { try await PhotosMedia.shared.previewContent(photoURL) },
+                    rendition: { try await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in }) },
+                    cached: cached, cachedIsOriginal: displayedIsOriginal && displayedFrameID == target.id && displayedSourceURL == source)
                 guard !Task.isCancelled, loadID == request,
                       session.previewFrame?.id == target.id, session.video?.url == source else { return }
-                switch preview {
+                switch preview.content {
                 case .still(let pixels):
                     let native = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
                     native.cacheMode = .never
                     image = native
+                    displayedIsOriginal = preview.isOriginal
                     animation = nil
+                    evidenceInput = PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: preview.isOriginal)
+                    if !preview.isOriginal { note = "Preview image" }
                 case .animated(let sequence):
                     animation = sequence
                 }
                 displayedFrameID = target.id
+                displayedSourceURL = source
                 if let step = arrows.loaded() { session.focusNeighbour(step) }
                 return
             }
@@ -452,12 +531,28 @@ struct FramePreviewView: View {
             let native = NSImage(cgImage: original, size: NSSize(width: original.width, height: original.height))
             native.cacheMode = .never
             image = native
+            displayedIsOriginal = true
             displayedFrameID = target.id
+            displayedSourceURL = source
             if let step = arrows.loaded() { session.focusNeighbour(step) }
         } catch {
             guard !Task.isCancelled, loadID == request,
                   session.previewFrame?.id == target.id, session.video?.url == source else { return }
             note = "Original image unavailable."
+        }
+    }
+
+    private func preloadNeighbours(of target: AnalyzedFrame) async {
+        guard !Task.isCancelled, downloadFromICloud, session.previewFrame?.id == target.id,
+              let source = session.video?.url, PhotosMedia.isPhotos(source) else { return }
+        let neighbours = session.previewPreloadFrames(after: target.id)
+        for neighbour in neighbours {
+            guard !Task.isCancelled, downloadFromICloud, session.previewFrame?.id == target.id,
+                  session.video?.url == source else { return }
+            guard let url = PhotosMedia.shared.photoItemURL(for: source, seconds: neighbour.timeSeconds) else { continue }
+            do { try await PhotosMedia.shared.preloadPreview(url) }
+            catch is CancellationError { return }
+            catch { /* Unavailable neighbours do not stop the idle preload window. */ }
         }
     }
 

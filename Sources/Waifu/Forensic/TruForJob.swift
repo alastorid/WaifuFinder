@@ -27,7 +27,7 @@ private actor TruForWorkQueue {
     private var starting=false
     var remaining:Int { max(0,total-scored) }
     var localAvailable:Bool { TruForConfiguration.load() != nil }
-    var remoteClients:[RemoteClient] { RemoteInferencePool.shared.entries.map(\.client).filter(\.offersTruFor) }
+    var remoteClients:[RemoteClient] { RemoteInferencePool.shared.truforClients }
     var remotely:Bool { !remoteClients.isEmpty }
     var available:Bool { localAvailable || remotely }
     func refresh(session:WaifuSession)async {

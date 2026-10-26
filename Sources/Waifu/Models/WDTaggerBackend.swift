@@ -58,6 +58,7 @@ actor WDTaggerBackend: TaggerBackend {
         return image
     }
     private let worker: WDTaggerWorker
+    private let inference: WDTaggerInference
     private let vocabulary: TagVocabulary
     private let generalThreshold: Float
     private let context: CIContext
@@ -83,55 +84,56 @@ actor WDTaggerBackend: TaggerBackend {
         context = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: true])
         let native = try WDTaggerWorker(weights: config.modelURL, executable: executable)
         worker = native
+        inference = WDTaggerInference(worker: native)
     }
 
     func tag(batch: [CGImage]) async throws -> [TagResult] {
         if batch.isEmpty { return [] }
         guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
         return try await withTaskCancellationHandler {
-            try autoreleasepool {
-                try prepare(batch: batch)
-                let rows = try worker.predictQuantized(count: batch.count)
-                try Task.checkCancellation()
-                return try rows.map { try $0.result(vocabulary: vocabulary, threshold: generalThreshold) }
+            // Staging belongs to this request. While the serial inference actor
+            // waits for its worker, this actor can render the next batch without
+            // overwriting the worker's live shared input mapping.
+            let input = try preparedInput(batch: batch)
+            let rows = try await inference.quantized(input: input, count: batch.count)
+            try Task.checkCancellation()
+            return try autoreleasepool {
+                try rows.map { try $0.result(vocabulary: vocabulary, threshold: generalThreshold) }
             }
         } onCancel: { worker.cancel() }
     }
 
-    /// The raw `Float32[10_861]` output rows, before any threshold is applied.
-    ///
-    /// Numerical validation uses this path. Production `tag(batch:)` quantizes
-    /// on CPU inside the worker before IPC; both paths share preprocessing and tail padding.
+    /// Numerical validation shares the same staging, worker and tail padding.
     func probabilityRows(batch: [CGImage]) async throws -> [[Float]] {
         if batch.isEmpty { return [] }
         guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
         return try await withTaskCancellationHandler {
-          try autoreleasepool {
-            try Task.checkCancellation()
-            try prepare(batch: batch)
-            let rows = try worker.predict(count: batch.count)
+            let input = try preparedInput(batch: batch)
+            let rows = try await inference.probabilities(input: input, count: batch.count)
             try Task.checkCancellation()
             return rows
-          }
         } onCancel: { worker.cancel() }
     }
 
-    private func prepare(batch: [CGImage]) throws {
+    private func preparedInput(batch: [CGImage]) throws -> Data {
         try Task.checkCancellation()
-        for (index, image) in batch.enumerated() {
-            try autoreleasepool {
-                try Self.renderRGBA(image, context: context, to: worker.pointer.advanced(by: index * Self.imageSize * Self.imageSize * 4))
+        var input = Data(count: WDTaggerWorker.inputBytes)
+        try input.withUnsafeMutableBytes { storage in
+            let pointer = storage.baseAddress!
+            let stride = Self.imageSize * Self.imageSize * 4
+            for (index, image) in batch.enumerated() {
+                try Task.checkCancellation()
+                try autoreleasepool {
+                    try Self.renderRGBA(image, context: context, to: pointer.advanced(by: index * stride))
+                }
             }
-        }
-        // Tail padding duplicates the last real frame. Model output padding is
-        // dropped below; it can never become a frame or alter the input order.
-        let stride = Self.imageSize * Self.imageSize * 4
-        let pointer = worker.pointer.assumingMemoryBound(to: UInt8.self)
-        if batch.count < Self.batchSize {
+            // Duplicate only the last real row; never invent an output frame.
             for index in batch.count..<Self.batchSize {
-                pointer.advanced(by: index * stride).update(from: pointer.advanced(by: (batch.count - 1) * stride), count: stride)
+                pointer.advanced(by: index * stride).copyMemory(
+                    from: pointer.advanced(by: (batch.count - 1) * stride), byteCount: stride)
             }
         }
+        return input
     }
 
     /// Core ML may pad each row of its output buffer. Physical strides belong to
@@ -218,5 +220,25 @@ actor WDTaggerBackend: TaggerBackend {
             pointer[base + plane + pixel] = Float(rgba[pixel * 4 + 1])
             pointer[base + 2 * plane + pixel] = Float(rgba[pixel * 4 + 2])
         }
+    }
+}
+
+/// Exactly one inference owns the mapped input at a time. The separate actor
+/// allows the backend to prepare another request during blocking worker IPC.
+private actor WDTaggerInference {
+    let worker: WDTaggerWorker
+    init(worker: WDTaggerWorker) { self.worker = worker }
+    private func upload(_ input: Data) throws {
+        try Task.checkCancellation()
+        guard input.count == WDTaggerWorker.inputBytes else { throw TaggerError.invalidBatch }
+        input.withUnsafeBytes { worker.pointer.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+    }
+    func quantized(input: Data, count: Int) throws -> [QuantizedTagRow] {
+        try upload(input)
+        return try worker.predictQuantized(count: count)
+    }
+    func probabilities(input: Data, count: Int) throws -> [[Float]] {
+        try upload(input)
+        return try worker.predict(count: count)
     }
 }

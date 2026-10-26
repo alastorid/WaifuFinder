@@ -57,3 +57,17 @@ backend. The shipped Core ML model remains fixed at batch 8 and the app remains
 on Metal. Do not rerun the same benchmark without a new hypothesis, a relevant
 implementation change, or different hardware/checkpoint; preserve the existing
 measurements and add new evidence to these reports.
+
+## Human-facing selection controls
+
+Do not use dropdown list boxes, popup pickers, or dropdown menus to choose an
+option in app settings, inspectors, or analysis controls. Show the available
+choices directly with preset-style segmented buttons, wrapping button rows,
+radio buttons, or another always-visible selection control. All TruFor display
+modes must remain visible together; never hide them in a dropdown. Context menus
+for actions (such as Open in Photos.app) remain appropriate.
+
+Photo analysis rows put TruFor before SAFIRE. Each row keeps its enable toggle,
+mode segments, progress and score/status inline. Do not put additional model
+status labels or mode controls on separate lines; detailed explanations belong
+in the row's tooltip.

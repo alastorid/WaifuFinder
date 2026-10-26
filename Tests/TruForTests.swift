@@ -3,6 +3,15 @@ import Metal
 
 func registerTruForTests() {
     let suite="TruFor regression"
+    Registry.shared.add(suite:suite,TestCase(name:"production pins original FP32 and removes Core ML companion overrides",knownBug:nil) {
+        let environment=TruForConfiguration.workerEnvironment([
+            "WAIFU_TRUFOR_PRECISION":"fp16", "WAIFU_TRUFOR_COREML_FP16_MODEL":"/companion.mlmodelc", "PATH":"preserved"])
+        checkEqual(environment["WAIFU_TRUFOR_PRECISION"],"fp32","production never inherits FP16")
+        checkNil(environment["WAIFU_TRUFOR_COREML_FP16_MODEL"],"companion cannot change inference")
+        checkEqual(environment["PATH"],"preserved","unrelated worker environment remains intact")
+        checkEqual(TruForConfiguration.execution,"trufor-fp32-v2","FP32 capability and score cache revision are fixed")
+        checkEqual(TruForConfiguration(directory:URL(fileURLWithPath:"/unused")).fingerprint,TruForConfiguration.weightsSHA,"wire fingerprint names the weights, not the execution namespace")
+    })
     Registry.shared.add(suite:suite,TestCase(name:"outline pixels match clamped morphology for portrait and landscape maps",knownBug:nil) {
         guard MTLCreateSystemDefaultDevice() != nil else { throw SkipTest(reason:"Metal unavailable") }
         for (width,height) in [(65,32),(32,65)] {

@@ -1432,7 +1432,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 await ModelLibrary.shared.acquireTagger()
                 acquired = true
                 lanes.append(.init(backend: try WDTaggerBackend(directory: config.directory,
-                    generalThreshold: threshold), capacity: 1))
+                    generalThreshold: threshold), capacity: 2))
             }
             guard !lanes.isEmpty else { throw ModelInstaller.fail("No tagging server or local model is available.") }
             let tagger = BalancedTaggerBackend(lanes: lanes)
@@ -1471,14 +1471,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 await self.acceptTaggedFrames(updates, token: token, elapsed: Date().timeIntervalSince(started),
                                               cacheKeys: cacheKeys)
             }
-            if !clients.isEmpty {
-                try await TaggingBatchPipeline.runPipelined(maximumInFlight: tagger.maximumInFlight,
-                    commitInOrder: false, next: next, whenEmpty: whenEmpty, process: process, commit: commit)
-            } else {
-                try await TaggingBatchPipeline.run(next: next, whenEmpty: whenEmpty, consume: { batch in
-                    await commit(try await process(batch))
-                })
-            }
+            try await TaggingBatchPipeline.runPipelined(maximumInFlight: tagger.maximumInFlight,
+                commitInOrder: clients.isEmpty, next: next, whenEmpty: whenEmpty, process: process, commit: commit)
         } catch {
             let elapsed = Date().timeIntervalSince(started)
             await failTagging(error, token: token, elapsed: elapsed)
@@ -2941,6 +2935,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     ///
     /// In one-group-per-line mode this stays inside the current group's line and stops
     /// at its ends; in the flow grid it walks the group-preserving displayed order.
+    /// Prefetch the same sequence that the preview's arrow keys traverse.
+    func previewPreloadFrames(after id: FrameID) -> [AnalyzedFrame] {
+        let order = navigationOrder
+        guard let index = order.indexByID[id] else { return [] }
+        return PhotosPreviewNeighbours.indices(current: index, count: order.frames.count).compactMap { offset in
+            order.neighbour(of: id, by: offset - index)
+        }
+    }
+
     func focusNeighbour(_ delta: Int) {
         guard uncover == nil else { return }
         let order = navigationOrder

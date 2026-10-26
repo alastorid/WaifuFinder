@@ -103,6 +103,17 @@ final class RemoteInferencePool: ObservableObject {
         taggingClients.filter { $0.remoteVocabulary?.cacheFingerprint == fingerprint }
     }
 
+    /// Forensic inference uses one lane per connected endpoint, like tagging.
+    private func forensicClients(where offers: (RemoteClient) -> Bool) -> [RemoteClient] {
+        var seen = Set<String>()
+        return entries.map(\.client).filter { client in
+            offers(client) && seen.insert(RemoteAddress.parse(client.manualAddress)?.display ?? client.manualAddress).inserted
+        }
+    }
+
+    var safireClients: [RemoteClient] { forensicClients { $0.offersSafire } }
+    var truforClients: [RemoteClient] { forensicClients { $0.offersTruFor } }
+
     var offersRemoteTagging: Bool { !taggingClients.isEmpty }
     var serverNames: String { taggingClients.compactMap { $0.capabilities?.serverName }.joined(separator: ", ") }
 

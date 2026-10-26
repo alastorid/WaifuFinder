@@ -22,6 +22,10 @@ struct VideoPreviewPanel: View {
         return session.frame(id: id)
     }
 
+    private var isPhotosMode: Bool {
+        session.video.map { PhotosMedia.isPhotos($0.url) } == true
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -81,14 +85,16 @@ struct VideoPreviewPanel: View {
             Text("Preview")
                 .font(.headline)
             Spacer()
-            if let frame = focusedFrame {
-                Text(timecode(frame.timeSeconds))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("no frame selected")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            if !isPhotosMode {
+                if let frame = focusedFrame {
+                    Text(timecode(frame.timeSeconds))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("no frame selected")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -151,10 +157,12 @@ struct VideoPreviewPanel: View {
             .buttonStyle(.borderless)
             .disabled(preview.player == nil)
 
-            Text("\(timecode(preview.currentTime)) / \(timecode(preview.duration))")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if !isPhotosMode {
+                Text("\(timecode(preview.currentTime)) / \(timecode(preview.duration))")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer()
 

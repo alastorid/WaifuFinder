@@ -202,6 +202,8 @@ final class RemoteServer: ObservableObject {
         var flags: RemoteBeacon.BeaconFlags = [.accepting]
         if client != nil { flags.insert(.clientConnected) }
         if capabilities.offersRemoteTagging { flags.insert(.taggerReady) }
+        if capabilities.offersSafire { flags.insert(.safireReady) }
+        if capabilities.offersTruFor { flags.insert(.truforReady) }
         for algorithm in UncoverAlgorithm.allCases where capabilities.offersRemote(algorithm) {
             let bit = 3 + (UncoverAlgorithm.allCases.firstIndex(of: algorithm) ?? 0)
             flags.insert(RemoteBeacon.BeaconFlags(rawValue: 1 << bit))

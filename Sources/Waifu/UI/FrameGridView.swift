@@ -441,6 +441,11 @@ struct FrameGridView: View {
             PhotosMedia.shared.photoItemURL(for: $0.url, seconds: frame.timeSeconds)
         }
 
+        if let photoURL {
+            Button("Open in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
+            Divider()
+        }
+
         if let groupID = frame.groupID,
            let group = session.groups.first(where: { $0.id == groupID }) {
             Button("Select All in Group") { session.selectAll(in: group) }
@@ -451,9 +456,7 @@ struct FrameGridView: View {
                 .disabled(!session.canAnalyzeFocusedRange)
         }
 
-        if let photoURL {
-            Button("View in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
-        } else if !isSelected {
+        if photoURL == nil, !isSelected {
             Button("Select") { session.select(frame.id) }
         }
 

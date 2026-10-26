@@ -143,19 +143,24 @@ actor RemoteConnection {
     /// Sends a request and returns the reply, throwing the server's error when
     /// the reply is a failure.
     func request(_ opcode: RemoteOpcode, payload: [UInt8],
-                 maximumOutstanding: Int = RemoteLimits.maximumOutstandingRequests) async throws -> RemoteEnvelope {
+                 maximumOutstanding: Int = RemoteLimits.maximumOutstandingRequests,
+                 cancelStreamOnly: Bool = false) async throws -> RemoteEnvelope {
         let streamID = try beginRequest()
         defer { endRequest() }
         return try await withTaskCancellationHandler {
         try Task.checkCancellation()
         try await send(opcode, payload: payload, streamID: streamID)
         guard let reply = await next(streamID: streamID) else {
+            try Task.checkCancellation()
             throw RemoteError.framing("The connection ended before the request was answered.")
         }
         if reply.isError { throw Self.remoteError(from: reply) }
         try Task.checkCancellation()
         return reply
-        } onCancel: { Task { await self.stop() } }
+        } onCancel: { Task {
+            if cancelStreamOnly { await self.cancelRequest(streamID) }
+            else { await self.stop() }
+        } }
     }
 
     func request(_ opcode: RemoteOpcode, control: RemoteControl) async throws -> RemoteEnvelope {

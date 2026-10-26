@@ -2,6 +2,79 @@ import AVFoundation
 import Foundation
 
 func registerPreviewFrameTests() {
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "a delayed local fallback never downgrades sharper cached photo pixels", knownBug: nil) {
+        let sharp = try ImageFixture.cgImage(width: 2048, height: 1536)
+        let small = try ImageFixture.cgImage(width: 512, height: 384)
+        let result = try await PreviewPhotoSource.load(
+            original: { throw PhotosMedia.localUnavailable() }, rendition: { small }, cached: sharp)
+        guard case .still(let pixels) = result.content else { check(false, "still image required"); return }
+        check(pixels === sharp, "the locally cached sharp photo survives a smaller Photos fallback")
+        check(!result.isOriginal, "a large thumbnail is not mislabeled as original")
+        check(!PreviewPhotoSource.isSharper(small, than: sharp), "same-photo thumbnail refresh cannot replace sharper pixels")
+        check(PreviewPhotoSource.isSharper(small, than: nil), "a new photo can display its own smaller thumbnail")
+        check(PreviewPhotoSource.isSharper(sharp, than: small), "a larger local rendition can still upgrade the photo")
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "same-photo reload retains original provenance when Photos is unavailable", knownBug: nil) {
+        let sharp = try ImageFixture.cgImage(width: 640, height: 480)
+        let small = try ImageFixture.cgImage(width: 64, height: 48)
+        for unavailable in [false, true] {
+            let result = try await PreviewPhotoSource.load(
+                original: { throw PhotosMedia.localUnavailable() }, rendition: {
+                    if unavailable { throw PhotosMedia.localUnavailable() }
+                    return small
+                }, cached: sharp, cachedIsOriginal: true)
+            guard case .still(let pixels) = result.content else { check(false, "still image required"); return }
+            check(pixels === sharp && result.isOriginal, "retained original stays sharp and remains the evidence input")
+        }
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "photo preview upgrades smaller cached pixels to larger locally available pixels", knownBug: nil) {
+        let sharp = try ImageFixture.cgImage(width: 640, height: 480)
+        let small = try ImageFixture.cgImage(width: 64, height: 48)
+        let result = try await PreviewPhotoSource.load(
+            original: { throw PhotosMedia.localUnavailable() }, rendition: { sharp }, cached: small)
+        guard case .still(let pixels) = result.content else { check(false, "still image required"); return }
+        check(pixels === sharp, "larger fallback upgrades the thumbnail")
+        let original = try await PreviewPhotoSource.load(original: { .still(sharp) }, rendition: { small }, cached: small)
+        guard case .still(let native) = original.content else { check(false, "original required"); return }
+        check(native === sharp && original.isOriginal, "available local original upgrades the thumbnail")
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "cloud original failure keeps a local image available to both evidence models", knownBug: nil) {
+        let image = try ImageFixture.cgImage(width: 96, height: 64)
+        let source = try await PreviewPhotoSource.load(
+            original: { throw NSError(domain: "CloudPhotoLibraryErrorDomain", code: 1005) },
+            rendition: { image })
+        guard case .still(let pixels) = source.content else { check(false, "still fallback required"); return }
+        check(pixels === image, "the same decoded rendition feeds preview and evidence")
+        check(!source.isOriginal, "rendition analysis is identified explicitly")
+        let original = try await PreviewPhotoSource.load(
+            original: { .still(image) }, rendition: { throw PhotosMedia.localUnavailable() })
+        check(original.isOriginal, "available originals remain the preferred input")
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "failed Photos reads retain the target thumbnail and cancellation never starts fallback", knownBug: nil) {
+        let image = try ImageFixture.cgImage(width: 64, height: 96)
+        let source = try await PreviewPhotoSource.load(
+            original: { throw PhotosMedia.localUnavailable() },
+            rendition: { throw PhotosMedia.localUnavailable() }, cached: image)
+        guard case .still(let pixels) = source.content else { check(false, "cached image required"); return }
+        check(pixels === image && !source.isOriginal, "local cached pixels survive both failed requests")
+        do {
+            _ = try await PreviewPhotoSource.load(original: { throw CancellationError() }, rendition: {
+                check(false, "cancelled photos do not queue fallback work")
+                return image
+            }, cached: image)
+            check(false, "cancelled navigation must terminate")
+        } catch is CancellationError { }
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "evidence cache identities separate preview quality and actual pixels", knownBug: nil) {
+        let image = try ImageFixture.cgImage(width: 64, height: 64)
+        let url = URL(string: "waifu-photos://preview-cache")!
+        let original = PreviewEvidenceInput(photoURL: url, image: image, isOriginal: true)
+        let preview = PreviewEvidenceInput(photoURL: url, image: image, isOriginal: false)
+        let a = original.contentIdentity(assetIdentity: "asset", png: Data([1]))
+        check(a != preview.contentIdentity(assetIdentity: "asset", png: Data([1])), "renditions never stand in for originals")
+        check(a != original.contentIdentity(assetIdentity: "asset", png: Data([2])), "same-sized different pixels invalidate evidence")
+        checkEqual(a, original.contentIdentity(assetIdentity: "asset", png: Data([1])), "unchanged input reuses cached evidence")
+    })
     Registry.shared.add(suite: "Frame preview", TestCase(name: "original preview keeps native pixels and the source canvas instead of the analysis thumbnail", knownBug: nil) {
         let directory = try Temporary.directory("preview-original")
         let url = directory.appendingPathComponent("padded.mp4")

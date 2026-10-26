@@ -13,15 +13,7 @@ private final class TruForWorker:@unchecked Sendable {
         let incoming=Pipe(),outgoing=Pipe();input=incoming.fileHandleForWriting;output=outgoing.fileHandleForReading
         process.executableURL=executable;process.arguments=["--model",configuration.directory.path,"--serve"];process.qualityOfService = .utility
         // A diagnostic shell override must not silently alter persisted app scores.
-        var environment=ProcessInfo.processInfo.environment
-        environment["WAIFU_TRUFOR_PRECISION"]="fp32"
-        let coreMLNoiseprint=configuration.directory.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
-        if FileManager.default.fileExists(atPath:coreMLNoiseprint.path) {
-            environment["WAIFU_TRUFOR_COREML_FP16_MODEL"]=coreMLNoiseprint.path
-        } else {
-            environment.removeValue(forKey:"WAIFU_TRUFOR_COREML_FP16_MODEL")
-        }
-        process.environment=environment
+        process.environment=TruForConfiguration.workerEnvironment(ProcessInfo.processInfo.environment)
         process.standardInput=incoming;process.standardOutput=outgoing
         FileManager.default.createFile(atPath:root.appendingPathComponent("worker.log").path,contents:nil)
         process.standardError=try FileHandle(forWritingTo:root.appendingPathComponent("worker.log"))

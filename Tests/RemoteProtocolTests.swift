@@ -316,7 +316,7 @@ func registerRemoteProtocolTests() {
         let beacon = RemoteBeacon(tcpPort: 47410, serverInstance: 0x0123_4567_89AB_CDEF,
                                   keyID: RemoteCrypto.keyID(for: key),
                                   sentAtMilliseconds: UInt32(truncatingIfNeeded: 1_700_000_000_000),
-                                  flags: [.accepting, .taggerReady,
+                                  flags: [.accepting, .taggerReady, .safireReady, .truforReady,
                                           RemoteBeacon.BeaconFlags(rawValue: 1 << 3)],
                                   name: name, appVersion: "9.9.9")
         let decoded = RemoteBeacon.decode(beacon.encoded())
@@ -327,6 +327,8 @@ func registerRemoteProtocolTests() {
         checkEqual(decoded?.name, name, "a maximal name survives")
         checkEqual(decoded?.appVersion, "9.9.9", "the version survives")
         check(decoded?.flags.contains(.taggerReady) == true, "tagger availability survives")
+        check(decoded?.flags.contains(.safireReady) == true, "SAFIRE availability survives")
+        check(decoded?.flags.contains(.truforReady) == true, "TruFor availability survives")
         check(decoded?.offers(.seedVR2) == true, "the algorithm bit lands on the right case")
         check(decoded?.offers(.flashVSR11) == false, "an unoffered algorithm reads as absent")
 
@@ -360,6 +362,8 @@ func registerRemoteProtocolTests() {
         let now = Date()
         await cache.record(beacon, from: "10.0.0.1", now: now)
         checkEqual(await cache.live(now: now).count, 1, "a fresh beacon is live")
+        check(await cache.live(now: now).first?.offersSafire == true, "discovery retains SAFIRE")
+        check(await cache.live(now: now).first?.offersTruFor == true, "discovery retains TruFor")
         checkEqual(await cache.live(now: now).first?.address, "10.0.0.1:47410",
                    "the source address is what a client dials, not a name from the payload")
         checkEqual(await cache.live(now: now).first?.keyID, RemoteCrypto.keyID(for: key),
@@ -1425,6 +1429,129 @@ func registerTruForNativeIntegrationTests() {
             let remoteScores=try await pair.client.truforScores([png,png])
             guard case .scores(let values)=localScores else { throw ModelInstaller.fail("Missing local TruFor scores") }
             checkEqual(remoteScores,values,"real score batch is identical")
+        }.value
+    })
+}
+
+func registerSafireLoopbackTests() {
+    let fingerprint=String(repeating:"a",count:64)
+    let catalog:@Sendable ()->RemoteModelCatalog = {
+        var catalog=StubCatalog.uncoverOnly()
+        let base=catalog.capabilities
+        catalog.capabilities={ version,name,session in
+            var value=await base(version,name,session)
+            value.safire = .init(available:true,modelFingerprint:fingerprint,
+                runtimeRevision:SafireSpatialResult.runtimeRevision,
+                preprocessingVersion:SafireSpatialResult.preprocessingVersion)
+            return value
+        }
+        catalog.safire={ request in
+            .init(assetID:request.photo.id,contentIdentity:request.photo.contentIdentity,
+                modelFingerprint:request.modelFingerprint,runtimeRevision:SafireSpatialResult.runtimeRevision,
+                preprocessingVersion:SafireSpatialResult.preprocessingVersion,
+                width:2,height:2,probabilities:[0,0.25,0.75,1],partitions:[0,1,1,2])
+        }
+        return catalog
+    }
+    let photo=LineagePhoto(id:"remote-photo",contentIdentity:String(repeating:"b",count:64),
+        name:"photo.png",width:448,height:448,format:"PNG",url:URL(string:"waifu-photos://remote-photo")!,offset:0)
+    Registry.shared.add(suite:"SAFIRE remote",TestCase(name:"lossless spatial evidence preserves identity across encrypted loopback",knownBug:nil) {
+        try await Task { @MainActor in
+            let pair=try LoopbackPair(catalog:catalog(),key:remoteTestKey())
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("SAFIRE loopback did not authenticate") }
+            check(pair.client.offersSafire,"matching remote SAFIRE is offered without local weights")
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let result=try await pair.client.safire(png:png,photo:photo)
+            checkEqual(result.probabilities,[0,0.25,0.75,1],"probabilities are exact")
+            checkEqual(result.partitions,[0,1,1,2],"partitions are exact")
+            checkEqual(result.assetID,photo.id,"photo identity survives")
+            checkEqual(result.contentIdentity,photo.contentIdentity,"content revision survives")
+            checkEqual(result.modelFingerprint,fingerprint,"server checkpoint identity survives")
+        }.value
+    })
+    Registry.shared.add(suite:"SAFIRE and TruFor remote",TestCase(name:"both models share one authenticated connection and pool",knownBug:nil) {
+        try await Task { @MainActor in
+            var service=catalog()
+            let base=service.capabilities
+            service.capabilities={ version,name,session in
+                var value=await base(version,name,session)
+                value.trufor = .init(available:true,modelFingerprint:TruForConfiguration.weightsSHA,
+                    runtimeRevision:TruForConfiguration.execution,preprocessingVersion:TruForConfiguration.preprocessing)
+                return value
+            }
+            service.trufor={ request in .scores(Array(repeating:0.625,count:request.images.count)) }
+            let pair=try LoopbackPair(catalog:service,key:remoteTestKey())
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("Forensic loopback did not authenticate") }
+            let defaults=UserDefaults(suiteName:"forensic-pool-\(UUID().uuidString)")!
+            let pool=RemoteInferencePool(defaults:defaults,primary:pair.client,discoveryEnabled:false)
+            checkEqual(pool.safireClients.count,1,"SAFIRE endpoint is selected")
+            checkEqual(pool.truforClients.count,1,"TruFor endpoint is selected")
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            async let spatial=pair.client.safire(png:png,photo:photo)
+            async let scores=pair.client.truforScores([png,png])
+            let (result,values)=try await (spatial,scores)
+            checkEqual(result.assetID,photo.id,"SAFIRE response stays on its stream")
+            checkEqual(values,[0.625,0.625],"TruFor response stays on its stream")
+        }.value
+    })
+    Registry.shared.add(suite:"SAFIRE remote",TestCase(name:"canceling SAFIRE preserves the connection for the next inference",knownBug:nil) {
+        try await Task { @MainActor in
+            let probe=CancellationProbe()
+            var service=catalog()
+            let infer=service.safire
+            service.safire={ request in
+                if !probe.cancelled {
+                    probe.start()
+                    do { try await Task.sleep(for:.seconds(30)) }
+                    catch { probe.cancel();throw error }
+                }
+                return try await infer(request)
+            }
+            let pair=try LoopbackPair(catalog:service,key:remoteTestKey())
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("SAFIRE loopback did not authenticate") }
+            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let work=Task { try await pair.client.safire(png:png,photo:photo) }
+            let deadline=Date().addingTimeInterval(3)
+            while !probe.started,Date()<deadline { try await Task.sleep(for:.milliseconds(10)) }
+            check(probe.started,"server began inference")
+            work.cancel()
+            if case .success=await work.result { check(false,"canceled SAFIRE must not return evidence") }
+            let canceledDeadline=Date().addingTimeInterval(3)
+            while !probe.cancelled,Date()<canceledDeadline { try await Task.sleep(for:.milliseconds(10)) }
+            check(probe.cancelled,"server inference is canceled")
+            check(pair.client.status.isConnected,"authenticated connection stays available")
+            let result=try await pair.client.safire(png:png,photo:photo)
+            checkEqual(result.assetID,photo.id,"subsequent inference succeeds on the same connection")
+        }.value
+    })
+    Registry.shared.add(suite:"SAFIRE remote",TestCase(name:"incompatible runtime and preprocessing are excluded before inference",knownBug:nil) {
+        try await Task { @MainActor in
+            for (model,runtime,preprocessing) in [
+                (fingerprint,"safire-native-v1",SafireSpatialResult.preprocessingVersion),
+                (fingerprint,SafireSpatialResult.runtimeRevision,"unknown-preprocessing"),
+                (String(repeating:"z",count:64),SafireSpatialResult.runtimeRevision,SafireSpatialResult.preprocessingVersion)
+            ] {
+                var service=catalog()
+                let base=service.capabilities
+                service.capabilities={ version,name,session in
+                    var value=await base(version,name,session)
+                    value.safire = .init(available:true,modelFingerprint:model,runtimeRevision:runtime,preprocessingVersion:preprocessing)
+                    return value
+                }
+                let pair=try LoopbackPair(catalog:service,key:remoteTestKey())
+                defer { pair.tearDown() }
+                guard await pair.connect() else { throw ModelInstaller.fail("SAFIRE loopback did not authenticate") }
+                check(!pair.client.offersSafire,"incompatible SAFIRE is not offered")
+                do {
+                    _ = try await pair.client.safire(png:Data(),photo:photo)
+                    check(false,"incompatible request must fail")
+                } catch let error as RemoteError {
+                    checkEqual(error.code,RemoteError.modelUnavailable("").code,"rejected before image upload")
+                }
+            }
         }.value
     })
 }

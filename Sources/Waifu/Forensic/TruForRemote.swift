@@ -29,6 +29,7 @@ extension TruForSpatial {
 extension RemoteServerSession {
     func handleTruFor(_ envelope:RemoteEnvelope)async {
         do {
+            try Task.checkCancellation()
             let request=try JSONDecoder().decode(RemoteTruForRequest.self,from:envelope.data);try request.validate()
             let result=try await catalog.trufor(request)
             try Task.checkCancellation()
@@ -49,7 +50,7 @@ extension RemoteServerSession {
     }
 }
 extension RemoteClient {
-    var offersTruFor:Bool { WaifuDistribution.isNonCommercialOnly && status.isConnected && capabilities?.trufor?.available==true && capabilities?.trufor?.modelFingerprint==TruForConfiguration.weightsSHA && capabilities?.trufor?.runtimeRevision==TruForConfiguration.execution && capabilities?.trufor?.preprocessingVersion==TruForConfiguration.preprocessing }
+    var offersTruFor:Bool { status.isConnected && capabilities?.offersTruFor==true }
     func truforScores(_ images:[Data])async throws->[Float] {
         let result=try await trufor(images,evidence:false)
         guard case .scores(let scores)=result else { throw RemoteError.framing("Unexpected TruFor evidence") };return scores

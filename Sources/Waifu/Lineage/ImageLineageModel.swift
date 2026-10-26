@@ -154,11 +154,8 @@ import Photos
     }
     private func analyzeSafire(ticket:UUID) async {
         let local=SafireConfiguration.load()
-        let remote=RemoteInferencePool.shared.entries.map(\.client).first {
-            $0.offersSafire && $0.capabilities?.safire?.runtimeRevision==SafireSpatialResult.runtimeRevision
-                && $0.capabilities?.safire?.preprocessingVersion==SafireSpatialResult.preprocessingVersion
-        }
-        guard let fingerprint=local?.fingerprint ?? remote?.capabilities?.safire?.modelFingerprint else { progress="Install SAFIRE in Settings → Models to read this group’s spatial evidence";return }
+        let remote=RemoteInferencePool.shared.safireClients.first
+        guard let fingerprint=remote?.capabilities?.safire?.modelFingerprint ?? local?.fingerprint else { progress="Install SAFIRE in Settings → Models to read this group’s spatial evidence";return }
         let targets=document.photos.filter { targetAssets.contains($0.id) }
         running=true
         defer { if self.ticket==ticket { running=false } }
@@ -174,8 +171,8 @@ import Photos
                     result=try await SafireJobWait.run(onWaiting:{
                         self.progress="SAFIRE · waiting for another job; this photo will resume automatically"
                     }) {
-                        if local != nil { return try await SafireBackend.shared.infer(png:png,photo:photo) }
                         if let remote { return try await remote.safire(png:png,photo:photo) }
+                        if local != nil { return try await SafireBackend.shared.infer(png:png,photo:photo) }
                         throw RemoteError.modelUnavailable("Install SAFIRE in Settings → Models.")
                     }
                     guard !Task.isCancelled,self.ticket==ticket else { return }
@@ -256,8 +253,8 @@ import Photos
     private func loadOverlay(_ id:String) {
         guard let photo=document.photos.first(where:{$0.id==id}) else { return }
         let stored=document.evidence[id]
-        let fingerprint=stored?.modelFingerprint ?? SafireConfiguration.load()?.fingerprint
-            ?? RemoteInferencePool.shared.entries.map(\.client).first(where:{$0.offersSafire})?.capabilities?.safire?.modelFingerprint
+        let fingerprint=stored?.modelFingerprint ?? RemoteInferencePool.shared.safireClients.first?.capabilities?.safire?.modelFingerprint
+            ?? SafireConfiguration.load()?.fingerprint
         guard let fingerprint else { return }
         let generation=ticket
         Task {

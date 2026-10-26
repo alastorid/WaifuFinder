@@ -117,6 +117,29 @@ func registerWDTaggerTests() {
         cancelled.cancel()
         _ = await checkThrowsAsync("cancelled inference does not return results") { try await cancelled.value }
     })
+    Registry.shared.add(suite: suite, TestCase(name: "one native worker preserves distinct overlapping batches and padded tails", knownBug: nil) {
+        let directory = try taggerFixtureDirectory()
+        let executable = try nativeTaggerTestExecutable()
+        let backend = try WDTaggerBackend(directory:directory,executableURL:executable)
+        let light = try syntheticTaggerGradient()
+        let dark = try ImageFixture.cgImage(width:448,height:448,gray:0)
+        let referenceLight = try await backend.tag(batch:[light])[0].encodedProbabilities
+        let referenceDark = try await backend.tag(batch:[dark])[0].encodedProbabilities
+        try await withThrowingTaskGroup(of:Void.self) { group in
+            for count in [1,5,8,1] {
+                group.addTask {
+                    let images = (0..<count).map { $0.isMultiple(of:2) ? light : dark }
+                    let rows = try await backend.tag(batch:images)
+                    checkEqual(rows.count,count,"overlap never emits padded frames")
+                    for (index,row) in rows.enumerated() {
+                        checkEqual(row.encodedProbabilities,index.isMultiple(of:2) ? referenceLight : referenceDark,
+                            "request-owned staging cannot be overwritten by a later batch")
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+    })
     Registry.shared.add(suite: suite, TestCase(name: "independent native model instances preserve mixed batches under concurrent prediction", knownBug: nil) {
         let directory = try taggerFixtureDirectory()
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("model.safetensors").path) else {

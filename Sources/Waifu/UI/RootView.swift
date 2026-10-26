@@ -255,14 +255,15 @@ struct RootView: View {
 
     /// The workspace's icon actions, top right of the title bar, with status
     /// capsules to their left. The back button owns leaving a workspace, so the
-    /// orb button only appears while the orb is closed.
+    /// orb button only appears while the orb is closed. Photos refresh and iCloud
+    /// controls remain available over the Crystal Orb.
     private var workspaceToolbarControls: some View {
         HStack(spacing: 8) {
             if !orb.isOpen {
                 orbButton
-                if showPhotosWorkspace { photosPanelActions }
-                else if session.video != nil { videoPanelActions }
             }
+            if showPhotosWorkspace { photosPanelActions }
+            else if !orb.isOpen && session.video != nil { videoPanelActions }
             panelToggleButton
             exportButton
         }
@@ -293,7 +294,7 @@ struct RootView: View {
 
     private var photosPanelActions: some View {
         HStack(spacing: 8) {
-            thumbnailShapeButton
+            if !orb.isOpen { thumbnailShapeButton }
 
             Button { downloadFromICloud.toggle() } label: {
                 Label("iCloud downloads", systemImage: downloadFromICloud ? "icloud.and.arrow.down.fill" : "icloud.slash")

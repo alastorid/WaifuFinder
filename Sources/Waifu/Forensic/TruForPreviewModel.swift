@@ -116,31 +116,39 @@ actor TruForEvidenceRenderer {
     private var evidence:TruForSpatial?
     private var original:CGImage?
     private var mode=TruForDisplay.combined
-    func load(url:URL?,enabled:Bool,mode:TruForDisplay)async {
+    func load(url:URL?,enabled:Bool,mode:TruForDisplay,input:PreviewEvidenceInput?)async {
         let token=UUID();ticket=token;renderTicket=UUID();photoURL=url;rendered=nil;evidence=nil;original=nil;status="";loading=false;self.mode=mode
         guard enabled,WaifuDistribution.isNonCommercialOnly,let url,let item=PhotosMedia.shared.item(url),item.isStill,let key=item.assetCacheKey else { return }
+        guard let input,input.photoURL==url else { status="Loading photo…";return }
         loading=true
         defer { if ticket==token { loading=false } }
         do {
             try await Task.sleep(for:.milliseconds(200));try Task.checkCancellation()
             status="TruFor · analyzing this photo…"
             let photo=TruForPhoto(url:url,assetKey:key)
-            let image=try await PhotosMedia.shared.image(url,seconds:0)
-            let png=try await Task.detached(priority:.utility){try SafireBackend.png(image)}.value
+            let image=input.image
+            let (png,inputIdentity)=try await Task.detached(priority:.utility) {
+                let png=try SafireBackend.png(image)
+                return (png,input.contentIdentity(assetIdentity:photo.contentIdentity,png:png))
+            }.value
             let local=TruForConfiguration.load()
-            let remote=RemoteInferencePool.shared.entries.map(\.client).first(where: \.offersTruFor)
+            let remote=RemoteInferencePool.shared.truforClients.first
+            guard local != nil || remote != nil else { status="Set up TruFor in Settings → Models";return }
             let map=try await SafireJobWait.run(onWaiting:{self.status="TruFor · waiting for another model job"}) {
+                if let remote { return try await remote.truforEvidence(png) }
                 if local != nil {
-                    let value=try await TruForBackend.shared.submit(images:[png],evidence:true,cacheKey:TruForConfiguration.scoreFingerprint+"|"+photo.contentIdentity)
+                    let value=try await TruForBackend.shared.submit(images:[png],evidence:true,cacheKey:TruForConfiguration.scoreFingerprint+"|"+inputIdentity)
                     guard case .evidence(let result)=value else { throw ModelInstaller.fail("Missing TruFor evidence") };return result
                 }
-                if let remote { return try await remote.truforEvidence(png) }
                 throw ModelInstaller.fail("Set up TruFor in Settings → Models")
             }
             guard !Task.isCancelled,ticket==token,PhotosMedia.shared.item(url)?.assetCacheKey==key else { return }
             evidence=map;original=image
             await display(self.mode)
-        } catch is CancellationError {} catch { if ticket==token { status="TruFor evidence unavailable" } }
+        } catch is CancellationError {} catch {
+            Diag.trace(.preview,message:"TruFor preview: \(error)")
+            if ticket==token { status="TruFor evidence unavailable" }
+        }
     }
     func display(_ mode:TruForDisplay)async {
         self.mode=mode
@@ -151,6 +159,9 @@ actor TruForEvidenceRenderer {
             guard !Task.isCancelled,renderTicket==token else { return }
             rendered=NSImage(cgImage:image,size:NSSize(width:image.width,height:image.height))
             status="TruFor · detection score "+String(format:"%.3f",evidence.score)+(mode == .noiseprint ? " · contrast-scaled residual, not a probability" : mode == .combined ? " · orange: reliable anomaly; violet: uncertain anomaly" : mode == .outlines ? " · anomaly ≥ 0.5" : "")
-        } catch { if renderTicket==token { status="TruFor display unavailable" } }
+        } catch {
+            Diag.trace(.preview,message:"TruFor display: \(error)")
+            if renderTicket==token { status="TruFor display unavailable" }
+        }
     }
 }

@@ -195,3 +195,11 @@ remote server reuse the UInt8/LZ4 payload without quantizing it again.
 An eight-frame sparse remote-response fixture measured 347,593 Float32 payload
 bytes versus 1,049 bytes of UInt8/LZ4. Reply-payload measurements exclude uploaded
 images and transport headers.
+
+## M3 input overlap update (2026-10-26)
+
+The local lane now has two slots and prepares request-owned RGBA staging while
+its serial worker executes. Local PhotoKit reads bypass cloud admission even
+when downloads are enabled. See [M3 input overlap](WDTagger-M3-input-overlap.md)
+for the bounded staging design, output parity, measured throughput and GPU
+utilization limits. The historical one-batch-prefetch results above are preserved.

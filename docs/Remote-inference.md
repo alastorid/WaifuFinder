@@ -1,6 +1,6 @@
 # Remote inference
 
-A Mac can share its installed tagging and reconstruction models with one other Mac.
+A Mac can share its installed tagging, reconstruction, SAFIRE and TruFor models with one other Mac.
 The client owns browsing, Apple Vision analysis, grouping, source media, compositing
 and export. The server executes model inference. Settings → Remote controls both
 roles independently. Client server entries retain their address and enabled state.
@@ -19,7 +19,7 @@ deduplicated endpoints with the selected vocabulary fingerprint; incompatible la
 are excluded. `BalancedTaggerBackend` reserves the least-loaded lane before sending
 a batch, counting requests through preparation, transport and completion. Equal depths
 rotate fairly. Each remote lane has an eight-batch window. Option-start adds a local
-lane with capacity one, after verifying that local labels match. Each frame is inferred
+lane with capacity two, after verifying that local labels match. Each frame is inferred
 once. Completed frame updates commit immediately so a slow server cannot hold up
 refilling a faster server's queue. Follow-up tagging preserves the local participation
 choice; cancellation joins in-flight tasks before releasing local model resources.
@@ -38,6 +38,29 @@ Reconstruction sends the prepared manifest and `degraded/` PNGs. `original/` and
 The manifest includes source metadata, including its path; it does not upload source
 video contents. A raised **R** on an inference control identifies remote execution,
 with a tooltip naming the server. Vision always runs locally.
+
+## SAFIRE and TruFor
+
+SAFIRE spatial analysis (photo preview and lineage groups) and TruFor preview evidence
+prefer the first connected compatible server, using local inference when no compatible
+server is connected. The client needs no local weights for remote execution. A job
+captures its selected server; a failure is reported without silently changing models.
+Existing SAFIRE evidence is reused only for the selected checkpoint and photo identity.
+TruFor album scoring distributes batches across compatible servers; Option-start also
+includes this Mac when local weights are installed. Duplicate endpoints form one lane.
+
+Settings → Remote lists SAFIRE and TruFor readiness on each server card and advertises
+both in discovery. Photo preview controls show the raised **R** when a compatible server
+is selected. SAFIRE requires matching runtime and preprocessing revisions and a valid
+checkpoint fingerprint. TruFor additionally pins the exact weights and FP32 execution
+revision, and remains available only in noncommercial builds.
+
+Both paths send lossless PNG input through the authenticated encrypted connection.
+SAFIRE returns binary spatial probabilities and source partitions with photo/content
+identity. TruFor returns ordered scalar scores or streams binary anomaly, reliability
+and Noiseprint++ maps in bounded chunks followed by an explicit terminator. Native
+Swift workers execute inference on the server. Canceling either forensic request stops
+only its stream, preserving the connection for other inference jobs.
 
 ## Connection and keys
 
@@ -159,7 +182,8 @@ needs to know the UI's progress, cache or export implementation.
 
 `Tests/RemoteProtocolTests.swift` covers binary bounds, splitting, key formatting,
 directional derivation, replay and ciphertext/header tampering, compression, beacon
-expiry, capabilities and labels. End-to-end cases use real loopback sockets with
+expiry, capabilities and labels. SAFIRE and TruFor loopback cases also cover spatial evidence,
+score order, incompatible revisions and cancellation without disconnecting. End-to-end cases use real loopback sockets with
 injected deterministic model backends: admission/refusal, vocabulary verification,
 identical local/remote UInt8 score payloads and all four rating probabilities, PNG round trips, cancellation with model-reference release,
 busy rejection of a second client, kick and reconnect. These tests validate

@@ -3,7 +3,6 @@
 // Retain Runtime/TRUFOR-LICENSE.txt and TRUFOR-CMX-LICENSE.txt with adaptations.
 import Foundation
 import CryptoKit
-import CoreML
 import MLX
 import Metal
 
@@ -25,8 +24,6 @@ public final class TruForModel {
     public let precision:Precision
     private var weights:[String:MLXArray]
     private var fuseParts:[String:[MLXArray]]=[:]
-    private var coreMLNoiseprint:CoreMLNoiseprint?
-    private var coreMLFailureReported=false
     public let device:String
     public let queryRows:Int
     public let noiseTile:Int
@@ -42,11 +39,6 @@ public final class TruForModel {
         noiseTile=Int(ProcessInfo.processInfo.environment["WAIFU_TRUFOR_NOISE_TILE"] ?? "512") ?? 512
         guard [128,256,512].contains(queryRows),[128,256,512].contains(noiseTile) else { throw TruForError.invalid("Unsupported profile override") }
         precision=Precision(rawValue:ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PRECISION"] ?? "") ?? .fp32
-        if let path=ProcessInfo.processInfo.environment["WAIFU_TRUFOR_COREML_FP16_MODEL"],
-           FileManager.default.fileExists(atPath:path) {
-            do { coreMLNoiseprint=try CoreMLNoiseprint(modelURL:URL(fileURLWithPath:path)) }
-            catch { FileHandle.standardError.write(Data("TruFor Core ML FP16 noiseprint unavailable; using native MLX: \(error)\n".utf8)) }
-        }
         let file=directory.appendingPathComponent("model.safetensors")
         let meta=try JSONSerialization.jsonObject(with:Data(contentsOf:directory.appendingPathComponent("architecture.json"))) as? [String:Any]
         guard meta?["sourceSHA256"] as? String == Self.sourceSHA,meta?["preprocessingVersion"] as? String == Self.preprocessing else { throw TruForError.invalid("Expected the verified official TruFor checkpoint") }
@@ -155,16 +147,6 @@ public final class TruForModel {
         return concatenated(rows,axis:1)
     }
     private func noise(_ input:TruForInput)throws->MLXArray {
-        if let coreMLNoiseprint {
-            do { return try coreMLNoiseprint.predict(input,tileSide:noiseTile) }
-            catch {
-                self.coreMLNoiseprint=nil
-                if !coreMLFailureReported {
-                    FileHandle.standardError.write(Data("TruFor Core ML FP16 noiseprint failed; falling back to native MLX: \(error)\n".utf8))
-                    coreMLFailureReported=true
-                }
-            }
-        }
         if let array=input.array { return noise(precision == .fp16 ? array.asType(.float16):array) }
         let h=input.height,width=input.width
         var rows:[MLXArray]=[]

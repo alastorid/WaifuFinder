@@ -55,6 +55,19 @@ final class PhotosMedia: @unchecked Sendable {
         let isComplete: Bool
         init(_ image: CGImage, isComplete: Bool) { self.image = image; self.isComplete = isComplete }
     }
+    private final class OriginalBox {
+        let data: Data
+        let orientation: CGImagePropertyOrientation
+        init(data: Data, orientation: CGImagePropertyOrientation) { self.data = data; self.orientation = orientation }
+    }
+    // Store encoded originals, not seven full decoded megapixel images.
+    private let previewOriginals: NSCache<NSString, OriginalBox> = {
+        let cache = NSCache<NSString, OriginalBox>()
+        cache.countLimit = 9
+        cache.totalCostLimit = 256 * 1024 * 1024
+        return cache
+    }()
+
     struct Item: @unchecked Sendable {
         let asset: PHAsset
         let url: URL
@@ -614,6 +627,19 @@ final class PhotosMedia: @unchecked Sendable {
     /// fallback if Photos cannot supply a larger local rendition.
     func rendition(_ url: URL, maxPixelSize: Int = analysisPixelSize, allowNetwork: Bool,
                    onPreview: (@Sendable (CGImage) -> Void)? = nil) async throws -> CGImage {
+        return try await PhotosRenditionLoader.load(allowNetwork: allowNetwork,
+            requestedSize: item(url).map { Self.renditionSize(width: $0.asset.pixelWidth, height: $0.asset.pixelHeight, maxPixelSize: maxPixelSize) },
+            local: { try await self.requestRendition(url, maxPixelSize: maxPixelSize, allowNetwork: false, onPreview: onPreview) },
+            cloud: {
+                try await PhotosCloudQueue.shared.perform(priority: .background) {
+                    try await self.requestRendition(url, maxPixelSize: maxPixelSize,
+                        allowNetwork: Self.downloadFromICloud, onPreview: onPreview)
+                }
+            })
+    }
+
+    private func requestRendition(_ url: URL, maxPixelSize: Int = analysisPixelSize, allowNetwork: Bool,
+                   onPreview: (@Sendable (CGImage) -> Void)? = nil) async throws -> CGImage {
         try Task.checkCancellation()
         guard let item = item(url) else { throw Self.failure("This Photos item is no longer available.") }
         let asset = item.asset
@@ -735,10 +761,28 @@ final class PhotosMedia: @unchecked Sendable {
 
     /// Reads a Photos still directly into memory and detects animated formats for
     /// preview playback. Ordinary analysis continues to use small PhotoKit renditions.
-    func previewContent(_ url: URL) async throws -> PhotosPreviewContent {
-        guard let item = item(url), item.isStill else {
+    private func originalPreviewData(_ url: URL, priority: PhotosCloudQueue.Priority) async throws -> (Data, CGImagePropertyOrientation) {
+        try Task.checkCancellation()
+        guard let item = item(url), item.isStill, let identity = item.assetCacheKey else {
             throw Self.failure("This photo is no longer available in Photos.")
         }
+        let key = "\(identity.identifier)|\(identity.modifiedMilliseconds)|\(identity.pixelWidth)x\(identity.pixelHeight)" as NSString
+        if let cached = previewOriginals.object(forKey: key) { return (cached.data, cached.orientation) }
+        let result: (Data, CGImagePropertyOrientation)
+        if Self.downloadFromICloud {
+            result = try await PhotosCloudQueue.shared.perform(priority: priority) {
+                try Task.checkCancellation()
+                return try await self.requestOriginalData(item)
+            }
+        } else {
+            result = try await requestOriginalData(item)
+        }
+        try Task.checkCancellation()
+        previewOriginals.setObject(OriginalBox(data: result.0, orientation: result.1), forKey: key, cost: result.0.count)
+        return result
+    }
+
+    private func requestOriginalData(_ item: Item) async throws -> (Data, CGImagePropertyOrientation) {
         let options = PHImageRequestOptions()
         options.version = .current
         options.deliveryMode = .highQualityFormat
@@ -757,6 +801,17 @@ final class PhotosMedia: @unchecked Sendable {
             }
         }
         try Task.checkCancellation()
+        return result
+    }
+
+    func preloadPreview(_ url: URL) async throws {
+        guard Self.downloadFromICloud else { return }
+        _ = try await originalPreviewData(url, priority: .preload)
+    }
+
+    func previewContent(_ url: URL) async throws -> PhotosPreviewContent {
+        let result = try await originalPreviewData(url, priority: .viewing)
+        guard let item = item(url) else { throw Self.failure("This photo is no longer available in Photos.") }
         let (imageData, orientation) = result
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil) else {
             throw Self.failure("Photos returned an unreadable image.")
@@ -781,24 +836,10 @@ final class PhotosMedia: @unchecked Sendable {
             return try await PreviewFrameReader(asset: VideoAssetFactory.asset(for: resolved)).image(at: time)
         }
         if !item.isStill { return try await PreviewFrameReader(asset: try await videoAsset(resolved).value).image(at: time) }
-        let options = PHImageRequestOptions()
-        options.isNetworkAccessAllowed = Self.downloadFromICloud
-        options.deliveryMode = .highQualityFormat
-        options.version = .current
-        let request = PhotosRequest<CGImage>()
-        let allowNetwork = options.isNetworkAccessAllowed
-        let image: CGImage = try await request.perform { completion in
-            PHImageManager.default().requestImageDataAndOrientation(for: item.asset, options: options) { data, _, orientation, info in
-                guard let data else {
-                    completion(.failure(!allowNetwork ? Self.localUnavailable() : (info?[PHImageErrorKey] as? Error ?? Self.failure("Photos could not read this image. Check your iCloud connection.")))); return
-                }
-                // Apply EXIF orientation without serializing the original to disk.
-                guard let input = CIImage(data: data)?.oriented(orientation),
-                      let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(input, from: input.extent) else {
-                    completion(.failure(Self.failure("Photos returned an unreadable image."))); return
-                }
-                completion(.success(image))
-            }
+        let (data, orientation) = try await originalPreviewData(resolved, priority: .background)
+        guard let input = CIImage(data: data)?.oriented(orientation),
+              let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(input, from: input.extent) else {
+            throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()
         return image

@@ -31,6 +31,9 @@ struct RemoteBeacon: Equatable, Sendable {
         static let accepting = BeaconFlags(rawValue: 1 << 0)
         static let clientConnected = BeaconFlags(rawValue: 1 << 1)
         static let taggerReady = BeaconFlags(rawValue: 1 << 2)
+        // Bits 3...7 are reserved for reconstruction algorithms.
+        static let safireReady = BeaconFlags(rawValue: 1 << 8)
+        static let truforReady = BeaconFlags(rawValue: 1 << 9)
     }
 
     /// `UncoverAlgorithm.allCases` order, one bit each starting at bit 3.
@@ -107,6 +110,8 @@ struct DiscoveredServer: Identifiable, Equatable, Sendable {
     var appVersion: String
     var tcpPort: UInt16
     var keyID: Data
+    var offersSafire: Bool
+    var offersTruFor: Bool
     var offersTagging: Bool
     var availableAlgorithms: Set<String>
     var busy: Bool
@@ -132,7 +137,9 @@ actor RemoteBeaconCache {
         let address = "\(sourceAddress):\(beacon.tcpPort)"
         servers[address] = DiscoveredServer(
             address: address, name: beacon.name, appVersion: beacon.appVersion, tcpPort: beacon.tcpPort,
-            keyID: beacon.keyID, offersTagging: beacon.flags.contains(.taggerReady),
+            keyID: beacon.keyID,
+            offersSafire: beacon.flags.contains(.safireReady),
+            offersTruFor: beacon.flags.contains(.truforReady), offersTagging: beacon.flags.contains(.taggerReady),
             availableAlgorithms: Set(UncoverAlgorithm.allCases.filter { beacon.offers($0) }.map(\.rawValue)),
             busy: beacon.flags.contains(.clientConnected), lastSeen: now)
     }

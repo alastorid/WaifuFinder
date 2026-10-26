@@ -54,6 +54,13 @@ the whole intermediate. The worker exposes three paths over one identical
 forward: score requests (up to four images, processed sequentially), single-image
 evidence, and a warm `--serve` protocol.
 
+Production always uses the original FP32 checkpoint with the optimized native MLX
+path: fused pixel conversion, fast LayerNorm and attention, halo-tiled Noiseprint,
+and bounded decoder/encoder strips. A compiled `CoreMLNoiseprintFP16.mlmodelc`
+companion is ignored, and the app strips the Core ML override from worker environments.
+The runtime no longer selects that companion. Execution stays `trufor-fp32-v2`;
+FP16/Core ML experimental results cannot populate its score cache or join its remote pool.
+
 ## RAM budget (2026-10-25)
 
 The worker now targets a **2,000,000,000-byte process budget**. The original

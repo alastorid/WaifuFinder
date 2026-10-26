@@ -158,7 +158,7 @@ struct RemoteSafireRequest: Codable, Sendable {
               png.prefix(8) == Data([137,80,78,71,13,10,26,10]),
               photo.width>0,photo.height>0,photo.width<=32768,photo.height<=32768,
               photo.url.scheme == "waifu-photos",!photo.id.isEmpty,photo.contentIdentity.count==64,photo.contentIdentity.allSatisfy(\.isHexDigit),
-              modelFingerprint.count==64 else { throw RemoteError.invalidRequest("Invalid lossless SAFIRE request.") }
+              modelFingerprint.count==64,modelFingerprint.allSatisfy(\.isHexDigit) else { throw RemoteError.invalidRequest("Invalid lossless SAFIRE request.") }
         guard let source=CGImageSourceCreateWithData(png as CFData,[kCGImageSourceShouldCache:false] as CFDictionary),
               let props=CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
               let w=props[kCGImagePropertyPixelWidth] as? Int,let h=props[kCGImagePropertyPixelHeight] as? Int,
@@ -169,25 +169,26 @@ struct RemoteSafireRequest: Codable, Sendable {
 extension RemoteServerSession {
     func handleSafire(_ envelope:RemoteEnvelope) async {
         do {
+            try Task.checkCancellation()
             let request=try JSONDecoder().decode(RemoteSafireRequest.self,from:envelope.data)
             try request.validate()
             let result=try await catalog.safire(request)
             try Task.checkCancellation()
             try await connection.send(.safireResult,payload:[UInt8](result.encodedSpatialData()),streamID:envelope.streamID)
         } catch {
-            if !Task.isCancelled { try? await connection.sendError(envelope,Self.describe(error)) }
+            try? await connection.sendError(envelope,Task.isCancelled ? .cancelled:Self.describe(error))
         }
         await resources.finish(streamID:envelope.streamID)
     }
 }
 
 extension RemoteClient {
-    var offersSafire:Bool { status.isConnected && capabilities?.safire?.available==true }
+    var offersSafire:Bool { status.isConnected && capabilities?.offersSafire==true }
     func safire(png:Data,photo:LineagePhoto) async throws -> SafireSpatialResult {
         guard offersSafire,let capability=capabilities?.safire,let connection else { throw RemoteError.modelUnavailable("No SAFIRE worker is connected.") }
         let request=RemoteSafireRequest(photo:photo,png:png,modelFingerprint:capability.modelFingerprint)
         try request.validate()
-        let response=try await connection.request(.safireRequest,payload:[UInt8](JSONEncoder().encode(request)))
+        let response=try await connection.request(.safireRequest,payload:[UInt8](JSONEncoder().encode(request)),cancelStreamOnly:true)
         guard response.opcode == .safireResult else { throw RemoteError.framing("Unexpected SAFIRE response") }
         let result=try SafireSpatialResult.decodeSpatialData(response.data)
         try result.validate()

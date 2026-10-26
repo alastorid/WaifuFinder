@@ -5,21 +5,19 @@ struct TruForConfiguration:Sendable {
     static let sourceSHA="ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844"
     static let weightsSHA="3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c"
     static let runtime="trufor-native-v1"
-    // Core ML FP16 is used for the DnCNN body when the compiled companion is
-    // present; the CMX encoder and detection heads stay on native FP32.
-    private static let nativeExecution="trufor-fp32-v2"
-    private static let coreMLExecution="trufor-coreml-dncnn-fp16-v1"
-    static var execution:String {
-        guard let directory=availableDirectory,
-              FileManager.default.fileExists(atPath:directory.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc").path) else {
-            return nativeExecution
-        }
-        return coreMLExecution
-    }
+    /// Original checkpoint, native FP32 throughout, with the optimized MLX kernels.
+    /// A companion model on disk must never silently select FP16 inference.
+    static let execution = "trufor-fp32-v2"
     static var scoreFingerprint:String { LineageIdentity.hash(weightsSHA+"|"+execution) }
     static let preprocessing="trufor-native-rgb-div256-v1"
     let directory:URL
-    var fingerprint:String { Self.weightsSHA + "|" + Self.execution }
+    var fingerprint:String { Self.weightsSHA }
+    static func workerEnvironment(_ inherited: [String: String]) -> [String: String] {
+        var environment = inherited
+        environment["WAIFU_TRUFOR_PRECISION"] = "fp32"
+        environment.removeValue(forKey: "WAIFU_TRUFOR_COREML_FP16_MODEL")
+        return environment
+    }
     static var pointerURL:URL { SeedVR2Configuration.configurationURL.deletingLastPathComponent().appendingPathComponent("trufor-model.txt") }
     static var executable:URL? { Bundle.main.url(forResource:"waifu-trufor",withExtension:nil,subdirectory:"Runtime") }
     static var availableDirectory:URL? {

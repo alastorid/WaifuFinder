@@ -51,6 +51,10 @@ struct RemoteServerCard: View {
                     }
                     if let capabilities {
                         capability("Tagging", available: capabilities.offersRemoteTagging)
+                        capability("SAFIRE", available: capabilities.offersSafire)
+                        if WaifuDistribution.isNonCommercialOnly {
+                            capability("TruFor", available: capabilities.offersTruFor)
+                        }
                         ForEach(capabilities.uncover, id: \.algorithm) { entry in
                             capability(UncoverAlgorithm(rawValue: entry.algorithm)?.label ?? entry.algorithm,
                                        available: entry.available)

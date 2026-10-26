@@ -1,0 +1,156 @@
+{
+  "status": "passed",
+  "scope": "Original FP32 native MLX activation parity after disabling automatic Core ML FP16 companion selection; no Python inference.",
+  "execution": "trufor-fp32-v2",
+  "weightsSHA256": "3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c",
+  "referenceInputSHA256": "008bb8e2121edebb81d275504a9e6bb8205127b043f5206200658ce7a2a5948c",
+  "validation": "TruFor native weights verified \u00b7 fp32 \u00b7 Apple M3",
+  "results": [
+    {
+      "tensor": "confidence_logits",
+      "shape": [
+        1,
+        129,
+        161,
+        1
+      ],
+      "maximumAbsoluteError": 0.0004062652587890625,
+      "relativeRMS": 2.8231118739814145e-05,
+      "passed": true
+    },
+    {
+      "tensor": "detection_statistics",
+      "shape": [
+        1,
+        8
+      ],
+      "maximumAbsoluteError": 0.0002346038818359375,
+      "relativeRMS": 2.074002688121545e-05,
+      "passed": true
+    },
+    {
+      "tensor": "localization_logits",
+      "shape": [
+        1,
+        129,
+        161,
+        2
+      ],
+      "maximumAbsoluteError": 0.00013178586959838867,
+      "relativeRMS": 2.3787835577390287e-05,
+      "passed": true
+    },
+    {
+      "tensor": "noiseprint",
+      "shape": [
+        1,
+        129,
+        161,
+        1
+      ],
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080205,
+      "passed": true
+    },
+    {
+      "tensor": "anomaly",
+      "shape": [
+        1,
+        129,
+        161
+      ],
+      "maximumAbsoluteError": 4.1425228118896484e-05,
+      "relativeRMS": 3.0743466021390104e-05,
+      "passed": true,
+      "maskIoU": 1
+    },
+    {
+      "tensor": "noiseprint",
+      "shape": [
+        1,
+        129,
+        161
+      ],
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080205,
+      "passed": true
+    },
+    {
+      "tensor": "reliability",
+      "shape": [
+        1,
+        129,
+        161
+      ],
+      "maximumAbsoluteError": 2.4616718292236328e-05,
+      "relativeRMS": 3.657997788890688e-06,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "shape": [
+        1
+      ],
+      "maximumAbsoluteError": 3.7848949432373047e-06,
+      "relativeRMS": 1.8457864329174354e-05,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "shape": [
+        1
+      ],
+      "maximumAbsoluteError": 3.7848949432373047e-06,
+      "relativeRMS": 1.8457864329174354e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_1",
+      "shape": [
+        1,
+        33,
+        41,
+        64
+      ],
+      "maximumAbsoluteError": 0.0006871223449707031,
+      "relativeRMS": 7.888655199055288e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_2",
+      "shape": [
+        1,
+        17,
+        21,
+        128
+      ],
+      "maximumAbsoluteError": 0.0007079839706420898,
+      "relativeRMS": 8.403686793181899e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_3",
+      "shape": [
+        1,
+        9,
+        11,
+        320
+      ],
+      "maximumAbsoluteError": 0.0003489255905151367,
+      "relativeRMS": 4.173157208189354e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_4",
+      "shape": [
+        1,
+        5,
+        6,
+        512
+      ],
+      "maximumAbsoluteError": 0.00010633468627929688,
+      "relativeRMS": 2.218253235475884e-05,
+      "passed": true
+    }
+  ]
+}

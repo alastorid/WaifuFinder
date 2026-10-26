@@ -79,6 +79,21 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
 
     var offersRemoteTagging: Bool { tagger?.available == true }
 
+    var offersSafire: Bool {
+        guard let safire else { return false }
+        return safire.available && safire.modelFingerprint.count == 64
+            && safire.modelFingerprint.allSatisfy(\.isHexDigit)
+            && safire.runtimeRevision == SafireSpatialResult.runtimeRevision
+            && safire.preprocessingVersion == SafireSpatialResult.preprocessingVersion
+    }
+
+    var offersTruFor: Bool {
+        guard WaifuDistribution.isNonCommercialOnly, let trufor else { return false }
+        return trufor.available && trufor.modelFingerprint == TruForConfiguration.weightsSHA
+            && trufor.runtimeRevision == TruForConfiguration.execution
+            && trufor.preprocessingVersion == TruForConfiguration.preprocessing
+    }
+
     /// The server's `UpscalerCapabilities` for `algorithm`, translated back into
     /// the local type so `RemoteUncoverBackend.capabilities()` can return it
     /// directly.

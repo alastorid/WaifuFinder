@@ -1,7 +1,8 @@
 import Foundation
 
 /// Bounded tagging preparation and processing. Local inference prefetches one
-/// batch; remote inference uses an ordered window of asynchronous requests.
+/// batch in the serial helper; production local inference uses two in-flight
+/// batches to overlap model-input rendering with worker execution.
 enum TaggingBatchPipeline {
     /// Keeps a bounded window of asynchronous operations alive, committing their
     /// results in input order by default, or on completion for independent updates.
