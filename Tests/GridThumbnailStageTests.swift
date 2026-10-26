@@ -427,16 +427,20 @@ private func testStageDeadline(_ pixels: CGImage) async {
 
 @MainActor
 private func testStageScroll() async {
-    let generation = UUID(), reads = StageReads(), stage = GridThumbnailStage()
+    var time = ContinuousClock.now
+    let generation = UUID(), reads = StageReads()
+    let stage = GridThumbnailStage(now: { time })
     defer { stage.stop(); reads.finishAll() }
     let frames = (0..<12).map(stageFrame), size = CGSize(width: 263, height: 130)
-    let started = ContinuousClock.now
     stage.submit(stageInput(1, frames, generation: generation), viewportSize: size) { await reads.read($0) }
     await stageWait { reads.waiting.count == 2 }
-    try? await Task.sleep(for: .milliseconds(180))
+    time = time.advanced(by: .milliseconds(180))
     stage.updateViewport(CGRect(x: 0, y: 264, width: 263, height: 130))
     await stageWait { reads.waiting.contains(frames[4].id) && reads.waiting.contains(frames[5].id) }
     check(stage.current == nil, "scrolling during preparation does not prematurely show the batch")
-    await stageWait { stage.current != nil }
-    check(started.duration(to: .now) < .milliseconds(450), "viewport updates retain the original 300 ms deadline")
+    // Trigger a refresh at the original deadline. A scroll that reset the
+    // deadline to 480 ms would fail this check, regardless of runner load.
+    time = time.advanced(by: .milliseconds(120))
+    stage.updateViewport(CGRect(x: 0, y: 265, width: 263, height: 130))
+    check(stage.current != nil, "viewport updates retain the original 300 ms deadline")
 }

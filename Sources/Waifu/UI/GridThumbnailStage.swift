@@ -264,8 +264,13 @@ final class GridThumbnailStage: ObservableObject {
     private var horizontalOffsets: [String: CGFloat] = [:]
     private var handoffs: [UUID: Task<Void, Never>] = [:]
     private let preparationLimit: Duration
+    private let readTime: @MainActor () -> ContinuousClock.Instant
 
-    init(preparationLimit: Duration = .milliseconds(300)) { self.preparationLimit = preparationLimit }
+    init(preparationLimit: Duration = .milliseconds(300),
+         now: @escaping @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+        self.preparationLimit = preparationLimit
+        self.readTime = now
+    }
 
     func submit(_ input: GridStageInput, viewportSize: CGSize, animated: Bool = false,
                 load: @escaping @MainActor (AnalyzedFrame) async -> CGImage?) {
@@ -279,7 +284,7 @@ final class GridThumbnailStage: ObservableObject {
             viewport = CGRect(origin: .zero, size: viewportSize)
             horizontalOffsets.removeAll()
         }
-        let next = Request(key: input.key, deadline: ContinuousClock.now.advanced(by: preparationLimit),
+        let next = Request(key: input.key, deadline: readTime().advanced(by: preparationLimit),
                            animated: animated, load: load)
         request = next
         let ticket = next.ticket
@@ -333,7 +338,7 @@ final class GridThumbnailStage: ObservableObject {
                 request.pixels.pin(image, identity: identity)
             }
         }
-        if wanted.allSatisfy({ request.pixels.contains($0) }) || ContinuousClock.now >= request.deadline {
+        if wanted.allSatisfy({ request.pixels.contains($0) }) || readTime() >= request.deadline {
             commit(request, snapshot: snapshot)
             return
         }
