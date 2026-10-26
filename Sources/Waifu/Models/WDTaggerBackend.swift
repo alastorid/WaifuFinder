@@ -117,6 +117,7 @@ actor WDTaggerBackend: TaggerBackend {
 
     private func preparedInput(batch: [CGImage]) throws -> Data {
         try Task.checkCancellation()
+        let renderContext = context
         var input = Data(count: WDTaggerWorker.inputBytes)
         try input.withUnsafeMutableBytes { storage in
             let pointer = storage.baseAddress!
@@ -124,7 +125,7 @@ actor WDTaggerBackend: TaggerBackend {
             for (index, image) in batch.enumerated() {
                 try Task.checkCancellation()
                 try autoreleasepool {
-                    try Self.renderRGBA(image, context: context, to: pointer.advanced(by: index * stride))
+                    try Self.renderRGBA(image, context: renderContext, to: pointer.advanced(by: index * stride))
                 }
             }
             // Duplicate only the last real row; never invent an output frame.
@@ -231,7 +232,8 @@ private actor WDTaggerInference {
     private func upload(_ input: Data) throws {
         try Task.checkCancellation()
         guard input.count == WDTaggerWorker.inputBytes else { throw TaggerError.invalidBatch }
-        input.withUnsafeBytes { worker.pointer.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+        let destination = worker.pointer
+        input.withUnsafeBytes { destination.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
     }
     func quantized(input: Data, count: Int) throws -> [QuantizedTagRow] {
         try upload(input)
