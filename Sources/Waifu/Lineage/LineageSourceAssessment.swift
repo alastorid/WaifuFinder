@@ -50,6 +50,9 @@ actor LineageSourceAssessor {
     }
     func assessPixels(parent:CGImage,child:CGImage,parentID:String,childID:String,parentDate:Date,childDate:Date) async throws -> LineageSourceEvidence? {
         try Task.checkCancellation()
+        // A local reference keeps synchronous buffer closures from capturing
+        // actor self. Older SDKs do not mark immutable CIImage as Sendable.
+        let renderContext = context
         guard parentDate<childDate else { return nil }
         let aspectA=Double(parent.width)/Double(parent.height),aspectB=Double(child.width)/Double(child.height)
         let sameAspect=abs(log(aspectA/aspectB))<0.001
@@ -70,7 +73,7 @@ actor LineageSourceAssessor {
             let difference=resampled.cropped(to:rect).applyingFilter("CIDifferenceBlendMode",parameters:[kCIInputBackgroundImageKey:target])
             let average=difference.applyingFilter("CIAreaAverage",parameters:[kCIInputExtentKey:CIVector(cgRect:rect)])
             var pixel=[Float](repeating:0,count:4)
-            pixel.withUnsafeMutableBytes { context.render(average,toBitmap:$0.baseAddress!,rowBytes:16,bounds:CGRect(x:0,y:0,width:1,height:1),format:.RGBAf,colorSpace:CrystalOrbDifferenceRenderer.color) }
+            pixel.withUnsafeMutableBytes { renderContext.render(average,toBitmap:$0.baseAddress!,rowBytes:16,bounds:CGRect(x:0,y:0,width:1,height:1),format:.RGBAf,colorSpace:CrystalOrbDifferenceRenderer.color) }
             let error=Double(max(pixel[0],pixel[1],pixel[2]))
             guard error.isFinite,error<=0.008 else { continue }
             let scale=min(1,CGFloat(256)/CGFloat(max(child.width,child.height)))
@@ -109,7 +112,7 @@ actor LineageSourceAssessor {
         let average=pixelsA.applyingFilter("CIDifferenceBlendMode",parameters:[kCIInputBackgroundImageKey:pixelsB])
             .applyingFilter("CIAreaAverage",parameters:[kCIInputExtentKey:CIVector(cgRect:valid)])
         var pixel=[Float](repeating:0,count:4)
-        pixel.withUnsafeMutableBytes { context.render(average,toBitmap:$0.baseAddress!,rowBytes:16,bounds:CGRect(x:0,y:0,width:1,height:1),format:.RGBAf,colorSpace:CrystalOrbDifferenceRenderer.color) }
+        pixel.withUnsafeMutableBytes { renderContext.render(average,toBitmap:$0.baseAddress!,rowBytes:16,bounds:CGRect(x:0,y:0,width:1,height:1),format:.RGBAf,colorSpace:CrystalOrbDifferenceRenderer.color) }
         let error=Double(max(pixel[0],pixel[1],pixel[2]))
         guard error.isFinite,error<=0.008 else { return nil }
         return .init(parentID:parentID,childID:childID,parentDate:parentDate,childDate:childDate,
