@@ -1922,10 +1922,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 let sourceFrames = existingFrames.filter {
                     VideoCollection.sourceIndex($0.id.sampleIndex) == sourceIndex
                 }
-                let localAnchor = sourceFrames
-                    .filter { localRange.contains($0.timeSeconds - member.offset) }
-                    .min { abs($0.timeSeconds - member.offset - (localRange.lowerBound + localRange.upperBound) / 2)
-                        < abs($1.timeSeconds - member.offset - (localRange.lowerBound + localRange.upperBound) / 2) }
+                let localCenter: Double = (localRange.lowerBound + localRange.upperBound) / 2
+                let localCandidates: [AnalyzedFrame] = sourceFrames.filter { frame in
+                    let localTime: Double = frame.timeSeconds - member.offset
+                    return localRange.contains(localTime)
+                }
+                let localAnchor: AnalyzedFrame? = localCandidates.min { left, right in
+                    let leftDistance: Double = abs(left.timeSeconds - member.offset - localCenter)
+                    let rightDistance: Double = abs(right.timeSeconds - member.offset - localCenter)
+                    return leftDistance < rightDistance
+                }
                 let timeline = try await SourceFrameTimeline.load(source: member.video.url, around: localRange)
                 let ordinalOffset: Int
                 if let localAnchor {
@@ -1940,9 +1946,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             return maps
         }
 
-        let anchor = existingFrames.min {
-            abs($0.timeSeconds - (timeRange.lowerBound + timeRange.upperBound) / 2)
-                < abs($1.timeSeconds - (timeRange.lowerBound + timeRange.upperBound) / 2)
+        let center: Double = (timeRange.lowerBound + timeRange.upperBound) / 2
+        let anchor: AnalyzedFrame? = existingFrames.min { left, right in
+            let leftDistance: Double = abs(left.timeSeconds - center)
+            let rightDistance: Double = abs(right.timeSeconds - center)
+            return leftDistance < rightDistance
         }
         let timeline = try await SourceFrameTimeline.load(source: video.url, around: timeRange)
         let ordinalOffset = anchor.map { $0.id.sampleIndex - timeline.index(at: $0.timeSeconds) }
