@@ -303,7 +303,9 @@ final class PhotoResourceDataReader: @unchecked Sendable {
                                 dataReceivedHandler: dataReceived,
                                 completionHandler: completion)
         }
-        cancelRequest = { manager.cancelDataRequest($0) }
+        // Resolve the shared manager at the call site instead of capturing
+        // an SDK object that older Photos headers do not mark Sendable.
+        cancelRequest = { PHAssetResourceManager.default().cancelDataRequest($0) }
     }
 
     /// Injection seam used to pin cancellation without requiring a real Photos library.
