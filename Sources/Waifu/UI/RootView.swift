@@ -190,7 +190,7 @@ struct RootView: View {
         .alert("Error", isPresented: .constant(session.errorMessage != nil)) {
             Button("OK") { session.errorMessage = nil }
         } message: {
-            Text(session.errorMessage ?? "")
+            Text(ErrorAlertText.sanitized(session.errorMessage ?? ""))
         }
     }
 

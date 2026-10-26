@@ -115,7 +115,7 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
             try Task.checkCancellation()
             error = albums.allSatisfy({ $0.count == 0 }) ? "No accessible albums contain photos." : nil
         } catch is CancellationError { return }
-        catch { self.error = error.localizedDescription }
+        catch { self.error = ErrorAlertText.sanitized(error.localizedDescription) }
         loading = false
     }
 
@@ -135,7 +135,9 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
                 }
                 session.loadVideo(at: url)
             } catch {
-                if !Task.isCancelled && selectionGeneration == generation { self.error = error.localizedDescription }
+                if !Task.isCancelled && selectionGeneration == generation {
+                    self.error = ErrorAlertText.sanitized(error.localizedDescription)
+                }
             }
             if selectionGeneration == generation { opening = false }
         }

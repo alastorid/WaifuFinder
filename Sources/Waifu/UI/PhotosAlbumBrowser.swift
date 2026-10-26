@@ -31,7 +31,7 @@ struct PhotosFavoriteButton: View {
                         userInfo: ["assetIdentifiers": identifiers, "isFavorite": next]
                     )
                 } catch {
-                    self.error = error.localizedDescription
+                    self.error = ErrorAlertText.sanitized(error.localizedDescription)
                 }
                 isUpdating = false
             }

@@ -9,7 +9,7 @@ enum PhotosAppIntegration {
             } catch {
                 let alert = NSAlert()
                 alert.messageText = "Couldn’t show this photo in Photos"
-                alert.informativeText = error.localizedDescription
+                alert.informativeText = ErrorAlertText.sanitized(error.localizedDescription)
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
             }
