@@ -64,117 +64,7 @@ struct FrameGridView: View {
     var body: some View {
         GeometryReader { geometry in
             Group {
-                ScrollView(.vertical, showsIndicators: true) {
-                    stagedLayout
-                }
-                .scrollPosition($verticalScrollPosition)
-                .coordinateSpace(name: "frame-grid-viewport")
-                .focusable()
-                .focusEffectDisabled()
-                .focused($isFocused)
-                .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .home, .end, .return]) { press in
-                    handleKeyPress(press)
-                }
-                .onKeyPress(keys: ["a"]) { press in
-                    guard press.modifiers.contains(.command),
-                          !press.modifiers.contains(.option), !press.modifiers.contains(.control),
-                          session.previewFrame == nil, session.uncover == nil, !session.crystalOrbIsOpen else { return .ignored }
-                    session.selectAllDisplayedFrames()
-                    return .handled
-                }
-                .onChange(of: session.frames.isEmpty) { _, empty in
-                    if !empty { isFocused = true }
-                }
-                .onAppear {
-                    thumbnailStage.onCommit = { [weak session] snapshot in
-                        session?.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
-                    }
-                    if let snapshot = thumbnailStage.current {
-                        session.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
-                    }
-                    prepareStage(size: geometry.size)
-                    if let snapshot = thumbnailStage.current {
-                        thumbnailPrefetcher.install(snapshot: snapshot, session: session)
-                    }
-                }
-                .onDisappear { thumbnailStage.stop(); thumbnailPrefetcher.stop() }
-                .onReceive(session.gridLayoutUpdates) { _ in
-                    prepareStage(size: geometry.size)
-                }
-                .onChange(of: geometry.size) { _, _ in
-                    prepareStage(size: geometry.size)
-                }
-                .onChange(of: session.usesGroupRows) { _, _ in
-                    prepareStage(size: geometry.size)
-                }
-                .onChange(of: session.thumbnailGeneration) { _, _ in
-                    prepareStage(size: geometry.size)
-                }
-                .onChange(of: squareThumbnails) { _, _ in prepareStage(size: geometry.size) }
-                .onChange(of: zoomTarget) { _, _ in
-                    prepareStage(size: geometry.size, animated: true)
-                }
-                // A pinch snaps its scaled base to the zoom ladder; each rung the
-                // gesture crosses commits an animated reflow like Photos.app.
-                .simultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            let base = pinchBaseWidth ?? zoomTarget
-                            pinchBaseWidth = base
-                            let candidate = GridZoom.snapped(base * value.magnification)
-                            if candidate != zoomTarget { zoomTarget = candidate }
-                        }
-                        .onEnded { _ in pinchBaseWidth = nil }
-                )
-                .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
-                    scrollVisibility.viewport = rect
-                    thumbnailStage.updateViewport(rect)
-                }
-                .onChange(of: thumbnailStage.current?.key) { old, _ in
-                    if let snapshot = thumbnailStage.current {
-                        thumbnailPrefetcher.install(snapshot: snapshot, session: session)
-                        if old?.generation != snapshot.key.generation {
-                            verticalScrollPosition.scrollTo(y: 0)
-                        }
-                    }
-                    if let id = session.gridNavigationFrameID, isNavigationTarget(id) {
-                        committedNavigation = id
-                        scroll(to: id)
-                    }
-                }
-                .onPreferenceChange(GridRowViewportPreferenceKey.self) { rowViewports in
-                    let visible = Set(rowViewports.compactMap { token, rect -> String? in
-                        rect.maxY > 0 && rect.minY < geometry.size.height ? token : nil
-                    })
-                    thumbnailPrefetcher.setVisibleRows(visible)
-                }
-                .onReceive(session.gridScrollRequests) { id in
-                    guard isNavigationTarget(id) else { return }
-                    committedNavigation = id
-                    scroll(to: id)
-                }
-                .onChange(of: session.focusedFrameID) { _, id in
-                    // A focus publication can redraw the grid before a queued
-                    // scroll event arrives. Reconcile the committed selection too.
-                    guard let id, isNavigationTarget(id) else { return }
-                    committedNavigation = id
-                    scroll(to: id)
-                }
-                // @Published emits before its setter commits. Scrolling here can
-                // force a render; defer it so that render sees the closed preview.
-                .onReceive(session.$crystalOrbIsOpen.dropFirst().receive(on: DispatchQueue.main)) { active in
-                    if !active, !session.crystalOrbIsOpen { restoreKeyboardFocus(reason: "Crystal Orb closed") }
-                }
-                .onReceive(session.previewFrameUpdates.dropFirst()) { frame in
-                    guard frame == nil, session.previewFrame == nil else { return }
-                    restoreKeyboardFocus(reason: "preview closed")
-                }
-                // Uncover can move focus into its controls and closes independently
-                // of previewFrame, so restore grid navigation on this path too.
-                .onReceive(session.$uncover.dropFirst().receive(on: DispatchQueue.main)) { uncover in
-                    guard uncover == nil, session.uncover == nil else { return }
-                    restoreKeyboardFocus(reason: "uncover closed")
-                }
+                gridWithNavigation(size: geometry.size)
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -182,6 +72,130 @@ struct FrameGridView: View {
             FrameGridStatusView(session: session, stage: thumbnailStage)
         }
         .onAppear { if !session.frames.isEmpty { isFocused = true } }
+    }
+
+    // Keep independent modifier groups behind opaque view boundaries so older
+    // Swift compilers do not solve the entire grid's generic tree at once.
+    private var gridWithInput: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            stagedLayout
+        }
+        .scrollPosition($verticalScrollPosition)
+        .coordinateSpace(name: "frame-grid-viewport")
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .home, .end, .return]) { press in
+            handleKeyPress(press)
+        }
+        .onKeyPress(keys: ["a"]) { press in
+            guard press.modifiers.contains(.command),
+                  !press.modifiers.contains(.option), !press.modifiers.contains(.control),
+                  session.previewFrame == nil, session.uncover == nil, !session.crystalOrbIsOpen else { return .ignored }
+            session.selectAllDisplayedFrames()
+            return .handled
+        }
+        .onChange(of: session.frames.isEmpty) { _, empty in
+            if !empty { isFocused = true }
+        }
+    }
+
+    private func gridWithLifecycle(size: CGSize) -> some View {
+        gridWithInput
+        .onAppear {
+            thumbnailStage.onCommit = { [weak session] snapshot in
+                session?.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+            }
+            if let snapshot = thumbnailStage.current {
+                session.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+            }
+            prepareStage(size: size)
+            if let snapshot = thumbnailStage.current {
+                thumbnailPrefetcher.install(snapshot: snapshot, session: session)
+            }
+        }
+        .onDisappear { thumbnailStage.stop(); thumbnailPrefetcher.stop() }
+        .onReceive(session.gridLayoutUpdates) { _ in
+            prepareStage(size: size)
+        }
+        .onChange(of: size) { _, _ in
+            prepareStage(size: size)
+        }
+        .onChange(of: session.usesGroupRows) { _, _ in
+            prepareStage(size: size)
+        }
+        .onChange(of: session.thumbnailGeneration) { _, _ in
+            prepareStage(size: size)
+        }
+        .onChange(of: squareThumbnails) { _, _ in prepareStage(size: size) }
+        .onChange(of: zoomTarget) { _, _ in
+            prepareStage(size: size, animated: true)
+        }
+        // A pinch snaps its scaled base to the zoom ladder; each rung the
+        // gesture crosses commits an animated reflow like Photos.app.
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    let base = pinchBaseWidth ?? zoomTarget
+                    pinchBaseWidth = base
+                    let candidate = GridZoom.snapped(base * value.magnification)
+                    if candidate != zoomTarget { zoomTarget = candidate }
+                }
+                .onEnded { _ in pinchBaseWidth = nil }
+        )
+    }
+
+    private func gridWithNavigation(size: CGSize) -> some View {
+        gridWithLifecycle(size: size)
+        .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
+            scrollVisibility.viewport = rect
+            thumbnailStage.updateViewport(rect)
+        }
+        .onChange(of: thumbnailStage.current?.key) { old, _ in
+            if let snapshot = thumbnailStage.current {
+                thumbnailPrefetcher.install(snapshot: snapshot, session: session)
+                if old?.generation != snapshot.key.generation {
+                    verticalScrollPosition.scrollTo(y: 0)
+                }
+            }
+            if let id = session.gridNavigationFrameID, isNavigationTarget(id) {
+                committedNavigation = id
+                scroll(to: id)
+            }
+        }
+        .onPreferenceChange(GridRowViewportPreferenceKey.self) { rowViewports in
+            let visible = Set(rowViewports.compactMap { token, rect -> String? in
+                rect.maxY > 0 && rect.minY < size.height ? token : nil
+            })
+            thumbnailPrefetcher.setVisibleRows(visible)
+        }
+        .onReceive(session.gridScrollRequests) { id in
+            guard isNavigationTarget(id) else { return }
+            committedNavigation = id
+            scroll(to: id)
+        }
+        .onChange(of: session.focusedFrameID) { _, id in
+            // A focus publication can redraw the grid before a queued
+            // scroll event arrives. Reconcile the committed selection too.
+            guard let id, isNavigationTarget(id) else { return }
+            committedNavigation = id
+            scroll(to: id)
+        }
+        // @Published emits before its setter commits. Scrolling here can
+        // force a render; defer it so that render sees the closed preview.
+        .onReceive(session.$crystalOrbIsOpen.dropFirst().receive(on: DispatchQueue.main)) { active in
+            if !active, !session.crystalOrbIsOpen { restoreKeyboardFocus(reason: "Crystal Orb closed") }
+        }
+        .onReceive(session.previewFrameUpdates.dropFirst()) { frame in
+            guard frame == nil, session.previewFrame == nil else { return }
+            restoreKeyboardFocus(reason: "preview closed")
+        }
+        // Uncover can move focus into its controls and closes independently
+        // of previewFrame, so restore grid navigation on this path too.
+        .onReceive(session.$uncover.dropFirst().receive(on: DispatchQueue.main)) { uncover in
+            guard uncover == nil, session.uncover == nil else { return }
+            restoreKeyboardFocus(reason: "uncover closed")
+        }
     }
 
     // MARK: - Layout

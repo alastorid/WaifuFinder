@@ -63,9 +63,11 @@ if [ "${#TESTS[@]}" -eq 0 ]; then
     exit 1
 fi
 
+"$SWIFTC" --version
 echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $TARGET"
 "$SWIFTC" \
     -Onone \
+    -continue-building-after-errors \
     -swift-version 6 \
     -sdk "$SDK" \
     -target "$TARGET" \
