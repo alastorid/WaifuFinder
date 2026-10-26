@@ -9,15 +9,18 @@ func compareCoreML(
   weights: URL, modelURL: URL, inputsURL: URL, rounds: Int,
   tile: WDMetal.GEMMTile, compactBias: Bool, probabilities: String?, includeOriginal: Bool = false,
   fusedQKV: Bool = false, currentReference: Bool = false,
-  gemmOverrides: [WDNativeTagger.GEMMOperation: [WDMetal.GEMMTile]] = [:], attentionQueryRows: Int = 32
+  gemmOverrides: [WDNativeTagger.GEMMOperation: [WDMetal.GEMMTile]] = [:], attentionQueryRows: Int = 32,
+  coremlUnits: String = "cpuAndGPU", batchSize: Int
 ) throws -> [String: Any] {
-  let batch = 8
-  let frames = 64
+  let batch = batchSize
   let row = 3 * 448 * 448
   let inputs = try Data(contentsOf: inputsURL, options: .mappedIfSafe)
-  guard inputs.count == frames * row * 4, rounds > 0 else {
-    throw WDNativeError.invalid("Paired comparison requires the retained 64-frame corpus")
+  guard batch > 0, inputs.count > 0, inputs.count % (row * 4) == 0,
+    inputs.count / (row * 4) % batch == 0, rounds > 0
+  else {
+    throw WDNativeError.invalid("Input corpus must contain whole RGB Float32 frames in complete batches")
   }
+  let frames = inputs.count / (row * 4)
   // Pin the released v3 control even if future production defaults change.
   let base = currentReference ? try WDNativeTagger(
     weights: weights, gemmTile: .baseline, simdNorm: false,
@@ -28,13 +31,24 @@ func compareCoreML(
       gemmOverrides: gemmOverrides, attentionQueryRows: attentionQueryRows)
   let original = currentReference ? base : includeOriginal ? native.variant(gemmTile: .baseline, fusedQKV: false, gemmOverrides: [:], attentionQueryRows: 32) : nil
   let configuration = MLModelConfiguration()
-  configuration.computeUnits = .cpuAndGPU
+  switch coremlUnits {
+  case "all": configuration.computeUnits = .all
+  case "cpuAndGPU": configuration.computeUnits = .cpuAndGPU
+  case "cpuAndNeuralEngine": configuration.computeUnits = .cpuAndNeuralEngine
+  default: throw WDNativeError.invalid("--coreml-units must be all, cpuAndGPU, or cpuAndNeuralEngine")
+  }
   configuration.allowLowPrecisionAccumulationOnGPU = false
   let coreml = try MLModel(contentsOf: modelURL, configuration: configuration)
   guard let inputName = coreml.modelDescription.inputDescriptionsByName.keys.first,
     let outputName = coreml.modelDescription.outputDescriptionsByName.keys.first
   else { throw WDNativeError.invalid("Missing Core ML features") }
-  let array = try MLMultiArray(shape: [8, 3, 448, 448], dataType: .float32)
+  guard let inputShape = coreml.modelDescription.inputDescriptionsByName[inputName]?
+      .multiArrayConstraint?.shape.map(\.intValue),
+    inputShape == [batch, 3, 448, 448]
+  else {
+    throw WDNativeError.invalid("Core ML model input shape does not match --batch-size \(batch)")
+  }
+  let array = try MLMultiArray(shape: [batch, 3, 448, 448].map(NSNumber.init(value:)), dataType: .float32)
   guard array.strides.map(\.intValue) == [row, 448 * 448, 448, 1] else {
     throw WDNativeError.invalid("Noncontiguous Core ML input")
   }
@@ -46,6 +60,7 @@ func compareCoreML(
   var coremlSweeps: [Double] = []
   var nativeProbabilities = Data()
   var coremlProbabilities = Data()
+  var coremlOutputStrides: [Int]?
   var originalProbabilities = Data()
   var originalSweeps: [Double] = []
   let thermalBefore = ProcessInfo.processInfo.thermalState.rawValue
@@ -59,7 +74,16 @@ func compareCoreML(
         let x = inputs.withUnsafeBytes { bytes -> MLXArray in
           let slice = UnsafeRawBufferPointer(
             rebasing: bytes[(offset * row * 4)..<((offset + batch) * row * 4)])
-          array.dataPointer.copyMemory(from: slice.baseAddress!, byteCount: slice.count)
+          do {
+            try array.withUnsafeMutableBytes { buffer, strides in
+              guard strides == [row, 448 * 448, 448, 1],
+                let destination = buffer.baseAddress, let source = slice.baseAddress
+              else { throw WDNativeError.invalid("Unexpected Core ML input buffer layout") }
+              destination.copyMemory(from: source, byteCount: slice.count)
+            }
+          } catch {
+            preconditionFailure("Unable to populate Core ML input: \(error)")
+          }
           if currentReference {
             let floats = slice.assumingMemoryBound(to: Float.self)
             let plane = 448 * 448
@@ -141,7 +165,8 @@ func compareCoreML(
         // Materialize only after both predictions, outside their timers.
         if round == 0 {
           guard let output = result?.featureValue(for: outputName)?.multiArrayValue,
-            output.count == batch * 10861, let y, y.shape == [batch, 10861]
+            output.dataType == .float32,
+            output.shape.map(\.intValue) == [batch, 10861], let y, y.shape == [batch, 10861]
           else { throw WDNativeError.invalid("Invalid paired classifier output") }
           y.asArray(Float.self).withUnsafeBytes { nativeProbabilities.append(contentsOf: $0) }
           if let originalY {
@@ -149,7 +174,18 @@ func compareCoreML(
               originalProbabilities.append(contentsOf: $0)
             }
           }
-          let values = (0..<output.count).map { output[$0].floatValue }
+          let rowStride = output.strides[0].intValue
+          let columnStride = output.strides[1].intValue
+          coremlOutputStrides = [rowStride, columnStride]
+          let values = try output.withUnsafeBytes { buffer -> [Float] in
+            guard let baseAddress = buffer.baseAddress else {
+              throw WDNativeError.invalid("Missing Core ML output bytes")
+            }
+            let base = baseAddress.assumingMemoryBound(to: Float.self)
+            return (0..<batch).flatMap { row in
+              (0..<10861).map { column in base[row * rowStride + column * columnStride] }
+            }
+          }
           values.withUnsafeBytes { coremlProbabilities.append(contentsOf: $0) }
         }
       }
@@ -184,15 +220,17 @@ func compareCoreML(
     "fusedQKV": fusedQKV,
     "reference": currentReference ? "current-rgba-fused-v3" : "unfused-float32-v1",
     "nativeInputLayout": currentReference ? "RGBA-uint8" : "RGB-planar-float32",
+    "coremlOutputStrides": coremlOutputStrides ?? [],
     "nativePredictionFPS": Double(frames) / medianNative,
     "coremlPredictionFPS": Double(frames) / medianCoreML,
+    "coremlComputeUnits": coremlUnits,
     "medianSweepSpeedRatio": medianCoreML / medianNative,
     "nativeSweepSeconds": nativeSweeps, "coremlSweepSeconds": coremlSweeps,
     "thermalBefore": thermalBefore, "thermalAfter": ProcessInfo.processInfo.thermalState.rawValue,
     "pairs": records,
     "executionOrderLegend": ["candidate-native", "original-native", "coreml"],
     "method":
-      "Balanced adjacent full-model batch-8 predictions; same inputs; GPU completion included (Core ML first scalar touched inside timer); input preparation and bulk extraction excluded. Original/candidate share immutable native weights. Three-way mode balances all six execution permutations.",
+      "Balanced adjacent full-model batch-\(batch) predictions; same inputs; Core ML completion included (first output scalar touched inside timer); input preparation and bulk extraction excluded. Original/candidate share immutable native weights. Three-way mode balances all six execution permutations.",
     "limitations":
       "Both models remain resident, so footprint differs from standalone runs. Shared hardware state and background work still vary. This is not a performance ceiling or sustained-video measurement.",
   ]

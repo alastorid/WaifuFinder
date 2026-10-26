@@ -1,0 +1,852 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Compare WD Tagger probability and tag-decision agreement on openly licensed, non-synthetic anime-style artwork. This is backend parity, not ground-truth tag accuracy.",
+  "hardware": "Mac15,12 / Apple M3 / macOS 26.5.1 (25F80)",
+  "checkpointSHA256": "34fdaae4d72640985f985bb447db27c227288571122ff40cb773f1299074d550",
+  "input": {
+    "source": "Wikimedia Commons file pages and imageinfo API",
+    "uniqueImages": 12,
+    "evaluatedUniqueImages": 12,
+    "fixedBatchRows": 64,
+    "batchSize": 8,
+    "rowFilling": "Cycle through the 12 selected files in source order to satisfy the fixed 64-frame comparison API; compute reported metrics on each first occurrence only.",
+    "sha256": "41004ca9f1d20280375a86b906025c07d759b182e3069f4a8c11e2a2df77cf75",
+    "preprocessing": "Same 1024-longest-side cap, Lanczos downscale, centered white letterbox, Core Image bicubic resize and sRGB RGBA8 rendering as WDTaggerBackend.renderRGBA; RGBA converted to RGB planar Float32 for comparison API.",
+    "imageFilesRetainedInRepository": false,
+    "metadataAndAttribution": "Per-image source page, creator, license, and downloaded-rendition SHA-256 are recorded below."
+  },
+  "comparison": {
+    "reference": "Tuned native Swift/MLX Metal WD Tagger",
+    "candidate": "Core ML WDTagger.mlmodelc with computeUnits=cpuAndGPU",
+    "sweeps": 1,
+    "nativeAndCoreMLRepeatedRowsByteIdentical": true,
+    "maximumAbsoluteProbabilityError": 0.006660938262939453,
+    "meanAbsoluteProbabilityError": 4.5394899643724784e-06,
+    "nonRatingTagThresholdChangesAt035": 0,
+    "ratingArgmaxChangedImages": 0,
+    "minimumTop15Overlap": 14,
+    "meanTop15Overlap": 14.916666666666666
+  },
+  "cpuAndNeuralEngine": {
+    "completed": true,
+    "batchSize": 1,
+    "frames": 12,
+    "sweeps": 3,
+    "report": ".build/wd-ane-baseline/free-license-sample/batch1-cpu-ane-3sweeps.json",
+    "probabilityOutputProduced": true,
+    "parityPassed": false,
+    "note": "See singleImageBatch1 for per-image timings and parity metrics."
+  },
+  "accuracyAssessment": {
+    "groundTruthTagsAvailable": false,
+    "modelAccuracyMeasured": false,
+    "interpretation": "Small output error and unchanged thresholded tags show agreement between native Metal and Core ML CPU+GPU on this sample. They do not establish that either model assigned semantically correct tags."
+  },
+  "images": [
+    {
+      "row": 0,
+      "fileTitle": "File:2014-10-31 pepper-more-anime net.jpg",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:2014-10-31_pepper-more-anime_net.jpg",
+      "creator": "David Revoy",
+      "license": "CC BY 4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+      "downloadedRenditionSHA256": "de5238e6dbff7a7c4c6304fe8321d19eabb469d7ec38d830bd8b322f6ec965a3",
+      "maximumAbsoluteProbabilityError": 0.003193676471710205,
+      "maximumErrorTag": "cowboy_hat",
+      "meanAbsoluteProbabilityError": 3.877561539411545e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "general",
+      "coremlRating": "general",
+      "top15Overlap": 14,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9754836559295654
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9663470387458801
+        },
+        {
+          "tag": "hat",
+          "probability": 0.955734133720398
+        },
+        {
+          "tag": "monochrome",
+          "probability": 0.9543079733848572
+        },
+        {
+          "tag": "smile",
+          "probability": 0.8606036305427551
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9752280116081238
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9660652279853821
+        },
+        {
+          "tag": "hat",
+          "probability": 0.9557030200958252
+        },
+        {
+          "tag": "monochrome",
+          "probability": 0.9538493156433105
+        },
+        {
+          "tag": "smile",
+          "probability": 0.8599370718002319
+        }
+      ]
+    },
+    {
+      "row": 1,
+      "fileTitle": "File:Anime girl in orange shirt.svg",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Anime_girl_in_orange_shirt.svg",
+      "creator": "GDJ",
+      "license": "CC0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "downloadedRenditionSHA256": "c9cec0f1f4ce7691b214fff3ae41e61331932e445fd6bfb567bf0869206e3694",
+      "maximumAbsoluteProbabilityError": 0.004269599914550781,
+      "maximumErrorTag": "transparent_background",
+      "meanAbsoluteProbabilityError": 5.395136668084888e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9984391331672668
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9826909303665161
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9389128684997559
+        },
+        {
+          "tag": "brown_hair",
+          "probability": 0.9167080521583557
+        },
+        {
+          "tag": "plaid",
+          "probability": 0.8030193448066711
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9984317421913147
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9826128482818604
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9384670853614807
+        },
+        {
+          "tag": "brown_hair",
+          "probability": 0.916206419467926
+        },
+        {
+          "tag": "plaid",
+          "probability": 0.8011667132377625
+        }
+      ]
+    },
+    {
+      "row": 2,
+      "fileTitle": "File:Anime2.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Anime2.png",
+      "creator": "G guytolu",
+      "license": "CC BY-SA 4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "downloadedRenditionSHA256": "967e71e3aaf29c25df169d0227dcc0b677baa3e0fecabc855e81e049b18e7346",
+      "maximumAbsoluteProbabilityError": 0.0030983686447143555,
+      "maximumErrorTag": "upper_body",
+      "meanAbsoluteProbabilityError": 4.080647613591282e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "hood",
+          "probability": 0.9878058433532715
+        },
+        {
+          "tag": "1boy",
+          "probability": 0.9782603979110718
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9655115008354187
+        },
+        {
+          "tag": "male_focus",
+          "probability": 0.9596109390258789
+        },
+        {
+          "tag": "monochrome",
+          "probability": 0.9460011720657349
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "hood",
+          "probability": 0.9877051115036011
+        },
+        {
+          "tag": "1boy",
+          "probability": 0.9779751300811768
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9652206301689148
+        },
+        {
+          "tag": "male_focus",
+          "probability": 0.9591192007064819
+        },
+        {
+          "tag": "monochrome",
+          "probability": 0.9454389214515686
+        }
+      ]
+    },
+    {
+      "row": 3,
+      "fileTitle": "File:Chara01.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Chara01.png",
+      "creator": "Snow64",
+      "license": "Public domain",
+      "licenseURL": "https://commons.wikimedia.org/wiki/Commons:Licensing#Public_domain",
+      "downloadedRenditionSHA256": "99203f5de71ac5586b05d0d8d98c00378fd72392fcb31e3b1381b22665f60c8f",
+      "maximumAbsoluteProbabilityError": 0.003101646900177002,
+      "maximumErrorTag": "side_ponytail",
+      "meanAbsoluteProbabilityError": 3.2634561648592353e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9938070178031921
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9881308674812317
+        },
+        {
+          "tag": "brown_hair",
+          "probability": 0.891999363899231
+        },
+        {
+          "tag": "maid",
+          "probability": 0.8704872131347656
+        },
+        {
+          "tag": "brown_eyes",
+          "probability": 0.8393393158912659
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9937048554420471
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9879393577575684
+        },
+        {
+          "tag": "brown_hair",
+          "probability": 0.8915761113166809
+        },
+        {
+          "tag": "maid",
+          "probability": 0.8687949776649475
+        },
+        {
+          "tag": "brown_eyes",
+          "probability": 0.8388250470161438
+        }
+      ]
+    },
+    {
+      "row": 4,
+      "fileTitle": "File:Chara02.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Chara02.png",
+      "creator": "Snow64",
+      "license": "Public domain",
+      "licenseURL": "https://commons.wikimedia.org/wiki/Commons:Licensing#Public_domain",
+      "downloadedRenditionSHA256": "1ac9b9d6e15da07506c5427302d2e89cfd5a1db0f2f1306aecfc0160751c0244",
+      "maximumAbsoluteProbabilityError": 0.004966050386428833,
+      "maximumErrorTag": "white_skirt",
+      "meanAbsoluteProbabilityError": 5.053750101069454e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9982590079307556
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9916195273399353
+        },
+        {
+          "tag": "green_eyes",
+          "probability": 0.9399133324623108
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9282788634300232
+        },
+        {
+          "tag": "antenna_hair",
+          "probability": 0.9032942056655884
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9982256293296814
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9915465712547302
+        },
+        {
+          "tag": "green_eyes",
+          "probability": 0.9392512440681458
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9278727173805237
+        },
+        {
+          "tag": "antenna_hair",
+          "probability": 0.9023142457008362
+        }
+      ]
+    },
+    {
+      "row": 5,
+      "fileTitle": "File:Chara03.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Chara03.png",
+      "creator": "Snow64",
+      "license": "Public domain",
+      "licenseURL": "https://commons.wikimedia.org/wiki/Commons:Licensing#Public_domain",
+      "downloadedRenditionSHA256": "b17ae15c480ce1b05873edce8be1b507b9abdd41fc88f72671c4898246ab3592",
+      "maximumAbsoluteProbabilityError": 0.0046253502368927,
+      "maximumErrorTag": "transparent_background",
+      "meanAbsoluteProbabilityError": 2.5170709250232903e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9983579516410828
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9832144975662231
+        },
+        {
+          "tag": "maid",
+          "probability": 0.887984037399292
+        },
+        {
+          "tag": "green_hair",
+          "probability": 0.8193157911300659
+        },
+        {
+          "tag": "ponytail",
+          "probability": 0.8071568012237549
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9983355402946472
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9830619096755981
+        },
+        {
+          "tag": "maid",
+          "probability": 0.8866594433784485
+        },
+        {
+          "tag": "green_hair",
+          "probability": 0.818210244178772
+        },
+        {
+          "tag": "ponytail",
+          "probability": 0.8068295121192932
+        }
+      ]
+    },
+    {
+      "row": 6,
+      "fileTitle": "File:Chara04.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Chara04.png",
+      "creator": "Snow64",
+      "license": "Public domain",
+      "licenseURL": "https://commons.wikimedia.org/wiki/Commons:Licensing#Public_domain",
+      "downloadedRenditionSHA256": "15bb9a544e3cde2c5d68fb962c7a131910b25dbfeb9bcfbd09c32831ebff8cfd",
+      "maximumAbsoluteProbabilityError": 0.0030111372470855713,
+      "maximumErrorTag": "child",
+      "meanAbsoluteProbabilityError": 3.3730134418874513e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9985786080360413
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9919379949569702
+        },
+        {
+          "tag": "drill_hair",
+          "probability": 0.9362850189208984
+        },
+        {
+          "tag": "blonde_hair",
+          "probability": 0.9036349058151245
+        },
+        {
+          "tag": "sensitive",
+          "probability": 0.8519527912139893
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9985609650611877
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9918528199195862
+        },
+        {
+          "tag": "drill_hair",
+          "probability": 0.9358453750610352
+        },
+        {
+          "tag": "blonde_hair",
+          "probability": 0.9030063152313232
+        },
+        {
+          "tag": "sensitive",
+          "probability": 0.8519339561462402
+        }
+      ]
+    },
+    {
+      "row": 7,
+      "fileTitle": "File:Chara05.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Chara05.png",
+      "creator": "Snow64",
+      "license": "Public domain",
+      "licenseURL": "https://commons.wikimedia.org/wiki/Commons:Licensing#Public_domain",
+      "downloadedRenditionSHA256": "1f805ebc854cfee3ee7ea2adec488cdd6111390396072c2cca803ecafd38d758",
+      "maximumAbsoluteProbabilityError": 0.005045861005783081,
+      "maximumErrorTag": "transparent_background",
+      "meanAbsoluteProbabilityError": 6.28174893790856e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9957848191261292
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9909096360206604
+        },
+        {
+          "tag": "pointy_ears",
+          "probability": 0.9783433079719543
+        },
+        {
+          "tag": "school_uniform",
+          "probability": 0.9544780254364014
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9469902515411377
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9957037568092346
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9907627701759338
+        },
+        {
+          "tag": "pointy_ears",
+          "probability": 0.9781140089035034
+        },
+        {
+          "tag": "school_uniform",
+          "probability": 0.9538425207138062
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9468628168106079
+        }
+      ]
+    },
+    {
+      "row": 8,
+      "fileTitle": "File:Jett and Zee.jpg",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Jett_and_Zee.jpg",
+      "creator": "MechaCon SpaceCowboy",
+      "license": "CC BY-SA 3.0",
+      "licenseURL": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "downloadedRenditionSHA256": "74ddc77819c76cee0d2676d6e603c9fcde2fbb04fac6929bffafda0be2d0bd84",
+      "maximumAbsoluteProbabilityError": 0.0034892410039901733,
+      "maximumErrorTag": "red_eyes",
+      "meanAbsoluteProbabilityError": 7.922250915726181e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "weapon",
+          "probability": 0.991118311882019
+        },
+        {
+          "tag": "gun",
+          "probability": 0.9894703030586243
+        },
+        {
+          "tag": "multiple_girls",
+          "probability": 0.983020007610321
+        },
+        {
+          "tag": "2girls",
+          "probability": 0.9824904203414917
+        },
+        {
+          "tag": "holding_gun",
+          "probability": 0.9392480850219727
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "weapon",
+          "probability": 0.9911122918128967
+        },
+        {
+          "tag": "gun",
+          "probability": 0.9894477128982544
+        },
+        {
+          "tag": "multiple_girls",
+          "probability": 0.9828667044639587
+        },
+        {
+          "tag": "2girls",
+          "probability": 0.9822584390640259
+        },
+        {
+          "tag": "holding_gun",
+          "probability": 0.9392172694206238
+        }
+      ]
+    },
+    {
+      "row": 9,
+      "fileTitle": "File:Moe anime girl in sailor fuku.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Moe_anime_girl_in_sailor_fuku.png",
+      "creator": "Akane-K",
+      "license": "CC0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "downloadedRenditionSHA256": "b5fee04f82aa58d4617d4a0e4846c2854731d9fa76fc58a22d0766be71739165",
+      "maximumAbsoluteProbabilityError": 0.006660938262939453,
+      "maximumErrorTag": "green_sailor_collar",
+      "meanAbsoluteProbabilityError": 5.9587905525404494e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9991832375526428
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9837225675582886
+        },
+        {
+          "tag": "thighhighs",
+          "probability": 0.9662834405899048
+        },
+        {
+          "tag": "school_uniform",
+          "probability": 0.9576753973960876
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9381240010261536
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9991750121116638
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9835628867149353
+        },
+        {
+          "tag": "thighhighs",
+          "probability": 0.9661639928817749
+        },
+        {
+          "tag": "school_uniform",
+          "probability": 0.9571058750152588
+        },
+        {
+          "tag": "skirt",
+          "probability": 0.9378660917282104
+        }
+      ]
+    },
+    {
+      "row": 10,
+      "fileTitle": "File:Moe Manga Lady.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Moe_Manga_Lady.png",
+      "creator": "jsks",
+      "license": "CC0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "downloadedRenditionSHA256": "ad7e73b95edb6bb8765966dc8e26af1f9b8f5c14d3fc2f8e33e2a3da2d63020b",
+      "maximumAbsoluteProbabilityError": 0.002283155918121338,
+      "maximumErrorTag": "skirt_suit",
+      "meanAbsoluteProbabilityError": 4.0645427361596376e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "sensitive",
+      "coremlRating": "sensitive",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9945940971374512
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9656413197517395
+        },
+        {
+          "tag": "purple_hair",
+          "probability": 0.9308364391326904
+        },
+        {
+          "tag": "purple_eyes",
+          "probability": 0.8862236142158508
+        },
+        {
+          "tag": "suit",
+          "probability": 0.878835141658783
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9945467710494995
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9655000567436218
+        },
+        {
+          "tag": "purple_hair",
+          "probability": 0.9306645393371582
+        },
+        {
+          "tag": "purple_eyes",
+          "probability": 0.8855905532836914
+        },
+        {
+          "tag": "suit",
+          "probability": 0.8785975575447083
+        }
+      ]
+    },
+    {
+      "row": 11,
+      "fileTitle": "File:Virtual singer.png",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Virtual_singer.png",
+      "creator": "paulliu",
+      "license": "CC0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "downloadedRenditionSHA256": "b6b0ca803dfb2f6d5e79d35f01f993c95f8c0383211f26579c55b857fe21b937",
+      "maximumAbsoluteProbabilityError": 0.0029353350400924683,
+      "maximumErrorTag": "hatsune_miku_(cosplay)",
+      "meanAbsoluteProbabilityError": 2.6859165700443555e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChanged": false,
+      "nativeRating": "general",
+      "coremlRating": "general",
+      "top15Overlap": 15,
+      "nativeTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9984207153320312
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9878058433532715
+        },
+        {
+          "tag": "hatsune_miku",
+          "probability": 0.9575961828231812
+        },
+        {
+          "tag": "twintails",
+          "probability": 0.9562272429466248
+        },
+        {
+          "tag": "long_hair",
+          "probability": 0.9391365647315979
+        }
+      ],
+      "coremlTop5": [
+        {
+          "tag": "1girl",
+          "probability": 0.9984111785888672
+        },
+        {
+          "tag": "solo",
+          "probability": 0.9877332448959351
+        },
+        {
+          "tag": "hatsune_miku",
+          "probability": 0.9572533965110779
+        },
+        {
+          "tag": "twintails",
+          "probability": 0.9559715986251831
+        },
+        {
+          "tag": "long_hair",
+          "probability": 0.9388898611068726
+        }
+      ]
+    }
+  ],
+  "singleImageBatch1": {
+    "modelPackage": ".build/wd-ane-baseline/upstream-batch1/WDTagger.mlpackage",
+    "sourceWeightsSHA256": "39fe04000d5907a0a7616df54af744d43fbd70b5fba7abc3135d3675734c03ef",
+    "frames": 12,
+    "uniqueImages": 12,
+    "batchSize": 1,
+    "predictionCallsPerSweepPerBackend": 12,
+    "sweeps": 3,
+    "tailPadding": false,
+    "warmup": "One single-image paired prediction before three measured sweeps; model loading excluded.",
+    "coremlOutputStrides": [
+      10864,
+      1
+    ],
+    "cpuAndGPU": {
+      "nativeImagesPerSecondPerSweep": [
+        15.1651453331,
+        15.0055997202,
+        15.2024322482
+      ],
+      "coremlImagesPerSecondPerSweep": [
+        13.8267239869,
+        13.6742851842,
+        13.7310965152
+      ],
+      "medianNativeImagesPerSecond": 15.1651453331,
+      "medianCoreMLImagesPerSecond": 13.7310965152,
+      "coremlThroughputChangePercent": -9.46,
+      "maximumAbsoluteProbabilityError": 0.0072602034,
+      "meanAbsoluteProbabilityError": 4.66656e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChangedImages": 0,
+      "minimumTop15Overlap": 14,
+      "meanTop15Overlap": 14.9166667
+    },
+    "cpuAndNeuralEngine": {
+      "nativeImagesPerSecondPerSweep": [
+        15.1889096958,
+        14.6222576058,
+        14.1795756735
+      ],
+      "coremlImagesPerSecondPerSweep": [
+        17.1037964007,
+        16.5462401184,
+        17.1174346421
+      ],
+      "medianNativeImagesPerSecond": 14.6222576058,
+      "medianCoreMLImagesPerSecond": 17.1037964007,
+      "coremlThroughputChangePercent": 16.97,
+      "maximumAbsoluteProbabilityError": 0.9837355614,
+      "meanAbsoluteProbabilityError": 0.003527984,
+      "nonRatingTagThresholdChangesAt035": 303,
+      "ratingArgmaxChangedImages": 5,
+      "minimumTop15Overlap": 2,
+      "meanTop15Overlap": 3.9166667,
+      "accepted": false
+    },
+    "cpuAndNeuralEngineVsCpuAndGPU": {
+      "maximumAbsoluteProbabilityError": 0.9836348295,
+      "meanAbsoluteProbabilityError": 0.0035248152,
+      "nonRatingTagThresholdChangesAt035": 303,
+      "ratingArgmaxChangedImages": 5,
+      "minimumTop15Overlap": 2,
+      "meanTop15Overlap": 3.9166667
+    },
+    "previousBatch8Attempt": {
+      "completed": false,
+      "waitedSeconds": 122,
+      "reason": "The provisional 14-image CPU+ANE process remained idle while ANECompilerService was busy; it was stopped before producing output."
+    },
+    "groundTruthAccuracyMeasured": false,
+    "interpretation": "Batch-1 CPU+ANE was faster in these three warm sweeps but failed backend parity badly. The sample has no annotated tags, so this is not an accuracy measurement."
+  }
+}

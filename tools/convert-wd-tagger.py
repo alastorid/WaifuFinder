@@ -114,15 +114,17 @@ def sha256(path: Path) -> str:
 
 def download(repo: str, destination: Path) -> tuple[Path, Path]:
     """Fetch the two artifacts the conversion needs, into ``destination``."""
-    from huggingface_hub import hf_hub_download
-
     destination.mkdir(parents=True, exist_ok=True)
     weights = destination / WEIGHT_FILE
     labels = destination / LABEL_FILE
+    hf_hub_download = None
     for name, target in ((WEIGHT_FILE, weights), (LABEL_FILE, labels)):
         if target.exists():
             log(f"reusing {target}")
             continue
+        if hf_hub_download is None:
+            from huggingface_hub import hf_hub_download as download_from_hub
+            hf_hub_download = download_from_hub
         log(f"downloading {repo}/{name}")
         path = Path(hf_hub_download(repo, name, local_dir=str(destination)))
         if path != target:

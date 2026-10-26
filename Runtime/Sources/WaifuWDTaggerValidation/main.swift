@@ -556,6 +556,21 @@ do {
     guard let i = args.firstIndex(of: key), i + 1 < args.count else { return nil }
     return args[i + 1]
   }
+  if args.contains("--compare-coreml-activations") {
+    guard let model = option("--coreml"), let inputs = option("--inputs"),
+      let report = option("--report")
+    else { throw WDNativeError.invalid("Supply --coreml, --inputs and --report") }
+    let result = try compareCoreMLActivations(
+      modelURL: URL(fileURLWithPath: model), inputsURL: URL(fileURLWithPath: inputs),
+      batches: Int(option("--batches") ?? "1") ?? 1,
+      reportURL: URL(fileURLWithPath: report),
+      cpuGPUReferenceURL: option("--cpu-gpu-reference").map(URL.init(fileURLWithPath:)),
+      cpuANEReferenceURL: option("--cpu-ane-reference").map(URL.init(fileURLWithPath:)))
+    try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+      .write(to: URL(fileURLWithPath: report))
+    print("Core ML activation comparison complete")
+    exit(0)
+  }
   let queryRows = Int(option("--attention-query-rows") ?? "32") ?? 32
   var gemmOverrides: [WDNativeTagger.GEMMOperation: [WDMetal.GEMMTile]] = [:]
   for operation in WDNativeTagger.GEMMOperation.allCases {
@@ -633,6 +648,8 @@ do {
     guard let inputs = option("--inputs"), let output = option("--report") else {
       throw WDNativeError.invalid("Supply --inputs and --report")
     }
+    let coremlUnits = option("--coreml-units") ?? "cpuAndGPU"
+    let defaultCoreMLBatch = coremlUnits == "cpuAndNeuralEngine" ? 1 : 8
     let report = try compareCoreML(
       weights: URL(fileURLWithPath: weights), modelURL: URL(fileURLWithPath: coreml),
       inputsURL: URL(fileURLWithPath: inputs), rounds: Int(option("--repeats") ?? "3") ?? 3,
@@ -640,7 +657,9 @@ do {
       probabilities: option("--probabilities"),
       includeOriginal: args.contains("--compare-original") || args.contains("--compare-current"),
       fusedQKV: fusedQKV, currentReference: args.contains("--compare-current"),
-      gemmOverrides: gemmOverrides, attentionQueryRows: queryRows
+      gemmOverrides: gemmOverrides, attentionQueryRows: queryRows,
+      coremlUnits: coremlUnits,
+      batchSize: Int(option("--batch-size") ?? String(defaultCoreMLBatch)) ?? defaultCoreMLBatch
     )
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
       .write(to: URL(fileURLWithPath: output))

@@ -35,3 +35,16 @@ resolve it before proceeding.
 
 Media fixtures use Apple-native generation. Keep app, build, tests, benchmarks and
 CI independent of FFmpeg libraries and command-line tools. Do not add such dependencies.
+
+## WD Tagger ANE and Core ML trials
+
+Before repeating or extending a WD SwinV2 ANE/Core ML experiment, read
+`docs/WDTagger-ANE.md`, `docs/wd-tagger-ane-results.json`, and
+`docs/wd-tagger-open-license-sample.json`. They record the direct-ANE block
+failure, the CPU+ANE batch-8 parity failure, and the single-image batch-1
+real-image measurements. The batch-1 CPU+ANE path was faster in the measured
+sample but failed numerical and tag-decision parity, so it is not an accepted
+backend. The shipped Core ML model remains fixed at batch 8 and the app remains
+on Metal. Do not rerun the same benchmark without a new hypothesis, a relevant
+implementation change, or different hardware/checkpoint; preserve the existing
+measurements and add new evidence to these reports.

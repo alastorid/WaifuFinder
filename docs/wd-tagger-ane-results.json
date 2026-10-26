@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 1,
+  "decision": "retain-metal-default",
+  "hardware": {
+    "modelIdentifier": "Mac15,12",
+    "chip": "Apple M3",
+    "operatingSystem": "macOS 26.5.1 (25F80)",
+    "m4Tested": false
+  },
+  "checkpoint": {
+    "sha256": "34fdaae4d72640985f985bb447db27c227288571122ff40cb773f1299074d550",
+    "tensorCount": 353,
+    "fp16ParameterCount": 112253413
+  },
+  "coremlBackendComparison": {
+    "modelPackage": "models/published/WD-SwinV2-Tagger-v3-CoreML/WDTagger.mlpackage",
+    "sourceWeightsSHA256": "39fe04000d5907a0a7616df54af744d43fbd70b5fba7abc3135d3675734c03ef",
+    "hardware": "Mac15,12 / Apple M3 / macOS 26.5.1 (25F80)",
+    "input": "64 synthetic RGB float32 frames in 0...255; batch 8; 448x448",
+    "cpuAndNeuralEngine": {
+      "warmSweeps": 3,
+      "nativeImagesPerSecond": 15.663616,
+      "coremlImagesPerSecond": 14.622675,
+      "coremlThroughputChangePercent": -6.65,
+      "performanceSource": ".build/wd-native/tuning/paired-32x64x32-fused-coreml-ane-ane-trial/comparison.json",
+      "paritySource": ".build/wd-ane-baseline/coreml-cpu-ane-managed-access.json",
+      "paritySweeps": 1,
+      "coremlOutputStrides": [
+        10864,
+        1
+      ],
+      "maximumAbsoluteProbabilityError": 0.9694408458,
+      "meanAbsoluteProbabilityError": 0.0020277327,
+      "nonRatingTagThresholdChangesAt035": 697,
+      "allOutputThresholdChangesAt035": 734,
+      "ratingArgmaxChangedFrames": 21,
+      "minimumTop15Overlap": 2,
+      "managedArrayAccessRetest": {
+        "source": ".build/wd-ane-baseline/coreml-cpu-ane-managed-access.json",
+        "nativeImagesPerSecond": 15.576877,
+        "coremlImagesPerSecond": 14.803506,
+        "sweeps": 1,
+        "probabilityFilesByteIdenticalToRawPointerDiagnostic": true,
+        "interpretation": "The mismatch persists when both input and output use Core ML's managed byte-access APIs."
+      },
+      "aneExecutionEvidence": "Core ML load/prediction stack reached ANECompilerService, AneInferenceOperationImplUsingAnefAPIs, and _ANEClient direct evaluation; this does not establish that every operation ran on ANE.",
+      "coldLoadCompilation": "Multi-minute Core ML/ANE compilation; excluded from warm throughput.",
+      "accepted": false,
+      "decision": "Rejected: lower warm throughput than tuned native Metal and unacceptable output disagreement."
+    },
+    "cpuAndGPUParityDiagnostic": {
+      "sweeps": 1,
+      "source": ".build/wd-ane-baseline/coreml-cpu-gpu-diagnostic.json",
+      "maximumAbsoluteProbabilityError": 0.022562623,
+      "meanAbsoluteProbabilityError": 7.4636e-06,
+      "nonRatingTagThresholdChangesAt035": 5,
+      "ratingArgmaxChangedFrames": 0,
+      "minimumTop15Overlap": 14
+    },
+    "cpuAndGPUVsCpuAndNeuralEngine": {
+      "sweeps": 1,
+      "sourceFiles": [
+        ".build/wd-ane-baseline/coreml-cpu-gpu-diagnostic-coreml.bin",
+        ".build/wd-ane-baseline/coreml-cpu-ane-managed-access-coreml.bin"
+      ],
+      "frames": 64,
+      "maximumAbsoluteProbabilityError": 0.969516932964325,
+      "meanAbsoluteProbabilityError": 0.002027753507718444,
+      "nonRatingTagThresholdChangesAt035": 700,
+      "ratingArgmaxChangedFrames": 21,
+      "minimumTop15Overlap": 2,
+      "meanTop15Overlap": 6.15625,
+      "naturalImageAccuracyEvaluated": false
+    },
+    "publishedCoreMLAgainstPyTorch": {
+      "computeUnits": "cpuAndGPU",
+      "validationSource": "models/published/WD-SwinV2-Tagger-v3-CoreML/validation.json",
+      "maximumAbsoluteProbabilityError": 0.0030537844,
+      "meanAbsoluteProbabilityError": 1.05826e-05,
+      "minimumTop15Overlap": 15,
+      "note": "This is a separate eight-sample conversion validation and does not explain the CPU+ANE disagreement against native MLX."
+    },
+    "allComputeUnits": {
+      "completed": false,
+      "reason": "Cold Core ML loading remained in ANE compilation for more than two minutes; diagnostic was stopped without output or timing."
+    },
+    "activationTapDiagnostic": {
+      "tapModelCreatedAndStaticallyCompiled": true,
+      "swiftProbeBuildSucceeded": true,
+      "cpuAndNeuralEngineModelLoadCompleted": false,
+      "waitedSeconds": 129,
+      "reportProduced": false,
+      "reason": "Tapped Core ML model load remained blocked while ANECompilerService was CPU-saturated; probe was stopped without inference output.",
+      "source": "Runtime/Sources/WaifuWDTaggerValidation/CoreMLActivationProbe.swift",
+      "tapPackageBuilder": "tools/expose-wd-tagger-coreml-taps.py"
+    },
+    "m4Tested": false
+  },
+  "openLicenseArtworkComparison": {
+    "report": "docs/wd-tagger-open-license-sample.json",
+    "source": "12 anime-style illustrations from Wikimedia Commons under CC0, public-domain, CC BY, or CC BY-SA",
+    "nativeVsCoreMLCPUAndGPU": {
+      "maximumAbsoluteProbabilityError": 0.0066609383,
+      "meanAbsoluteProbabilityError": 4.53949e-06,
+      "nonRatingTagThresholdChangesAt035": 0,
+      "ratingArgmaxChangedImages": 0,
+      "minimumTop15Overlap": 14,
+      "meanTop15Overlap": 14.9166667
+    },
+    "cpuAndNeuralEngineCompleted": true,
+    "cpuAndNeuralEngineWaitedSeconds": null,
+    "groundTruthAccuracyMeasured": false,
+    "note": "The original batch-8 CPU+GPU parity result and the new batch-1 CPU+ANE result use the same 12 openly licensed images. No ground-truth tag annotations were available.",
+    "singleImageBatch1": {
+      "source": ".build/wd-ane-baseline/free-license-sample/batch1-cpu-ane-3sweeps.json",
+      "frames": 12,
+      "uniqueImages": 12,
+      "predictionCallsPerSweep": 12,
+      "sweeps": 3,
+      "coremlModelInputShape": [
+        1,
+        3,
+        448,
+        448
+      ],
+      "coremlOutputStrides": [
+        10864,
+        1
+      ],
+      "nativeImagesPerSecondPerSweep": [
+        15.1889096958,
+        14.6222576058,
+        14.1795756735
+      ],
+      "cpuAndNeuralEngineImagesPerSecondPerSweep": [
+        17.1037964007,
+        16.5462401184,
+        17.1174346421
+      ],
+      "medianNativeImagesPerSecond": 14.6222576058,
+      "medianCpuAndNeuralEngineImagesPerSecond": 17.1037964007,
+      "cpuAndNeuralEngineThroughputChangePercent": 16.97,
+      "maximumAbsoluteProbabilityError": 0.9837355614,
+      "meanAbsoluteProbabilityError": 0.003527984,
+      "nonRatingTagThresholdChangesAt035": 303,
+      "ratingArgmaxChangedImages": 5,
+      "minimumTop15Overlap": 2,
+      "meanTop15Overlap": 3.9166667,
+      "accepted": false,
+      "naturalImageGroundTruthAccuracyMeasured": false,
+      "note": "One Core ML batch-1 request per image, no padding. Faster than native in this warm sample, but severe probability and tag-decision disagreement rejects the ANE path."
+    },
+    "previousBatch8Attempt": {
+      "completed": false,
+      "waitedSeconds": 122,
+      "reason": "The provisional CPU+ANE process remained idle while ANECompilerService was busy and was stopped without producing predictions."
+    }
+  },
+  "maderixBridgeStudy": {
+    "checkedInExecutionBridge": "_ANEInMemoryModel",
+    "aneClientOperationalBridgeFound": false,
+    "aneCompilerOperationalBridgeFound": false,
+    "aneClientMention": "API introspection only",
+    "note": "Adapted the checked-in in-memory MIL compile/evaluate route; the requested client/compiler bridge was not present as an operational implementation in the inspected checkout."
+  },
+  "gpuOnlyEndToEnd": {
+    "source": ".build/wd-ane-baseline/gpu-baseline.json",
+    "batchSize": 8,
+    "syntheticFrames": 64,
+    "warmSweeps": 3,
+    "predictionAndIpcImagesPerSecond": 16.127755003274473,
+    "meanMeasuredBatchLatencySeconds": 0.5004404080100358,
+    "throughputImpliedBatchLatencySeconds": 0.49604,
+    "peakWorkerPhysicalFootprintBytes": 662455304,
+    "exactOutputAgreementWithSavedGpuReference": true,
+    "naturalImageAccuracyEvaluated": false
+  },
+  "aneFp16Qkv": [
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage1-b8-rows12544.json",
+      "stage": 1,
+      "batch": 8,
+      "rowsPerCall": 12544,
+      "calls": 8,
+      "aneMedianMs": 2.693,
+      "metalRawGemmMedianMs": 6.273,
+      "metalProductionFusedQkvMedianMs": 10.315,
+      "maximumAbsoluteError": 0.00390625
+    },
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage2-b8-rows12544.json",
+      "stage": 2,
+      "batch": 8,
+      "rowsPerCall": 12544,
+      "calls": 2,
+      "aneMedianMs": 1.07,
+      "metalRawGemmMedianMs": 4.567,
+      "metalProductionFusedQkvMedianMs": 6.087,
+      "maximumAbsoluteError": 0.0078125
+    },
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage3-b1-padded32.json",
+      "stage": 3,
+      "batch": 1,
+      "rowsPerCall": 800,
+      "aneMedianMs": 0.293,
+      "metalRawGemmMedianMs": 1.355,
+      "metalProductionFusedQkvMedianMs": 1.475,
+      "maximumAbsoluteError": 0.001953125,
+      "paddedRows": 16
+    },
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage3-b4.json",
+      "stage": 3,
+      "batch": 4,
+      "rowsPerCall": 3136,
+      "aneMedianMs": 0.597,
+      "metalRawGemmMedianMs": 4.559,
+      "metalProductionFusedQkvMedianMs": 5.146,
+      "maximumAbsoluteError": 0.001953125
+    },
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage3-b8.json",
+      "stage": 3,
+      "batch": 8,
+      "rowsPerCall": 6272,
+      "aneMedianMs": 0.97,
+      "metalRawGemmMedianMs": 4.678,
+      "metalProductionFusedQkvMedianMs": 5.315,
+      "maximumAbsoluteError": 0.001953125
+    },
+    {
+      "source": ".build/wd-ane-baseline/ane-metal-bound-qkv-stage4-b8.json",
+      "stage": 4,
+      "batch": 8,
+      "rowsPerCall": 1568,
+      "aneMedianMs": 1.044,
+      "metalRawGemmMedianMs": 7.093,
+      "metalProductionFusedQkvMedianMs": 7.37,
+      "maximumAbsoluteError": 0.0078125
+    }
+  ],
+  "aneFp16SingleWindowAttention": [
+    {
+      "source": ".build/wd-ane-baseline/attention-s1-edge-window0.json",
+      "stage": 1,
+      "window": 0,
+      "shifted": true,
+      "aneMedianMs": 0.13950001448392868,
+      "metalFlash32MedianMs": 0.24749990552663803,
+      "maxAbsOutputError": 0.001953125,
+      "identicalProgramCacheHitVerified": true,
+      "cacheLookupMs": 0.15566684305667877
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s1-edge-window7.json",
+      "stage": 1,
+      "window": 7,
+      "shifted": true,
+      "aneMedianMs": 0.11374987661838531,
+      "metalFlash32MedianMs": 0.4385830834507942,
+      "maxAbsOutputError": 0.001220703125
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s1-edge-window56.json",
+      "stage": 1,
+      "window": 56,
+      "shifted": true,
+      "aneMedianMs": 0.09195785969495773,
+      "metalFlash32MedianMs": 0.4319585859775543,
+      "maxAbsOutputError": 0.0062408447265625
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s1-edge-window63.json",
+      "stage": 1,
+      "window": 63,
+      "shifted": true,
+      "aneMedianMs": 0.09325053542852402,
+      "metalFlash32MedianMs": 0.2965424209833145,
+      "maxAbsOutputError": 0.00079345703125
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s2-shifted-window15.json",
+      "stage": 2,
+      "window": 15,
+      "shifted": true,
+      "aneMedianMs": 0.1466674730181694,
+      "metalFlash32MedianMs": 0.47333259135484695,
+      "maxAbsOutputError": 0.0006103515625
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s3-shifted-window3.json",
+      "stage": 3,
+      "window": 3,
+      "shifted": true,
+      "aneMedianMs": 0.25137513875961304,
+      "metalFlash32MedianMs": 0.4565827548503876,
+      "maxAbsOutputError": 0.0005435943603515625
+    },
+    {
+      "source": ".build/wd-ane-baseline/attention-s4-unshifted-window0.json",
+      "stage": 4,
+      "window": 0,
+      "shifted": false,
+      "aneMedianMs": 0.5369996652007103,
+      "metalFlash32MedianMs": 0.8172504603862762,
+      "maxAbsOutputError": 0.00079345703125
+    }
+  ],
+  "selectiveW8A8Qkv": {
+    "source": ".build/wd-ane-baseline/w8a8-qkv-stage3-b8.json",
+    "stage": 3,
+    "activationAndWeightPrecision": "W8A8 quantization with FP16 output; constexpr weight dequantization is folded at compile time",
+    "weightSource": "real prepared checkpoint QKV weight",
+    "activationSource": "synthetic deterministic sinusoidal activation",
+    "runs": [
+      {
+        "batch": 1,
+        "rows": 784,
+        "paddedRows": 16,
+        "aneMedianMs": 0.32470840960741043,
+        "metalFp16MedianMs": 1.8431665375828743,
+        "nonFiniteOutputs": 0,
+        "maximumAbsoluteError": 0.049823760986328125,
+        "meanAbsoluteError": 0.008837457746267319
+      },
+      {
+        "batch": 4,
+        "rows": 3136,
+        "paddedRows": 0,
+        "aneMedianMs": 0.6159590557217598,
+        "metalFp16MedianMs": 4.590666852891445,
+        "nonFiniteOutputs": 0,
+        "maximumAbsoluteError": 0.0509033203125,
+        "meanAbsoluteError": 0.008820777758955956
+      },
+      {
+        "batch": 8,
+        "rows": 6272,
+        "paddedRows": 0,
+        "aneMedianMs": 1.012374646961689,
+        "metalFp16MedianMs": 6.973041221499443,
+        "nonFiniteOutputs": 0,
+        "maximumAbsoluteError": 0.0509033203125,
+        "meanAbsoluteError": 0.008768191561102867
+      }
+    ],
+    "componentCandidate": true,
+    "productionAccepted": false,
+    "limitation": "Synthetic activation calibration; no image-derived scale, full-stage result, or tag-decision comparison."
+  },
+  "fusedMlpExperiments": {
+    "weightBlobLayoutFix": "Separate immutable BLOBFILE per checkpoint tensor; this corrected the earlier shared multi-tensor blob's wrong values.",
+    "fc1ProjectionOnly": {
+      "source": ".build/wd-ane-baseline/mlp-fc1-only-separate-blobs-stage3-b8.json",
+      "stage": 3,
+      "batch": 8,
+      "accepted": true,
+      "maximumAbsoluteError": 0.00390625,
+      "meanAbsoluteError": 7.99982618464499e-05
+    },
+    "oneMlpTailWithPostLayerNorm": {
+      "source": ".build/wd-ane-baseline/mlp-one-block-postnorm-stage3-b8.json",
+      "stage": 3,
+      "batch": 8,
+      "accepted": true,
+      "aneMedianMs": 9.032458066940308,
+      "metalMedianMs": 13.709916733205318,
+      "maximumAbsoluteError": 0.0008544921875,
+      "meanAbsoluteError": 8.666342390085082e-05,
+      "note": "Attention and pre-MLP operations omitted."
+    },
+    "twoMlpTailsWithPostLayerNorm": [
+      {
+        "source": ".build/wd-ane-baseline/mlp-two-block-postnorm-stage3-b1-padded32.json",
+        "batch": 1,
+        "rows": 784,
+        "paddedRows": 16,
+        "aneMedianMs": 2.347208559513092,
+        "metalMedianMs": 6.787042133510113,
+        "maximumAbsoluteError": 0.0009765625,
+        "meanAbsoluteError": 0.00014227487108841235
+      },
+      {
+        "source": ".build/wd-ane-baseline/mlp-two-block-postnorm-stage3-b4.json",
+        "batch": 4,
+        "rows": 3136,
+        "paddedRows": 0,
+        "aneMedianMs": 7.421416230499744,
+        "metalMedianMs": 13.833916746079922,
+        "maximumAbsoluteError": 0.0010986328125,
+        "meanAbsoluteError": 0.00014183719699480097
+      },
+      {
+        "source": ".build/wd-ane-baseline/mlp-two-block-postnorm-stage3-b8.json",
+        "batch": 8,
+        "rows": 6272,
+        "paddedRows": 0,
+        "aneMedianMs": 15.112624503672123,
+        "metalMedianMs": 26.235749945044518,
+        "maximumAbsoluteError": 0.0010986328125,
+        "meanAbsoluteError": 0.00014181990100412952
+      }
+    ],
+    "acceptedAsMlpTailFusionProbe": true,
+    "completeSwinBlocks": false,
+    "note": "The second MLP tail consumes the first tail output inside one ANE graph. Attention/pre-MLP operations are absent, so this does not measure full block fusion."
+  },
+  "fullSwinBlockFusionAttempt": {
+    "probe": "Runtime/Sources/WaifuWDTaggerANEProbe/main.swift --full-block",
+    "completeBlockMilCompilesAndLoads": true,
+    "runtimeEvaluationSucceeded": false,
+    "runtimeError": "ANEProgramProcessRequestDirect() status=0x1d, statusType=0x9 (Program Inference error)",
+    "attempts": [
+      {
+        "stage": 4,
+        "block": 0,
+        "shifted": false
+      },
+      {
+        "stage": 3,
+        "block": 0,
+        "shifted": false
+      },
+      {
+        "stage": 3,
+        "block": 1,
+        "window": 3,
+        "shifted": true
+      }
+    ],
+    "numericalAgreementMeasured": false,
+    "timingMeasured": false,
+    "accepted": false,
+    "note": "Standalone on-ANE masked attention and two-tail MLP fusion pass, but their complete-block graph is rejected at evaluation on Mac15,12."
+  },
+  "maderixSyntheticSramProbe": {
+    "source": "maderix/ANE:sram_bench.m",
+    "deviceModel": "Mac15,12",
+    "runs": [
+      {
+        "channels": 256,
+        "spatialPositions": 64,
+        "weightsMB": 0.1,
+        "activationsMB": 0.03,
+        "totalMB": 0.2,
+        "medianMs": 0.195,
+        "tflops": 0.04
+      },
+      {
+        "channels": 512,
+        "spatialPositions": 64,
+        "weightsMB": 0.5,
+        "activationsMB": 0.06,
+        "totalMB": 0.6,
+        "medianMs": 0.104,
+        "tflops": 0.32
+      },
+      {
+        "channels": 1024,
+        "spatialPositions": 64,
+        "weightsMB": 2.0,
+        "activationsMB": 0.12,
+        "totalMB": 2.2,
+        "medianMs": 0.129,
+        "tflops": 1.04
+      },
+      {
+        "channels": 2048,
+        "spatialPositions": 64,
+        "weightsMB": 8.0,
+        "activationsMB": 0.25,
+        "totalMB": 8.5,
+        "medianMs": 0.315,
+        "tflops": 1.7
+      },
+      {
+        "channels": 3072,
+        "spatialPositions": 64,
+        "weightsMB": 18.0,
+        "activationsMB": 0.38,
+        "totalMB": 18.8,
+        "medianMs": 0.459,
+        "tflops": 2.63
+      },
+      {
+        "channels": 4096,
+        "spatialPositions": 64,
+        "weightsMB": 32.0,
+        "activationsMB": 0.5,
+        "totalMB": 33.0,
+        "medianMs": 1.204,
+        "tflops": 1.78
+      },
+      {
+        "channels": 5120,
+        "spatialPositions": 64,
+        "weightsMB": 50.0,
+        "activationsMB": 0.62,
+        "totalMB": 51.2,
+        "medianMs": 1.0,
+        "tflops": 3.35
+      },
+      {
+        "channels": 6144,
+        "spatialPositions": 64,
+        "weightsMB": 72.0,
+        "activationsMB": 0.75,
+        "totalMB": 73.5,
+        "medianMs": 1.343,
+        "tflops": 3.6
+      },
+      {
+        "channels": 8192,
+        "spatialPositions": 32,
+        "weightsMB": 128.0,
+        "activationsMB": 0.5,
+        "totalMB": 129.0,
+        "medianMs": 4.329,
+        "tflops": 0.99
+      }
+    ],
+    "sramCapacityInferred": false,
+    "note": "Synthetic 1x1 convolution timing sweep; results are noisy and do not isolate SRAM capacity or represent WD Tagger stage memory."
+  },
+  "maderixSyntheticW8A8Probe": {
+    "source": "maderix/ANE:ane_int8_bench.m",
+    "deviceModel": "Mac15,12",
+    "bannerWarning": "The reference program prints an M4 label even though it was run here on Mac15,12 (M3).",
+    "runs": [
+      {
+        "channels": 512,
+        "spatialPositions": 64,
+        "depth": 128,
+        "fp16Ms": 15.74,
+        "w8a8Ms": 15.734,
+        "ratio": 1.0004
+      },
+      {
+        "channels": 512,
+        "spatialPositions": 64,
+        "depth": 64,
+        "fp16Ms": 7.987,
+        "w8a8Ms": 8.015,
+        "ratio": 0.9965
+      },
+      {
+        "channels": 256,
+        "spatialPositions": 64,
+        "depth": 256,
+        "fp16Ms": 8.941,
+        "w8a8Ms": 8.3,
+        "ratio": 1.0772
+      },
+      {
+        "channels": 256,
+        "spatialPositions": 64,
+        "depth": 128,
+        "fp16Ms": 4.35,
+        "w8a8Ms": 4.401,
+        "ratio": 0.9884
+      },
+      {
+        "channels": 384,
+        "spatialPositions": 64,
+        "depth": 128,
+        "fp16Ms": 9.198,
+        "w8a8Ms": 9.129,
+        "ratio": 1.0076
+      }
+    ],
+    "weightsSynthetic": true,
+    "accuracyCompared": false
+  },
+  "memoryAndApiClaims": {
+    "iosurfaceBackedANEInputOutputVerified": true,
+    "hostWriteAndReadUseMemcpy": true,
+    "metalTextureOrBufferInteropImplemented": false,
+    "gpuToANEZeroCopyVerified": false,
+    "inProcessCompiledProgramCacheImplemented": true,
+    "programCachePolicy": "SHA-256 keyed by MIL and immutable weight path, offset, and contents; two-entry LRU of loaded programs",
+    "programCacheRepeatHitVerified": true,
+    "persistentCompiledProgramCacheAcrossLaunches": false,
+    "fullStageOrEndToEndHybridMeasured": false,
+    "productionMetalBackendChanged": false
+  }
+}
