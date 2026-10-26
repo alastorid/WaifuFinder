@@ -137,6 +137,9 @@ jobs:
             Runtime/.build/repositories
           key: ${{ runner.os }}-${{ runner.arch }}-mlx-${{ hashFiles('Runtime/Package.resolved') }}
 
+      - name: Test dependency policy audit
+        run: python3 tools/test-license-audit.py
+
       - name: Audit prohibited dependency artifacts
         run: python3 tools/audit-licenses.py
 
