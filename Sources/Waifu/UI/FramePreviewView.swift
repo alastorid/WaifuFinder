@@ -457,7 +457,7 @@ struct FramePreviewView: View {
         } catch {
             guard !Task.isCancelled, loadID == request,
                   session.previewFrame?.id == target.id, session.video?.url == source else { return }
-            note = error.localizedDescription
+            note = "Original image unavailable."
         }
     }
 
@@ -506,7 +506,7 @@ struct FramePreviewView: View {
             metadataFrameID = nil
             metadataTags = []
             metadataRating = nil
-            metadataError = error.localizedDescription
+            metadataError = "Photo details unavailable."
         }
     }
 

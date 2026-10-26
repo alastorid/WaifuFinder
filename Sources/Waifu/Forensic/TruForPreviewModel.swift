@@ -98,7 +98,7 @@ actor TruForEvidenceRenderer {
         var dimensions=SIMD2<UInt32>(UInt32(width),UInt32(height));encoder.setBytes(&dimensions,length:MemoryLayout<SIMD2<UInt32>>.size,index:6)
         encoder.dispatchThreadgroups(MTLSize(width:(width+15)/16,height:(height+15)/16,depth:1),threadsPerThreadgroup:MTLSize(width:16,height:16,depth:1))
         encoder.endEncoding();commands.commit();commands.waitUntilCompleted()
-        guard commands.error==nil else { throw ModelInstaller.fail("Could not render TruFor evidence: \(commands.error!.localizedDescription)") }
+        guard commands.error==nil else { throw ModelInstaller.fail("Could not render TruFor evidence") }
         var bytes=[UInt8](repeating:0,count:pixels*4)
         bytes.withUnsafeMutableBytes { data in _ = memcpy(data.baseAddress!,output.contents(),pixels*4) }
         guard let rendered=CGImage(width:width,height:height,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:width*4,space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue),provider:CGDataProvider(data:Data(bytes) as CFData)!,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else { throw ModelInstaller.fail("Could not render TruFor evidence") }
@@ -140,7 +140,7 @@ actor TruForEvidenceRenderer {
             guard !Task.isCancelled,ticket==token,PhotosMedia.shared.item(url)?.assetCacheKey==key else { return }
             evidence=map;original=image
             await display(self.mode)
-        } catch is CancellationError {} catch { if ticket==token { status=error.localizedDescription } }
+        } catch is CancellationError {} catch { if ticket==token { status="TruFor evidence unavailable" } }
     }
     func display(_ mode:TruForDisplay)async {
         self.mode=mode
@@ -151,6 +151,6 @@ actor TruForEvidenceRenderer {
             guard !Task.isCancelled,renderTicket==token else { return }
             rendered=NSImage(cgImage:image,size:NSSize(width:image.width,height:image.height))
             status="TruFor · detection score "+String(format:"%.3f",evidence.score)+(mode == .noiseprint ? " · contrast-scaled residual, not a probability" : mode == .combined ? " · orange: reliable anomaly; violet: uncertain anomaly" : mode == .outlines ? " · anomaly ≥ 0.5" : "")
-        } catch { if renderTicket==token { status=error.localizedDescription } }
+        } catch { if renderTicket==token { status="TruFor display unavailable" } }
     }
 }

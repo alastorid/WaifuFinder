@@ -48,6 +48,6 @@ import Combine
             mask=NSImage(cgImage:material.mask,size:NSSize(width:material.mask.width,height:material.mask.height))
             status="SAFIRE · "+summary.ratio.formatted(.percent.precision(.fractionLength(2)))+" mask area"
         } catch is CancellationError { }
-        catch { if ticket==token { status=error.localizedDescription } }
+        catch { if ticket==token { status="SAFIRE evidence unavailable" } }
     }
 }

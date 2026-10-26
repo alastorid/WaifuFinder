@@ -204,7 +204,7 @@ struct VideoPreviewPanel: View {
                         preview.load(asset: asset.value, offset: item?.offset ?? 0, mediaDuration: item?.duration,
                                      timelineDuration: session.video?.durationSeconds)
                         preview.seek(to: focusedFrame?.timeSeconds ?? time)
-                    } catch { session.errorMessage = error.localizedDescription }
+                    } catch { session.errorMessage = "Video preview unavailable." }
                 }
                 return
             }

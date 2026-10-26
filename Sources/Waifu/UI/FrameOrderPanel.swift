@@ -114,14 +114,11 @@ struct FrameOrderPanel: View {
     private var orderSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             signalRow(.minimalVisualDistance)
-            signalRow(.time)
+            if session.photosAlbumURL == nil { signalRow(.time) }
             signalRow(.face)
             signalRow(.definition)
             signalRow(.art)
             ratingSection
-            if session.photosAlbumURL != nil, WaifuDistribution.isNonCommercialOnly {
-                ForensicPanelSection(session: session, job: session.forensic) { signalRow(.trufor) }
-            }
         }
     }
 
