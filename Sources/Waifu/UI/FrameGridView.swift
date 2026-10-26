@@ -41,7 +41,6 @@ struct FrameGridView: View {
     /// Called when the user clicks a frame (single-click replaces selection,
     /// modifier clicks toggle or extend selection; Return also selects).
     let onFrameClick: (AnalyzedFrame, ClickKind) -> Void
-    var onSafire: ((AnalyzedFrame) -> Void)? = nil
 
     /// Whether the grid has keyboard focus.
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
@@ -445,12 +444,6 @@ struct FrameGridView: View {
         if let groupID = frame.groupID,
            let group = session.groups.first(where: { $0.id == groupID }) {
             Button("Select All in Group") { session.selectAll(in: group) }
-        }
-
-        if photoURL != nil,let onSafire {
-            // Opening captures the current photo/group. Album analysis and
-            // regrouping do not prevent reading or viewing SAFIRE evidence.
-            Button("SAFIRE",action:{onSafire(frame)})
         }
 
         if session.offersFocusedRangeAnalysis {

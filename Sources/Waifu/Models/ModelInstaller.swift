@@ -2,6 +2,14 @@ import CoreML
 import CryptoKit
 import Foundation
 
+struct ModelCompanionRelease: Decodable, Sendable {
+    let repository: String
+    let revision: String
+    let manifestSHA256: String
+    let supportFilesSHA256: [String: String]
+    let pathPrefix: String?
+}
+
 struct ModelRelease: Decodable, Sendable {
     let repository: String
     let revision: String
@@ -9,6 +17,7 @@ struct ModelRelease: Decodable, Sendable {
     let supportFilesSHA256: [String: String]
     let pathPrefix: String?
     var downloadBaseURL: String? = nil
+    let coreMLNoiseprintFP16: ModelCompanionRelease?
 }
 
 enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
@@ -34,8 +43,20 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .real: "Frame restoration · Core ML FP16 · about 33 MB download"
         case .pgt: "Temporal face restoration · Core ML · about 381 MB"
         case .tagger: "Frame traits · optimized native GPU · about 225 MB"
-        case .safire: "Photos forensics · native Swift/MLX · CC BY 4.0 weights"
-        case .trufor: "Photos forensics · native Swift/MLX · GRIP-UNINA nonprofit weights"
+        case .safire: "Photos forensics · optimized native GPU · about 388 MB"
+        case .trufor: "Photos forensics · Core ML FP16 noiseprint + native GPU · about 276 MB"
+        }
+    }
+    var licenseNotice: (summary: String, detail: String)? {
+        switch self {
+        case .pgt:
+            ("Non-commercial use only", "PGTFormer’s non-commercial licence applies to the model and its use.")
+        case .safire:
+            ("CC BY 4.0 · attribution required", "SAFIRE weights are provided under CC BY 4.0. Retain the licence and credit the original authors.")
+        case .trufor:
+            ("Nonprofit", "Redistributed with credit under the GRIP-UNINA licence: informational and nonprofit use only, and public results must credit the original authors.")
+        default:
+            nil
         }
     }
     var releaseName: String? {
@@ -195,6 +216,14 @@ actor ModelInstaller {
                 progress("File \(index + 1) of \(files.count) · \(message)", (Double(index) + (fraction ?? 0)) / Double(files.count))
             })
         }
+        if model == .trufor, let companion = release.coreMLNoiseprintFP16 {
+            do { try await installCoreMLNoiseprint(companion, stage: stage, progress: progress) }
+            catch {
+                progress("Core ML FP16 unavailable · using validated native FP32 fallback", nil)
+                try? FileManager.default.removeItem(at: stage.appendingPathComponent("CoreMLNoiseprint", isDirectory: true))
+                try? FileManager.default.removeItem(at: stage.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc"))
+            }
+        }
         progress("Download complete · setting up \(model.name)", nil)
         // The pinned Core ML bundles contain .mlpackage sources. Compiled Core ML is tied
         // to the local compiler and macOS version, so it is built here on the machine
@@ -225,8 +254,12 @@ actor ModelInstaller {
         return destination
     }
     static func installationDirectory(_ model: ManagedModel, release: ModelRelease, root: URL) -> URL {
-        let name = model == .tagger ? "wd-tagger-native-v2"
-            : (model == .pgt || model == .safire || model == .trufor) ? model.rawValue + "-" + String(release.revision.prefix(12)) : model.rawValue
+        let name: String
+        if model == .tagger { name = "wd-tagger-native-v2" }
+        else if model == .pgt || model == .safire || model == .trufor {
+            let companion = model == .trufor ? release.coreMLNoiseprintFP16.map { "-coreml-" + String($0.revision.prefix(12)) } ?? "" : ""
+            name = model.rawValue + "-" + String(release.revision.prefix(12)) + companion
+        } else { name = model.rawValue }
         return root.appendingPathComponent(name, isDirectory: true)
     }
     /// The `fileSHA256` map a release manifest must publish.
@@ -247,6 +280,39 @@ actor ModelInstaller {
         guard let digest = hashes[marker] else { return nil }
         return try checkedFile(root, marker, digest).deletingLastPathComponent()
     }
+    private static func baseURL(repository: String, revision: String, pathPrefix: String?) -> URL {
+        let suffix = pathPrefix.map { $0 + "/" } ?? ""
+        return URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(suffix)")!
+    }
+    private func installCoreMLNoiseprint(_ release: ModelCompanionRelease, stage: URL,
+                                         progress: @escaping Progress) async throws {
+        let component = stage.appendingPathComponent("CoreMLNoiseprint", isDirectory: true)
+        try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
+        let base = Self.baseURL(repository: release.repository, revision: release.revision, pathPrefix: release.pathPrefix)
+        let manifest = component.appendingPathComponent("manifest.json")
+        try await fetch(base.appendingPathComponent("manifest.json"), to: manifest,
+                        hash: release.manifestSHA256, progress: progress)
+        let hashes = try Self.hashes(component)
+        let files = hashes.merging(release.supportFilesSHA256) { original, _ in original }
+        for (index, name) in files.keys.sorted().enumerated() {
+            let relative = "CoreMLNoiseprint/\(name)"
+            let target = try Self.checkedFile(stage, relative, files[name]!)
+            progress("File \(index + 1) of \(files.count) · Core ML FP16 · \(name)",
+                     Double(index) / Double(files.count))
+            try await fetch(base.appendingPathComponent(name), to: target, hash: files[name]!, progress: { message, fraction in
+                progress("Core ML FP16 · \(message)", fraction)
+            })
+        }
+        guard let package = try Self.package(component, hashes, "model.mlpackage") else {
+            throw Self.fail("The TruFor FP16 companion does not contain its Core ML package.")
+        }
+        progress("Setting up TruFor · compiling Core ML FP16 model", nil)
+        let compiled = try await MLModel.compileModel(at: package)
+        defer { try? FileManager.default.removeItem(at: compiled) }
+        let target = stage.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
+        try FileManager.default.copyItem(at: compiled, to: target)
+        _ = try MLModel(contentsOf: target)
+    }
     func validate(_ model: ManagedModel, directory: URL, progress: @escaping Progress) throws {
         // A legacy RealESRGAN import is a bare compiled model with no manifest.
         // It cannot be checksum-verified, so it is only accepted when the user
@@ -261,6 +327,26 @@ actor ModelInstaller {
             for (name,hash) in try Self.hashes(directory) {
                 progress("Setting up TruFor · verifying \(name)",nil)
                 guard try Self.digest(Self.checkedFile(directory,name,hash))==hash else { throw Self.fail("Missing or damaged TruFor file: \(name)") }
+            }
+            if let companion = try Self.release(.trufor).coreMLNoiseprintFP16,
+               FileManager.default.fileExists(atPath: directory.appendingPathComponent("CoreMLNoiseprint/manifest.json").path) {
+                let component = directory.appendingPathComponent("CoreMLNoiseprint", isDirectory: true)
+                let manifest = component.appendingPathComponent("manifest.json")
+                guard try Self.digest(manifest) == companion.manifestSHA256 else {
+                    throw Self.fail("The TruFor Core ML FP16 companion does not match its pinned release.")
+                }
+                let companionHashes = try Self.hashes(component)
+                let companionFiles = companionHashes.merging(companion.supportFilesSHA256) { original, _ in original }
+                for (name, hash) in companionFiles {
+                    progress("Setting up TruFor · verifying Core ML FP16 \(name)", nil)
+                    guard try Self.digest(Self.checkedFile(component, name, hash)) == hash else {
+                        throw Self.fail("Missing or damaged TruFor Core ML FP16 file: \(name)")
+                    }
+                }
+                let compiledModel = directory.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
+                if FileManager.default.fileExists(atPath: compiledModel.path) {
+                    _ = try? MLModel(contentsOf: compiledModel)
+                }
             }
             return
         }

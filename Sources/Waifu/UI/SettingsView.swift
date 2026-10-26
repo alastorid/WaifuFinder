@@ -195,27 +195,29 @@ struct ModelSettingsView: View {
                     Image(systemName: entry.ready ? "checkmark.circle.fill" : "arrow.down.circle")
                         .foregroundStyle(entry.ready ? Color.green : Color.secondary).font(.title3).frame(width: 28)
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                        HStack(alignment: .firstTextBaseline) {
                             Text(entry.model.name).font(.headline)
                             Spacer()
                             Text(entry.updateAvailable ? "Update available" : entry.ready ? "Ready" : entry.location == nil ? (entry.pending == nil ? "Not installed" : "Download incomplete") : "Needs attention")
                                 .font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
-                        Text(entry.model.detail).font(.caption).foregroundStyle(.secondary)
-                        if entry.model == .trufor {
-                            Text("Redistributed with credit under the GRIP-UNINA licence: informational and nonprofit use only, and public results must credit the original authors.")
+                        Text(entry.model.detail)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let notice = entry.model.licenseNotice {
+                            Text(notice.summary)
                                 .font(.caption).foregroundStyle(.secondary)
-                        }
-                        if entry.model.isNonCommercialRestricted {
-                            Text(entry.model == .trufor ? "Nonprofit use only" : "Non-commercial use only")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .help(notice.detail)
+                                .accessibilityHint(notice.detail)
                         }
                         if let location = entry.location {
                             Text("\(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file)) · \(library.isManaged(entry) ? "App managed" : "External folder")")
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(location.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(2)
                         }
-                    }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let pending = entry.pending, library.active != entry.model {
                     Text("Incomplete download · \(pending.path)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -247,8 +249,11 @@ struct ModelSettingsView: View {
                         Button("Choose Existing…") { library.chooseExisting(entry.model) }
                     }.disabled(library.active != nil || library.isDownloadingAll || (library.inUse[entry.model] ?? 0) > 0)
                 }
-            }.padding(6)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(highlightedModel == entry.model.rawValue ? Color.accentColor : .clear, lineWidth: 2)

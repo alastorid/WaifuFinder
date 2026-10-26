@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-25",
+  "device": "Apple M4",
+  "macOS": "26.4.1",
+  "sourceWeightsSHA256": "3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c",
+  "sourceRevisionSHA256": "ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844",
+  "input": {
+    "image": "2000x2000 maximum.png",
+    "preprocessing": "opaque sRGB RGB divided by 256",
+    "tileOrigin": [512, 512],
+    "inputShapeNHWC": [1, 546, 546, 3],
+    "comparedOutput": "central 512x512 noiseprint",
+    "reference": "TFM1 evidence from the native MLX/Metal worker",
+    "warmSampleCount": 20
+  },
+  "accuracyGate": {
+    "maxAbsoluteError": 0.001,
+    "relativeRMS": 0.001
+  },
+  "results": [
+    {
+      "backend": "MLX / Metal",
+      "precision": "FP32",
+      "warmP50Milliseconds": 263.611083,
+      "warmP95Milliseconds": 273.5735,
+      "physicalPeakBytes": 892372168,
+      "modelParameterBytes": 274821940,
+      "noiseprintMaxAbsoluteError": 0.0,
+      "noiseprintRelativeRMS": 0.0,
+      "accepted": true
+    },
+    {
+      "backend": "Core ML",
+      "computeUnits": "all",
+      "precision": "FP32",
+      "computePlanPreferredOperationCounts": {
+        "GPU": 49,
+        "unavailable": 119
+      },
+      "warmP50Milliseconds": 89.966792,
+      "warmP95Milliseconds": 93.835082,
+      "physicalPeakBytes": 248693552,
+      "noiseprintMaxAbsoluteError": 0.0004192143678665161,
+      "noiseprintRelativeRMS": 0.0007005027332581356,
+      "accepted": true
+    },
+    {
+      "backend": "Core ML",
+      "computeUnits": "all",
+      "precision": "FP16",
+      "computePlanPreferredOperationCounts": {
+        "ANE": 52,
+        "unavailable": 122
+      },
+      "warmP50Milliseconds": 20.932917,
+      "warmP95Milliseconds": 21.865458,
+      "physicalPeakBytes": 41468624,
+      "noiseprintMaxAbsoluteError": 0.24374610185623169,
+      "noiseprintRelativeRMS": 0.5971685071177092,
+      "accepted": false
+    },
+    {
+      "backend": "Core ML",
+      "computeUnits": "all",
+      "precision": "mixed",
+      "fp32ConvolutionCount": 5,
+      "fp16ConvolutionCount": 12,
+      "fp32ConvolutionIndices": [0, 11, 23, 35, 47],
+      "preferredOperationCounts": {"ANE": 43, "GPU": 15, "unavailable": 128},
+      "warmP50Milliseconds": 56.26125,
+      "warmP95Milliseconds": 68.006458,
+      "physicalPeakBytes": 488620824,
+      "noiseprintMaxAbsoluteError": 0.23673273622989655,
+      "noiseprintRelativeRMS": 0.5695567975661472,
+      "accepted": false
+    },
+    {
+      "backend": "Core ML",
+      "computeUnits": "all",
+      "precision": "mixed",
+      "fp32ConvolutionCount": 9,
+      "fp16ConvolutionCount": 8,
+      "fp32ConvolutionIndices": [0, 5, 11, 17, 23, 29, 35, 41, 47],
+      "preferredOperationCounts": {"ANE": 39, "GPU": 27, "unavailable": 136},
+      "warmP50Milliseconds": 90.880791,
+      "warmP95Milliseconds": 106.923541,
+      "physicalPeakBytes": 808223536,
+      "noiseprintMaxAbsoluteError": 0.2661311775445938,
+      "noiseprintRelativeRMS": 0.5510133552463886,
+      "accepted": false
+    },
+    {
+      "backend": "experimental direct ANE",
+      "precision": "FP16",
+      "compileAndLoad": "succeeds for the tested small DnCNN graph",
+      "evaluation": "fails on the M4 during TruFor 17-layer graph execution with status 0x1d/type 0x9",
+    "failedAttemptPlusFallbackPhysicalPeakBytes": 534119408,
+    "physicalPeakScope": "Combined direct-ANE failure and Core ML FP32 fallback process; not direct-only",
+      "warmP50Milliseconds": null,
+      "noiseprintMaxAbsoluteError": null,
+      "accepted": false,
+      "fallback": "Core ML FP32; same-tile accuracy gate passes"
+    }
+  ],
+  "directANSyntheticSmoke": {
+    "64ChannelFP16ConvWithBias": {
+      "compileCount": 1,
+      "compileAndLoadMilliseconds": 33.019625,
+      "evaluationMilliseconds": 0.203333,
+      "finiteOutput": true
+    },
+    "17Layer64ChannelChain": {
+      "side32": "evaluates",
+      "side36": "fails with ANEProgramProcessRequestDirect status 0x1d/type 0x9",
+      "side66": "fails with ANEProgramProcessRequestDirect status 0x1d/type 0x9"
+    }
+  },
+  "memoryBudget": {
+    "limitBytes": 2000000000,
+    "full4MPMLXPeakBytes": 1028343032,
+    "full24MPMLXStoppedAtBytes": 1705707344,
+    "guardRelaxed": false
+  },
+  "notes": [
+    "Core ML compute-plan placement is a preferred-device recommendation, not a runtime hardware trace.",
+    "Direct ANE is isolated, optional, and not selected by the application.",
+    "Upstream synthetic W8A8 MIL was reviewed but not ported: there are no calibrated accuracy-validated INT8 TruFor weights, and direct FP16 execution already fails on the real graph.",
+    "Inference and benchmark workers are native Swift/Objective-C; Python is not in the inference chain.",
+    "No GPL/LGPL or FFmpeg dependency was added."
+  ]
+}

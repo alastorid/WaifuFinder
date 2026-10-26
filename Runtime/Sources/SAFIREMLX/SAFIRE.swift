@@ -17,10 +17,10 @@ public enum SAFIREPrecision: String, Codable {
 /// are gathered once at load; linear weights are pre-transposed; the automatic
 /// 256-prompt path runs as fixed-shape compiled chunks whose image keys stay
 /// unbatched in the first layer and whose mask post-processing is a fused
-/// kernel. No Swin routing, cosine normalization, quantization or approximate
-/// GELU.
+/// kernel. Production uses FP16 only inside the two-way decoder transformer;
+/// the encoder and spatial upscaling tail stay FP32.
 public final class SAFIREModel {
-    public static let revision = "safire-native-v1"
+    public static let revision = "safire-native-v2"
     private var weights: [String:MLXArray]
     private var transposed: [String:MLXArray] = [:]
     private var relTables: [String:(MLXArray,MLXArray)] = [:]
@@ -28,18 +28,17 @@ public final class SAFIREModel {
     private var upscaleBiases: [String:MLXArray] = [:]
     private let profile: SAFIREProfile
     private let precision: SAFIREPrecision
-    private var dtype: DType { precision == .fp16 ? .float16 : .float32 }
-    /// Mixed-precision scope: the decoder consumes encoder embeddings, so its
-    /// weights can run FP32 (exact upcast from a prepared FP16 file) while the
-    /// encoder runs FP16, or the reverse, to localize precision sensitivity.
-    private var encoderDType: DType { dtype }
-    private var decoderDType: DType {
-        guard precision == .fp16 else { return .float32 }
-        switch profile.fp16Scope {
-        case "encoder": return .float32
-        case "decoder": return .float16
-        default: return .float16
-        }
+    private var encoderDType: DType {
+        precision == .fp16 && ["all", "encoder"].contains(profile.fp16Scope) ? .float16 : .float32
+    }
+    private var promptDType: DType {
+        precision == .fp16 && ["all", "decoder"].contains(profile.fp16Scope) ? .float16 : .float32
+    }
+    private var transformerDType: DType {
+        precision == .fp16 && ["all", "decoder", "transformer"].contains(profile.fp16Scope) ? .float16 : .float32
+    }
+    private var decoderTailDType: DType {
+        precision == .fp16 && ["all", "decoder"].contains(profile.fp16Scope) ? .float16 : .float32
     }
     private let highpass: MLXArray
     private let densePE: MLXArray
@@ -85,19 +84,25 @@ public final class SAFIREModel {
         if prepared && !weights.values.allSatisfy({ $0.dtype == .float16 }) {
             throw SAFIREError.invalid("Prepared SAFIRE checkpoint must hold FP16 weights")
         }
-        if profile.precisionOverridden { precision = profile.precision }
-        else { precision = prepared ? .fp16 : .fp32 }
-        if precision == .fp16 && weights.values.first?.dtype != .float16 {
-            for (name,value) in weights { weights[name]=value.asType(.float16) }
+        precision = profile.precision
+        if prepared && precision == .fp16 && profile.fp16Scope != "all" {
+            throw SAFIREError.invalid("Mixed-precision scopes require the original FP32 SAFIRE checkpoint")
         }
-        if precision == .fp32 && weights.values.first?.dtype != .float32 {
-            for (name,value) in weights { weights[name]=value.asType(.float32) }
-        }
-        if precision == .fp16, profile.fp16Scope == "encoder" {
-            // Decoder runs FP32: exact upcast of the prepared FP16 tensors.
-            for (name,value) in weights where !name.hasPrefix("image_encoder.") {
-                weights[name]=value.asType(.float32)
+        for (name,value) in weights {
+            let useHalf: Bool
+            if precision != .fp16 {
+                useHalf = false
+            } else {
+                switch profile.fp16Scope {
+                case "all": useHalf = true
+                case "encoder": useHalf = name.hasPrefix("image_encoder.")
+                case "decoder": useHalf = name.hasPrefix("prompt_encoder.") || name.hasPrefix("mask_decoder.")
+                case "transformer": useHalf = name.hasPrefix("mask_decoder.transformer.")
+                default: useHalf = false
+                }
             }
+            let target: DType = useHalf ? .float16 : .float32
+            if value.dtype != target { weights[name] = value.asType(target) }
         }
         // One-time kernel layout preparation; original safetensors stay lossless.
         for key in Array(weights.keys) where key.hasSuffix(".weight") && weights[key]!.ndim == 4 {
@@ -139,10 +144,11 @@ public final class SAFIREModel {
         }
         // The FFT branch stays FP32 in every precision mode.
         highpass = MLXArray(mask,[1,1024,1024,1])
-        let edt: DType = precision == .fp16 ? .float16 : .float32
-        let ddt: DType
-        if precision != .fp16 { ddt = .float32 }
-        else { switch profile.fp16Scope { case "encoder": ddt = .float32; case "decoder": ddt = .float16; default: ddt = .float16 } }
+        let encoderType: DType = precision == .fp16 && ["all", "encoder"].contains(profile.fp16Scope) ? .float16 : .float32
+        let promptType: DType = precision == .fp16 && ["all", "decoder"].contains(profile.fp16Scope) ? .float16 : .float32
+        let transformerType: DType = precision == .fp16 && ["all", "decoder", "transformer"].contains(profile.fp16Scope) ? .float16 : .float32
+        let edt = encoderType
+        let ddt = promptType
         for i in 0..<12 {
             let prefix="image_encoder.blocks.\(i).attn"
             let side=[2,5,8,11].contains(i) ? 64 : 14
@@ -171,19 +177,20 @@ public final class SAFIREModel {
         // checkpoint constant. Folding removes six [batch,4096,256]
         // materializations per grid chunk.
         var folded:[String:MLXArray]=[:]
+        let transformerPE=densePE.asType(transformerType)
         // Folded constants carry the projection bias as well, so the runtime
         // form keys@W^T + (pe@W^T + bias) equals the upstream (keys+pe)@W^T + bias.
         for layer in 0..<2 {
             let p="mask_decoder.transformer.layers.\(layer)"
             let kBias=weights[p+".cross_attn_token_to_image.k_proj.bias"]
-            let kFolded=matmul(densePE,transposed[p+".cross_attn_token_to_image.k_proj"]!)
-            folded[p+".cross_attn_token_to_image.k"]=kBias.map { kFolded+$0 } ?? kFolded
+            let kFolded=matmul(transformerPE,transposed[p+".cross_attn_token_to_image.k_proj"]!)
+            folded[p+".cross_attn_token_to_image.k"]=kBias.map { kFolded+$0.asType(transformerType) } ?? kFolded
             let qBias=weights[p+".cross_attn_image_to_token.q_proj.bias"]
-            let qFolded=matmul(densePE,transposed[p+".cross_attn_image_to_token.q_proj"]!)
-            folded[p+".cross_attn_image_to_token.q"]=qBias.map { qFolded+$0 } ?? qFolded
+            let qFolded=matmul(transformerPE,transposed[p+".cross_attn_image_to_token.q_proj"]!)
+            folded[p+".cross_attn_image_to_token.q"]=qBias.map { qFolded+$0.asType(transformerType) } ?? qFolded
         }
-        let finalFolded=matmul(densePE,transposed["mask_decoder.transformer.final_attn_token_to_image.k_proj"]!)
-        let finalBiasFold=weights["mask_decoder.transformer.final_attn_token_to_image.k_proj.bias"].map { finalFolded+$0 }
+        let finalFolded=matmul(transformerPE,transposed["mask_decoder.transformer.final_attn_token_to_image.k_proj"]!)
+        let finalBiasFold=weights["mask_decoder.transformer.final_attn_token_to_image.k_proj.bias"].map { finalFolded+$0.asType(transformerType) }
         folded["mask_decoder.transformer.final_attn_token_to_image.k"]=finalBiasFold ?? finalFolded
         peFolded=folded
         peFolded=folded
@@ -358,7 +365,7 @@ public final class SAFIREModel {
     public func decode(embedding:MLXArray,points:MLXArray) throws -> (masks:MLXArray,quality:MLXArray) {
         guard embedding.shape == [1,64,64,256], points.ndim == 2, points.dim(1) == 2,
               (1...16).contains(points.dim(0)) else { throw SAFIREError.invalid("Invalid prompt batch") }
-        let embedding=embedding.asType(decoderDType)
+        let embedding=embedding.asType(promptDType)
         let batch=points.dim(0)
         let graph:([MLXArray])->[MLXArray]
         if let cached=compiledDecoders[batch] { graph=cached }
@@ -377,7 +384,7 @@ public final class SAFIREModel {
     }
     private func decodeGraph(embedding:MLXArray,points:MLXArray) -> (MLXArray,MLXArray) {
         let batch=points.dim(0)
-        let phase=matmul((points.asType(decoderDType)+0.5)/1024*2-1,w("prompt_encoder.pe_layer.positional_encoding_gaussian_matrix"))*(2*Float.pi)
+        let phase=matmul((points.asType(promptDType)+0.5)/1024*2-1,w("prompt_encoder.pe_layer.positional_encoding_gaussian_matrix"))*(2*Float.pi)
         let positive=concatenated([sin(phase),cos(phase)],axis:-1)+w("prompt_encoder.point_embeddings.1.weight")
         let padding=broadcast(w("prompt_encoder.not_a_point_embed.weight"),to:[batch,1,256])
         let sparse=concatenated([positive.expandedDimensions(axis:1),padding],axis:1)
@@ -390,9 +397,11 @@ public final class SAFIREModel {
     /// stream unbatched through the first layer, where it is still identical
     /// for every prompt of the automatic grid.
     private func twoWayTransformer(embedding:MLXArray,tokens:MLXArray,sharedKeys:MLXArray?) -> (MLXArray,MLXArray) {
+        let embedding=embedding.asType(transformerDType)
+        let tokens=tokens.asType(transformerDType)
         let batch=tokens.dim(0)
         var queries=tokens
-        var keys=sharedKeys ?? broadcast(embedding.reshaped(1,4096,256)+w("prompt_encoder.no_mask_embed.weight"),to:[batch,4096,256])
+        var keys=sharedKeys?.asType(transformerDType) ?? broadcast(embedding.reshaped(1,4096,256)+w("prompt_encoder.no_mask_embed.weight").asType(transformerDType),to:[batch,4096,256])
         // q/k projections consume keys+pe via the pre-folded constant
         // (peFolded); v projections take keys directly, as upstream.
         // `folded` is the precomputed pe@W for whichever side consumes
@@ -465,15 +474,17 @@ public final class SAFIREModel {
         return value
     }
     private func decoderTail(queries:MLXArray,keys:MLXArray,batch:Int) -> (MLXArray,MLXArray) {
+        let tailQueries=queries.asType(decoderTailDType)
+        let tailKeys=keys.asType(decoderTailDType)
         var mark=Date()
-        var up=upscaleStage(keys.reshaped(batch,64,64,256),"mask_decoder.output_upscaling.0",
+        var up=upscaleStage(tailKeys.reshaped(batch,64,64,256),"mask_decoder.output_upscaling.0",
             lnName:"mask_decoder.output_upscaling.1")
         record("tail.upscale1",mark,up); mark=Date()
         up=upscaleStage(up,"mask_decoder.output_upscaling.3",geluAfter:true)
         record("tail.upscale2",mark,up); mark=Date()
         // multimask_output=False selects mask token zero. Other tokens still take
         // part in two-way attention, just as upstream; unused hypernets are skipped.
-        let hyper=mlp(queries[0...,1,0...],"mask_decoder.output_hypernetworks_mlps.0")
+        let hyper=mlp(tailQueries[0...,1,0...],"mask_decoder.output_hypernetworks_mlps.0")
         record("tail.hyper",mark,hyper); mark=Date()
         // Mask logits are the threshold-bearing output: evaluate the final
         // projection in FP32 in every precision mode.
@@ -482,7 +493,7 @@ public final class SAFIREModel {
         let masks=SAFIRENorm.maskProject(up.reshaped(batch,65536,32).asType(.float32),
             hyper:hyper.asType(.float32),batch:batch).reshaped(batch,256,256)
         record("tail.maskProject",mark,masks); mark=Date()
-        let quality=mlp(queries[0...,0,0...],"mask_decoder.iou_prediction_head")[0...,0].asType(.float32)
+        let quality=mlp(tailQueries[0...,0,0...],"mask_decoder.iou_prediction_head")[0...,0].asType(.float32)
         record("tail.quality",mark,quality)
         return (masks,quality)
     }
@@ -524,7 +535,7 @@ public final class SAFIREModel {
     func gridPredictions(embedding:MLXArray) -> (masks:MLXArray,areas:[Int32],counts:[Float],features:[[Float]],qualities:[Float]) {
         let chunk=profile.promptBatch
         precondition(256%chunk==0,"Prompt chunk must divide the 16×16 grid")
-        let embedding=embedding.asType(decoderDType)
+        let embedding=embedding.asType(promptDType)
         let keys0=embedding.reshaped(1,4096,256)+w("prompt_encoder.no_mask_embed.weight")
         let graph=gridGraph(chunk)
         var chunkMasks:[MLXArray]=[],chunkAreas:[MLXArray]=[],chunkPooled:[MLXArray]=[],chunkCounts:[MLXArray]=[],chunkQuality:[MLXArray]=[]
@@ -748,9 +759,9 @@ public struct SAFIREProfile: Codable {
         let rows=Int(environment["WAIFU_SAFIRE_QUERY_ROWS"] ?? Self.defaultQueryRows(device:device.name)) ?? 0
         let batch=Int(environment["WAIFU_SAFIRE_PROMPT_BATCH"] ?? Self.defaultPromptBatch(device:device.name)) ?? 0
         let precisionRaw=environment["WAIFU_SAFIRE_PRECISION"]
-        let precision=SAFIREPrecision(rawValue:precisionRaw ?? "") ?? .fp32
-        let fp16Scope=environment["WAIFU_SAFIRE_FP16_SCOPE"] ?? "all"
-        guard ["all","encoder","decoder"].contains(fp16Scope) else {
+        let precision=SAFIREPrecision(rawValue:precisionRaw ?? "fp16") ?? .fp32
+        let fp16Scope=environment["WAIFU_SAFIRE_FP16_SCOPE"] ?? "transformer"
+        guard ["all","encoder","decoder","transformer"].contains(fp16Scope) else {
             throw SAFIREError.invalid("Invalid FP16 scope")
         }
         let compile=Int(environment["WAIFU_SAFIRE_COMPILE"] ?? "1") != 0
@@ -777,7 +788,9 @@ public struct SAFIREProfile: Codable {
                 "upscaling":"fused FP32 upsample GEMM kernels (bias + pixel shuffle + LayerNorm/GELU epilogue, one pass; WAIFU_SAFIRE_UPSCALE=mlx reverts to MLX matmul + separate passes)",
                 "maskProject":"fused per-prompt hypernet dot kernel",
                 "GEMM":"MLX library device-aware tiles, pre-transposed weights",
-                "precision":"FP32 weights/activations; FP32 FFT, softmax and mask logits; FP16 path retained behind WAIFU_SAFIRE_PRECISION for benchmarks only"],
+                "precision":precision == .fp16 && fp16Scope == "transformer"
+                    ? "FP16 two-way decoder transformer; FP32 encoder, prompt encoder, upscaling tail, FFT, softmax and mask logits"
+                    : "\(precision.rawValue.uppercased()) precision scope: \(fp16Scope); FP32 FFT, softmax and mask logits"],
             evidence:"docs/ImageLineage-native-validation.json; docs/ImageLineage-native-benchmark.json",
             maximumThreadgroupBytes:device.maxThreadgroupMemoryLength)
     }

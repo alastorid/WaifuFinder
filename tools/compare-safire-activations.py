@@ -44,7 +44,7 @@ for reference in sorted(a.reference.glob('*.safetensors')):
             record.update(passed=ok,pixelAgreement=agreement,minimumSourceIoU=min(ious))
         results.append(record);passed=passed and ok
         print(key,'PASS' if ok else 'FAIL','max',round(maximum,7),'relative RMS',round(relative,7))
-report=dict(status='passed' if passed else 'failed',runtimeRevision='safire-native-v1',
+report=dict(status='passed' if passed else 'failed',runtimeRevision='safire-native-v2',
     sourceSHA256='65bdf6880380162d57f77d71b3fd367c3f16aebca316f942a821da16e9225b12',
     fixture=json.loads((a.reference/'reference.json').read_text())['fixture'],tolerances=dict(relativeRMS=2e-4,maxAbsoluteFloor=2e-4,maxDynamicRangeFraction=1e-3,maskIoU=0.999,partitionAgreement=0.9999,sourcePartitionIoU=0.999),
     spatialParityPassed=passed,scope='FP32 encoder, two positive-point decoder masks, and automatic 256-prompt binary/source-partition output; deterministic farthest-first clustering; not dataset quality validation',results=results)

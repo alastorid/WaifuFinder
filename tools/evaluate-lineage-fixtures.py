@@ -39,6 +39,6 @@ try:
         rows.append(row);print(entry['name']+': flagged '+format(row['flaggedFraction'],'.3%'),flush=True)
 finally:
     process.stdin.close();process.terminate();process.wait(timeout=15)
-report=dict(runtimeRevision='safire-native-v1',source=history['source'],sourceURL=history['sourceURL'],
+report=dict(runtimeRevision='safire-native-v2',source=history['source'],sourceURL=history['sourceURL'],
     scope='One photographic scene and known edits; diagnostic behavior, not dataset-level accuracy. Baseline flagged area is an overflagging diagnostic, not a pristine-camera false-positive rate. Window rates are not exact-mask recall.',results=rows)
 (a.output/'summary.json').write_text(json.dumps(report,indent=2)+'\n')

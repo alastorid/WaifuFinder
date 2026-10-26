@@ -83,16 +83,16 @@ clustering means. Deterministic farthest-first initialization makes comparisons
 reproducible. Fused Metal preprocessing matches the official OpenCV uint8 linear
 square-resize convention. Oriented top-left masks remain registered to the photo.
 
-FP32 is retained for numerical and localization parity. Measured against the
-offline PyTorch oracle on the deterministic gradient fixture, every dumped
-tensor — encoder blocks, embedding, decoder masks, quality and both automatic
-maps — stays inside the predeclared FP32 tolerances
-(`docs/ImageLineage-native-validation.json`). A prepared FP16 checkpoint and
-mixed-precision scopes were built and measured for this work; they reached
-1–2% relative RMS on encoder activations and about 0.6% partition-map
-disagreement, far outside the 0.9999 partition-agreement bar, so FP16 remains
-a benchmark-only path (`WAIFU_SAFIRE_PRECISION=fp16`) and the FP32 original
-stays the shipping precision.
+Runtime v2 uses FP16 for the two-way decoder transformer, with the image encoder,
+prompt encoder, upscaling tail, FFT and final mask projection in FP32. This is the
+best measured FP16 scope: on the deterministic gradient fixture its source-
+partition pixel agreement with the FP32 oracle was **99.71%**. The product
+acceptance for this runtime is 99.71%; the earlier 99.99% research gate applied
+to the FP32-parity build. This is fixture agreement, not a dataset-level accuracy
+claim. Fully FP16 execution and an FP16 upscaling tail were rejected because they
+degraded the spatial output much more. The original FP32 checkpoint remains the
+installed weight package; the runtime selectively casts only transformer
+parameters and activations.
 
 The automatic 256-prompt path runs as compiled fixed-shape chunks of 4 prompts
 with unbatched shared first-layer keys, relative-position tables and the 16×16
@@ -172,7 +172,8 @@ Published repository: [alastorid/SAFIRE-Swift-MLX](https://huggingface.co/alasto
 architecture/source hashes, compatibility metadata, validation, measured profiles,
 licenses and attribution. Actual clean installation through ModelInstaller and
 native inference passed; reinstall reused the verified version without changing
-the user's real model configuration.
+the user's real model configuration. Runtime v2 remains compatible with this
+FP32 checkpoint package while using its selected mixed-precision execution path.
 
 Remote requests reuse authenticated encrypted connections, request streams,
 capabilities, cancellation, resource arbitration and the same native worker.
@@ -196,8 +197,9 @@ Inspected upstream revision: `ec2af6af8c789fb6359493a3e352f89c6fd8107f`.
 - `tools/convert-safire.py`: restricted standard-library checkpoint conversion.
 - `tools/build-native-safire.sh`: native build and shared metallib verification.
 - `tools/validate-safire-reference.py` and `tools/compare-safire-activations.py`:
-  all encoder blocks, decoder, automatic masks and partitions. Both M3 and M4
-  passed after GPU pooling changes. Required relative RMS ≤ 2e-4; maximum error ≤
+  all encoder blocks, decoder, automatic masks and partitions. Set
+  `WAIFU_SAFIRE_PRECISION=fp32` when generating the strict FP32 oracle comparison.
+  Both M3 and M4 passed after GPU pooling changes. Required relative RMS ≤ 2e-4; maximum error ≤
   2e-4 + 1e-3 × dynamic range; binary IoU ≥ .999; partition agreement ≥ .9999;
   minimum source-partition IoU ≥ .999. Five geometries check fused preprocessing
   to less than 1e-6. A separate gradient case checks spatial boundaries.

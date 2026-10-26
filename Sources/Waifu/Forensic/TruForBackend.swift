@@ -15,6 +15,12 @@ private final class TruForWorker:@unchecked Sendable {
         // A diagnostic shell override must not silently alter persisted app scores.
         var environment=ProcessInfo.processInfo.environment
         environment["WAIFU_TRUFOR_PRECISION"]="fp32"
+        let coreMLNoiseprint=configuration.directory.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
+        if FileManager.default.fileExists(atPath:coreMLNoiseprint.path) {
+            environment["WAIFU_TRUFOR_COREML_FP16_MODEL"]=coreMLNoiseprint.path
+        } else {
+            environment.removeValue(forKey:"WAIFU_TRUFOR_COREML_FP16_MODEL")
+        }
         process.environment=environment
         process.standardInput=incoming;process.standardOutput=outgoing
         FileManager.default.createFile(atPath:root.appendingPathComponent("worker.log").path,contents:nil)
@@ -27,7 +33,11 @@ private final class TruForWorker:@unchecked Sendable {
     private func line()throws->String {
         var bytes=Data()
         while bytes.count<8192 {
-            guard let byte=try output.read(upToCount:1),!byte.isEmpty else { throw ModelInstaller.fail("TruFor worker stopped") }
+            guard let byte=try output.read(upToCount:1),!byte.isEmpty else {
+                let log=(try? String(contentsOf:root.appendingPathComponent("worker.log"),encoding:.utf8)) ?? ""
+                let detail=log.split(separator:"\n").last.map(String.init) ?? ""
+                throw ModelInstaller.fail(detail.hasPrefix("TruFor stopped") ? detail:"TruFor worker stopped")
+            }
             if byte[0]==10 { return String(decoding:bytes,as:UTF8.self) };bytes.append(byte)
         }
         throw ModelInstaller.fail("Invalid TruFor worker reply")

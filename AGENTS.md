@@ -36,6 +36,15 @@ resolve it before proceeding.
 Media fixtures use Apple-native generation. Keep app, build, tests, benchmarks and
 CI independent of FFmpeg libraries and command-line tools. Do not add such dependencies.
 
+## TruFor Core ML, MLX and ANE experiments
+
+Before repeating or extending TruFor Core ML, MLX or ANE work, read
+`docs/TruFor-M4-experiment-notes.md`. It records M4 measurements, rejected
+memory probes, the 1024×1024 Core ML safety stop and the limits of counting
+ANE-service memory. Keep Python out of every inference path; Python may be used
+only for explicitly offline conversion/reference tooling. The nonprofit TruFor
+licence and the GPL/LGPL prohibition above still apply.
+
 ## WD Tagger ANE and Core ML trials
 
 Before repeating or extending a WD SwinV2 ANE/Core ML experiment, read

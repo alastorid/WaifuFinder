@@ -5,7 +5,8 @@ let allowTruFor=ProcessInfo.processInfo.environment["WAIFU_COMMERCIAL_DISTRIBUTI
 let package = Package(
     name: "WaifuRuntime",
     platforms: [.macOS(.v15)],
-    products: (allowTruFor ? [.executable(name:"waifu-trufor",targets:["WaifuTruFor"])] : []) + [.executable(name:"waifu-safire",targets:["WaifuSAFIRE"]),.executable(name: "waifu-seedvr2", targets: ["WaifuSeedVR2"]),
+    products: (allowTruFor ? [.executable(name:"waifu-trufor",targets:["WaifuTruFor"]),
+                              .executable(name:"waifu-trufor-direct-ane-probe",targets:["WaifuTruForDirectANEProbe"])] : []) + [.executable(name:"waifu-safire",targets:["WaifuSAFIRE"]),.executable(name: "waifu-seedvr2", targets: ["WaifuSeedVR2"]),
                .executable(name: "waifu-flashvsr", targets: ["WaifuFlashVSR"]),
                .executable(name: "waifu-face-validation", targets: ["WaifuFaceValidation"]),
                .executable(name: "waifu-pgtformer", targets: ["WaifuPGTFormer"]),
@@ -14,8 +15,14 @@ let package = Package(
                .executable(name: "waifu-wdtagger-validation", targets: ["WaifuWDTaggerValidation"])],
     dependencies: [.package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.2")],
     targets: (allowTruFor ? [
-        .target(name:"TruForMLX",dependencies:[.product(name:"MLX",package:"mlx-swift")]),
-        .executableTarget(name:"WaifuTruFor",dependencies:["TruForMLX",.product(name:"MLX",package:"mlx-swift")])] : []) + [
+        .target(name:"TruForMLX",dependencies:[.product(name:"MLX",package:"mlx-swift")],
+                linkerSettings:[.linkedFramework("CoreML")]),
+        .executableTarget(name:"WaifuTruFor",dependencies:["TruForMLX",.product(name:"MLX",package:"mlx-swift")]),
+        .target(name:"TruForDirectANE",path:"Sources/TruForDirectANE",publicHeadersPath:"include",
+                cSettings:[.unsafeFlags(["-fobjc-arc"])],
+                linkerSettings:[.linkedFramework("Foundation"),.linkedFramework("IOSurface")]),
+        .executableTarget(name:"WaifuTruForDirectANEProbe",dependencies:["TruForDirectANE","TruForMLX",.product(name:"MLX",package:"mlx-swift")],
+                          linkerSettings:[.linkedFramework("CoreML"),.linkedFramework("CoreGraphics"),.linkedFramework("ImageIO")])] : []) + [
         .target(name:"SAFIREMLX",dependencies:[.product(name:"MLX",package:"mlx-swift")]),
         .executableTarget(name:"WaifuSAFIRE",dependencies:["SAFIREMLX",.product(name:"MLX",package:"mlx-swift")]),
         .target(name: "WDTaggerMLX", dependencies: [.product(name: "MLX", package: "mlx-swift")],

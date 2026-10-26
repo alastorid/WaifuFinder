@@ -18,13 +18,9 @@ The pre-squash commit hash record is backed up in a [private GitHub archive](htt
 
 ## SAFIRE for Photos
 
-Right-click a Photos thumbnail and choose **SAFIRE**. It analyzes that photo, or
-its complete group in one-group-per-line mode. Each photo gets a clear highlighted
-overlay and a separate mask, sorted by lowest mask-area ratio first. The least
-masked versions are original candidates under that ranking rule, rather than a
-proven chronology. Photos preview also has a **SAFIRE** overlay/mask toggle.
-Install the model through Settings → Models. See [SAFIRE](docs/ImageLineage.md)
-for the workflow, validation, CPU/GPU measurements and remote execution.
+The Photos preview offers a **SAFIRE** overlay/mask toggle for inspecting the
+model’s flagged regions. Install the model through Settings → Models. SAFIRE’s
+map does not identify editing software or establish photo chronology.
 
 ## TruFor forensic scores
 
@@ -37,6 +33,11 @@ Settings → Models. TruFor is redistributed with credit under the GRIP-UNINA
 licence: informational and nonprofit use only, and public results must credit
 the original authors. See [TruFor](docs/TruFor.md) for validation and
 measurements.
+
+The native TruFor worker targets a 2 GB process budget while preserving its
+original 24 MP input envelope. Large images stream FP32 activations through
+temporary disk storage, preserving full resolution and global model context.
+This trades speed and disk traffic for RAM. See the [RAM policy and validation](docs/TruFor.md#ram-budget-2026-10-25).
 
 ## Install on a Mac
 
@@ -134,6 +135,12 @@ they exclude image preparation, file I/O and app/worker communication.
 | Previous native, Float32 input, 768 MiB budget | 15.28 / 15.51 | 998.2 / 998.4 MB | Opening / closing controls |
 | **Native Metal, direct RGBA bytes, 448 MiB budget** | **15.52 / 15.53** | **665.3 MB** | **Selected app backend**, repeated |
 | Native RGBA, 384 MiB budget | 15.29 | 609.9 MB | Lower-memory trial; slower than selected |
+
+The Core ML controls above allowed CPU and GPU only. A later CPU+ANE run did invoke
+ANE execution, but measured 14.62 fps versus 15.66 fps for native and failed the
+output-agreement check; the `.all` cold-load compilation did not complete. The
+[WD Tagger ANE investigation](docs/WDTagger-ANE.md) records the measurements and
+the numerical failure.
 
 The selected path preserves approximately 15.5 fps while using **33.4% less peak
 process memory** than the previous native path. It measured **7.2–9.0% faster and

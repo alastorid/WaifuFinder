@@ -349,6 +349,24 @@
     "cacheLimitMB": 64,
     "budgetMB": 2048
   },
+  "precisionAcceptanceUpdate": {
+    "runtimeRevision": "safire-native-v2",
+    "device": "Apple M3",
+    "fixture": "Tests/Fixtures/WDTagger/rgb-gradient.png",
+    "profile": "256 query rows / 4 prompts",
+    "scope": "Five warm SFM1 worker requests per precision, separate sequential worker processes, same installed FP32 checkpoint. FP16 scope casts only mask_decoder.transformer parameters and activations; encoder, prompt encoder and upscaling tail remain FP32. No peak-memory measurement was captured.",
+    "fp32": {
+      "medianSeconds": 2.251648667,
+      "samples": [2.230896625, 2.31672875, 2.24942825, 2.251648667, 2.319959584]
+    },
+    "transformerFP16": {
+      "medianSeconds": 2.044577917,
+      "samples": [2.044577917, 1.981813291, 2.058557208, 1.979232374, 2.052828292]
+    },
+    "speedup": "9.2% (1.10x)",
+    "partitionPixelAgreement": 0.9971,
+    "parityNote": "The 0.9971 result comes from the earlier measured transformer-FP16 / tail-FP32 experiment on this fixture; it was accepted for runtime v2. Real-photo dataset accuracy is unmeasured."
+  },
   "agentRounds": {
     "agent-a": "decoder FP16 rejected at every scope (best 0.9971 vs 0.9999 gate; tail FP16 catastrophic 0.7254); fused keys q/k GEMM: wash \u2014 rejected. Report: .native-runtime/agent-a-report.md",
     "agent-b": "fused rel-pos bias outer-sum kernel shipped (bitwise-exact, encode.total 0.790\u21920.776s, 5/6 rounds); per-chunk compile and flash kernel rejected with measurements. Report: .native-runtime/agent-b-report.md",

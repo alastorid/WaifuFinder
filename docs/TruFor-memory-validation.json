@@ -1,0 +1,482 @@
+{
+  "status": "failed",
+  "measuredDate": "2026-10-25",
+  "platform": "macOS-26.5.1-arm64-arm-64bit",
+  "chip": "Apple M3",
+  "budgetBytes": 2000000000,
+  "stopBytes": 1700000000,
+  "maximumPixels": 24000000,
+  "precision": "fp32",
+  "inputPolicy": "Original 24 MP envelope; no new RAM pixel cap; native geometry without resize; FP32 disk scratch for large activations",
+  "physicalPeakSamplingMilliseconds": 5,
+  "externalProcessMemory": {
+    "maximumResidentBytes": 983449600,
+    "peakPhysicalBytes": 1621542184
+  },
+  "scoreEvidenceBatchConsistent": true,
+  "officialReferenceParity": [
+    {
+      "tensor": "confidence_logits",
+      "maximumAbsoluteError": 0.0004062652587890625,
+      "relativeRMS": 2.823111873981454e-05,
+      "passed": true
+    },
+    {
+      "tensor": "detection_statistics",
+      "maximumAbsoluteError": 0.0002346038818359375,
+      "relativeRMS": 2.074002688121545e-05,
+      "passed": true
+    },
+    {
+      "tensor": "localization_logits",
+      "maximumAbsoluteError": 0.00013178586959838867,
+      "relativeRMS": 2.3787835577390836e-05,
+      "passed": true
+    },
+    {
+      "tensor": "noiseprint",
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080338,
+      "passed": true
+    },
+    {
+      "tensor": "anomaly",
+      "maximumAbsoluteError": 4.1425228118896484e-05,
+      "relativeRMS": 3.0743466021390484e-05,
+      "passed": true,
+      "maskIoU": 1.0
+    },
+    {
+      "tensor": "noiseprint",
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080338,
+      "passed": true
+    },
+    {
+      "tensor": "reliability",
+      "maximumAbsoluteError": 2.4616718292236328e-05,
+      "relativeRMS": 3.6579977888907174e-06,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "maximumAbsoluteError": 3.7848949432373047e-06,
+      "relativeRMS": 1.8457864329174354e-05,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "maximumAbsoluteError": 3.7848949432373047e-06,
+      "relativeRMS": 1.8457864329174354e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_1",
+      "maximumAbsoluteError": 0.0006871223449707031,
+      "relativeRMS": 7.888655199055568e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_2",
+      "maximumAbsoluteError": 0.0007079839706420898,
+      "relativeRMS": 8.403686793182088e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_3",
+      "maximumAbsoluteError": 0.0003489255905151367,
+      "relativeRMS": 4.173157208189423e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_4",
+      "maximumAbsoluteError": 0.00010633468627929688,
+      "relativeRMS": 2.2182532354759056e-05,
+      "passed": true
+    }
+  ],
+  "streamedOfficialReferenceParity": [
+    {
+      "tensor": "confidence_logits",
+      "maximumAbsoluteError": 0.0003910064697265625,
+      "relativeRMS": 2.7166830452332508e-05,
+      "passed": true
+    },
+    {
+      "tensor": "detection_statistics",
+      "maximumAbsoluteError": 0.000152587890625,
+      "relativeRMS": 1.3466907178690395e-05,
+      "passed": true
+    },
+    {
+      "tensor": "localization_logits",
+      "maximumAbsoluteError": 0.00013136863708496094,
+      "relativeRMS": 2.3640299180403745e-05,
+      "passed": true
+    },
+    {
+      "tensor": "noiseprint",
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080338,
+      "passed": true
+    },
+    {
+      "tensor": "anomaly",
+      "maximumAbsoluteError": 4.1365623474121094e-05,
+      "relativeRMS": 3.0587290347695014e-05,
+      "passed": true,
+      "maskIoU": 1.0
+    },
+    {
+      "tensor": "noiseprint",
+      "maximumAbsoluteError": 0.00025855470448732376,
+      "relativeRMS": 0.00020350488028080338,
+      "passed": true
+    },
+    {
+      "tensor": "reliability",
+      "maximumAbsoluteError": 2.580881118774414e-05,
+      "relativeRMS": 3.6209541817987896e-06,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "maximumAbsoluteError": 2.682209014892578e-06,
+      "relativeRMS": 1.3080376296265291e-05,
+      "passed": true
+    },
+    {
+      "tensor": "score",
+      "maximumAbsoluteError": 2.682209014892578e-06,
+      "relativeRMS": 1.3080376296265291e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_1",
+      "maximumAbsoluteError": 0.0006866455078125,
+      "relativeRMS": 7.888526417969853e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_2",
+      "maximumAbsoluteError": 0.0007083415985107422,
+      "relativeRMS": 8.403562383413923e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_3",
+      "maximumAbsoluteError": 0.0003495216369628906,
+      "relativeRMS": 4.172639525591537e-05,
+      "passed": true
+    },
+    {
+      "tensor": "stage_4",
+      "maximumAbsoluteError": 0.00010766088962554932,
+      "relativeRMS": 2.285531379582824e-05,
+      "passed": true
+    }
+  ],
+  "previousWorkerStripParity": [
+    {
+      "tensor": "score",
+      "maximumAbsoluteError": 0.0,
+      "relativeRMS": 0.0,
+      "passed": true
+    },
+    {
+      "tensor": "anomaly",
+      "maximumAbsoluteError": 9.834766387939453e-07,
+      "relativeRMS": 8.445062246437787e-07,
+      "passed": true,
+      "maskIoU": 1.0
+    },
+    {
+      "tensor": "reliability",
+      "maximumAbsoluteError": 1.1324882507324219e-06,
+      "relativeRMS": 9.13046389707227e-08,
+      "passed": true
+    },
+    {
+      "tensor": "noiseprint",
+      "maximumAbsoluteError": 0.0,
+      "relativeRMS": 0.0,
+      "passed": true
+    },
+    {
+      "tensor": "streamed.score",
+      "maximumAbsoluteError": 1.2390315532684326e-05,
+      "relativeRMS": 0.0001257303968317452,
+      "passed": false
+    },
+    {
+      "tensor": "streamed.anomaly",
+      "maximumAbsoluteError": 1.9997358322143555e-05,
+      "relativeRMS": 3.332457188367793e-05,
+      "passed": true,
+      "maskIoU": 1.0
+    },
+    {
+      "tensor": "streamed.reliability",
+      "maximumAbsoluteError": 3.7729740142822266e-05,
+      "relativeRMS": 6.357579069288557e-06,
+      "passed": true
+    },
+    {
+      "tensor": "streamed.noiseprint",
+      "maximumAbsoluteError": 0.0,
+      "relativeRMS": 0.0,
+      "passed": true
+    }
+  ],
+  "requests": [
+    {
+      "case": "full-native-score",
+      "seconds": 282.75890000000004,
+      "reply": "OK",
+      "scores": [
+        0.07582094520330429
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 1247301452,
+        "peakPhysicalBytes": 1587365232,
+        "phase": "request-memory",
+        "physicalBytes": 966542704,
+        "stopBytes": 1700000000
+      },
+      "reusedCompletedStandaloneRun": true
+    },
+    {
+      "case": "full-native-evidence",
+      "seconds": 302.624764625,
+      "reply": "OK",
+      "scores": [
+        0.07582094520330429
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 1247301452,
+        "peakPhysicalBytes": 1557546280,
+        "phase": "request-memory",
+        "physicalBytes": 867927504,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "odd-score",
+      "seconds": 1.707400875000019,
+      "reply": "OK",
+      "scores": [
+        0.09854669868946075
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 418846004,
+        "peakPhysicalBytes": 869336528,
+        "phase": "request-memory",
+        "physicalBytes": 684901672,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "odd-evidence",
+      "seconds": 1.2470161659999803,
+      "reply": "OK",
+      "scores": [
+        0.09854669868946075
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 418846012,
+        "peakPhysicalBytes": 888505640,
+        "phase": "request-memory",
+        "physicalBytes": 689833256,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "landscape",
+      "seconds": 4.0052493749999485,
+      "reply": "OK",
+      "scores": [
+        0.09724761545658112
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 504338240,
+        "peakPhysicalBytes": 904496424,
+        "phase": "request-memory",
+        "physicalBytes": 697320744,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "portrait",
+      "seconds": 3.843909832999998,
+      "reply": "OK",
+      "scores": [
+        0.09697942435741425
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 504338244,
+        "peakPhysicalBytes": 904512808,
+        "phase": "request-memory",
+        "physicalBytes": 697353512,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "maximum-score",
+      "seconds": 29.14397733300001,
+      "reply": "OK",
+      "scores": [
+        0.07796163111925125
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 445183372,
+        "peakPhysicalBytes": 918095168,
+        "phase": "request-memory",
+        "physicalBytes": 761136448,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "maximum-evidence",
+      "seconds": 27.623158124999975,
+      "reply": "OK",
+      "scores": [
+        0.07796163111925125
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 493180476,
+        "peakPhysicalBytes": 954303808,
+        "phase": "request-memory",
+        "physicalBytes": 823772528,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "wide",
+      "seconds": 27.82376687499999,
+      "reply": "OK",
+      "scores": [
+        0.08406876772642136
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 446452812,
+        "peakPhysicalBytes": 943129920,
+        "phase": "request-memory",
+        "physicalBytes": 858293640,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "tall",
+      "seconds": 29.644941916999983,
+      "reply": "OK",
+      "scores": [
+        0.07623303681612015
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 444540652,
+        "peakPhysicalBytes": 981517656,
+        "phase": "request-memory",
+        "physicalBytes": 875939208,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "four-maximum",
+      "seconds": 111.46359974999996,
+      "reply": "OK",
+      "scores": [
+        0.07796163111925125,
+        0.07796163111925125,
+        0.07796163111925125,
+        0.07796163111925125
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 445183372,
+        "peakPhysicalBytes": 1039549832,
+        "phase": "request-memory",
+        "physicalBytes": 879314336,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "oversize",
+      "seconds": 0.0010232079999923371,
+      "reply": "ERROR invalid(\"Unsupported native TruFor image geometry (original 24 megapixel envelope); images are never silently resized.\")",
+      "scores": null,
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 0,
+        "peakPhysicalBytes": 879379872,
+        "phase": "request-memory",
+        "physicalBytes": 879379872,
+        "stopBytes": 1700000000
+      }
+    },
+    {
+      "case": "after-rejection",
+      "seconds": 1.5311960829999407,
+      "reply": "OK",
+      "scores": [
+        0.09854669868946075
+      ],
+      "passed": true,
+      "memory": {
+        "activeMLXBytes": 275060020,
+        "budgetBytes": 2000000000,
+        "cachedMLXBytes": 0,
+        "peakMLXBytes": 418846004,
+        "peakPhysicalBytes": 981091744,
+        "phase": "request-memory",
+        "physicalBytes": 838321568,
+        "stopBytes": 1700000000
+      }
+    }
+  ]
+}

@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='safire-benchmark-') as work:
                 raw=output.read_bytes();magic,w,h,flag=struct.unpack_from('<4sIII',raw)
                 assert magic==b'SFM1' and len(raw)==16+w*h*(4+2*flag)
                 values=array.array('f');values.frombytes(raw[16:16+w*h*4])
-                data=dict(probabilities=values,runtimeRevision='safire-native-v1')
+                data=dict(probabilities=values,runtimeRevision='safire-native-v2')
             record=dict(queryRows=rows,promptBatch=batch,loadSeconds=loadSeconds,warmupSeconds=warmup,samples=samples,
                 medianSeconds=statistics.median(samples),
                 resultRange=[min(data['probabilities']),max(data['probabilities'])],runtime=data.get('runtimeRevision'),transport=a.transport,workerCPUSamples=cpuSamples,medianWorkerCPUSeconds=statistics.median(cpuSamples),medianWorkerCPUUtilizationPercent=100*statistics.median([c/w for c,w in zip(cpuSamples,samples)]))
@@ -96,5 +96,5 @@ with tempfile.TemporaryDirectory(prefix='safire-benchmark-') as work:
             except Exception: pass
             process.terminate();process.wait(timeout=10)
 report=dict(platform=platform.platform(),machine=platform.machine(),fixture=str(a.image),
-    runtimeRevision='safire-native-v1',device=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip(),scope='single gradient fixture, complete warm worker wall time; CPU seconds include all worker threads, measured with ps cumulative CPU around each request; 100% is one CPU core',profiles=reports)
+    runtimeRevision='safire-native-v2',device=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip(),scope='single gradient fixture, complete warm worker wall time; CPU seconds include all worker threads, measured with ps cumulative CPU around each request; 100% is one CPU core',profiles=reports)
 a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(report,indent=2)+'\n')

@@ -14,7 +14,7 @@ struct LineageRegion: Codable, Equatable, Sendable, Identifiable {
 struct LineageSegment: Codable, Equatable, Sendable { let a: CGPoint; let b: CGPoint }
 
 struct SafireSpatialResult: Codable, Sendable {
-    static let runtimeRevision = "safire-native-v1"
+    static let runtimeRevision = "safire-native-v2"
     static let preprocessingVersion = "safire-opencv-linear-rgb-square-v1"
     let assetID: String
     let contentIdentity: String

@@ -15,7 +15,6 @@ import UniformTypeIdentifiers
 struct RootView: View {
     @StateObject private var session = WaifuSession()
     @StateObject private var orb = WaifuCrystalOrbModel()
-    @StateObject private var lineage = ImageLineageModel()
     // Only the player panel observes its clock; playback must not refresh the grid.
     @State private var preview = PreviewController()
     // One per window, shared by the Sort and Filter fraction and the cloud in the
@@ -54,11 +53,7 @@ struct RootView: View {
                 DropZone(session: session, isPrimary: true, isTargeted: isDropTargeted, openPhotos: openPhotosWorkspace)
             } else if showPhotosWorkspace {
                 PhotosWorkspaceView(session: session, onBack: navigateBack) {
-                    ZStack {
-                        mainContent.opacity(lineage.isOpen ? 0 : 1).allowsHitTesting(!lineage.isOpen)
-                            .accessibilityHidden(lineage.isOpen)
-                        if lineage.isOpen { ImageLineageView(model:lineage,session:session) }
-                    }
+                    mainContent
                 }
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
                 .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
@@ -113,10 +108,9 @@ struct RootView: View {
         .onDrop(of: [.fileURL, .url, .image], isTargeted: $isDropTargeted) { providers in
             CrystalOrbImport.accept(providers, model: orb, session: session)
         }
-        .onDisappear { lineage.close(); if orb.isOpen { orb.close() } }
+        .onDisappear { if orb.isOpen { orb.close() } }
         .onChange(of: session.thumbnailGeneration) { _, _ in
             orb.sourceChanged(session: session)
-            if lineage.isOpen { lineage.refresh(session:session) }
         }
         .onChange(of: orb.isOpen) { _, active in if active { preview.pause() } }
         .onOpenURL { url in
@@ -135,7 +129,7 @@ struct RootView: View {
     var body: some View {
         routedWorkspace
         .background {
-            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb, lineage:lineage)
+            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb)
                 .frame(width: 0, height: 0)
         }
         .background {
@@ -146,7 +140,6 @@ struct RootView: View {
                 .frame(width: 0, height: 0)
         }
         .onChange(of: session.photosAlbumURL) { old, new in
-            if old != new && lineage.isOpen { lineage.close() }
             if old != nil && new == nil { showPhotosWorkspace = false }
         }
         .onChange(of: downloadFromICloud) { _, enabled in
@@ -225,7 +218,6 @@ struct RootView: View {
             orb.close()
             return
         }
-        if lineage.isOpen { lineage.close(); return }
         if showPhotosWorkspace {
             if photosOpenedFromRanked, session.video != nil {
                 showPhotosWorkspace = false
@@ -238,7 +230,6 @@ struct RootView: View {
     }
 
     private func returnToWelcome() {
-        lineage.close()
         if orb.isOpen { orb.close() }
         preview.pause()
         if session.progress.isRunning { session.cancel() }
@@ -256,7 +247,7 @@ struct RootView: View {
             if rightPanelExpanded { preview.pause() }
             rightPanelExpanded.toggle()
         } label: {
-            Label(lineage.isOpen ? "Photo information and evidence" : orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
+            Label(orb.isOpen ? "Image information" : "Preview and controls", systemImage: "sidebar.right")
         }
         .labelStyle(.iconOnly)
         .accessibilityLabel(rightPanelExpanded ? "Hide right panel" : "Show right panel")
@@ -393,10 +384,6 @@ struct RootView: View {
                     case .additiveRange: session.selectFrame(frame.id, command: true, shift: true)
                     case .double: break
                     }
-                },
-                onSafire: { frame in
-                    preview.pause()
-                    lineage.open(session:session,anchoredAt:frame)
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -48,24 +48,65 @@ would need silent resizing; geometry outside the validated envelope is an error.
 `Runtime/Sources/TruForMLX` implements the full architecture in Swift and MLX:
 the Noiseprint++ DnCNN body, the CMX Mit-B2 encoder with FRM rectification and
 FFM fusion, both decode heads, and the official detection head. Input conversion
-uses a fused Metal kernel. Large images run the noise body in 1024-px tiles with
+uses a fused Metal kernel. Large images run the noise body in 512-px tiles with
 a 17-px halo, which reproduces the exact receptive field without materializing
 the whole intermediate. The worker exposes three paths over one identical
-forward: batch scores (up to four images when their combined area fits the
-1M-pixel batch envelope), single-image evidence, and a warm `--serve` protocol.
+forward: score requests (up to four images, processed sequentially), single-image
+evidence, and a warm `--serve` protocol.
 
-## Measured optimization
+## RAM budget (2026-10-25)
+
+The worker now targets a **2,000,000,000-byte process budget**. The original
+24 MP native-image envelope remains; there is no added 4 MP RAM cap, resizing or
+independent-tile replacement for global attention. Production remains FP32.
+
+- Decode one input per forward and evaluate intermediate operations explicitly.
+  The whole-forward compiled graph and its per-geometry cache are removed.
+- Decode in strips of at most 8,192 feature positions rather than expanding
+  all four 512-channel feature maps across the full image simultaneously.
+- Choose encoder streaming when estimated live activations exceed the working
+  budget. Stage the RGB input and FP32 features in private, open-but-unlinked
+  scratch files with filesystem data caching disabled. Query
+  strips attend to the complete reduced K/V sequence; rectification and fusion
+  retain global channel statistics. Layerwise convolution halos preserve image
+  boundaries. Files are reclaimed on normal completion, errors and process exit.
+- Reduce detection statistics in bounded strips with stable accumulation and
+  write evidence incrementally. Large CPU staging allocations are explicitly
+  returned to macOS's allocator between phases and requests.
+- Disable MLX's reusable buffer cache and set its allocation guideline to 1.2 GB.
+  These settings alone are not a process limit. A separate 5 ms physical-footprint
+  monitor reclaims unused CPU pages and stops the worker at 1.7 GB, leaving
+  headroom for in-flight allocations below 2 GB. The app surfaces that error.
+
+Streaming uses temporary disk space and can be slower. FP32 global reductions
+have a different accumulation order, so the reference gates are checked rather
+than claiming bit-identical output. The monitor is an early-stop safeguard,
+not an operating-system allocation quota; measured cases establish the practical
+memory bound on the tested machine.
+
+The reproducible check is `tools/validate-trufor-memory.py`: Apple-generated PNG
+fixtures, both encoder paths against the saved official reference, odd-geometry
+strip comparisons against the previous FP32 worker, full-resolution score and
+evidence, repeated mixed geometries and four-image requests. It records MLX
+active/cache/peak counters and process physical footprint separately in
+[TruFor-memory-validation.json](TruFor-memory-validation.json), including an
+independent `/usr/bin/time -l` process peak.
+
+## Earlier latency optimization
+
+The following measurements predate the RAM-budget refactor; they are historical,
+not the current execution strategy or a current speed guarantee.
 
 The runtime is tuned by the same method as the WD Tagger kernel review: phase
 profiling, paired interleaved runs, and parity gates before anything ships.
 
-Adopted, each measured:
+Earlier experiments, each measured:
 
-- **Per-shape compiled forward.** The serve path compiles the whole graph per
+- **Earlier per-shape compiled forward (superseded).** The serve path compiles the whole graph per
   input geometry with the noise body outside the compiled graph, so its
   memory-bounding evaluations survive. This removed most of the per-request
   graph-construction overhead (1.79 s → 1.46 s at 1024×768 on a quiet M3).
-- **FP16 weights and activations** with FP32 islands — every LayerNorm, every
+- **FP16 weights and activations (experiment)** with FP32 islands — every LayerNorm, every
   BN including the DnCNN BN rows, and the whole detection head. FP16 remains an explicit worker benchmark option; production uses FP32,
   which passes the strict validation gate.
   Measured against the official FP32 reference: detection score within 0.002,
@@ -74,7 +115,7 @@ Adopted, each measured:
   published gates (score ≤ 1e-5) after the refactor.
 - **Decoder kernels pre-sliced** into four contiguous per-part weights at load,
   removing a strided weight read from every decode pass.
-- **Noise tile 1024** (from 512), worth several percent at 1024×768; per-tile
+- **Earlier noise tile 1024** (now 512 for bounded memory), worth several percent at 1024×768; per-tile
   evaluations keep large-image memory bounded.
 
 Measured and rejected: a custom direct 3×3 conv Metal kernel for the DnCNN
@@ -97,7 +138,7 @@ package carries the full report as `validation.json`, and the app re-verifies it
 against pinned hashes at install time; a folder that has not passed official
 score and spatial validation is refused.
 
-## Measured performance
+## Historical measured performance
 
 Warm worker, 1024×768, complete inference including decode, forward and result
 serialization; medians of paired interleaved runs. Absolute clocks vary with
@@ -116,8 +157,8 @@ pre-optimization 1.79 s (about 1.38×); on the M4 the configured path measures
 1.02 s against the pre-optimization 1.43 s (about 1.40×). The M4 FP32 outputs
 match the M3 FP32 outputs at the same error magnitudes, so cross-device
 determinism holds for the strict path. Evidence mode is within 3% of the score
-path. Images whose combined area exceeds the batch envelope
-predict per image; small-image batches run as one fused forward. These
+path. Those earlier runs used fused small-image batches; the current memory-budget
+worker processes every request image sequentially. These
 measurements do not establish a globally fastest configuration and do not
 guarantee a busy machine's timing.
 
@@ -143,7 +184,8 @@ include the execution revision, and remote capabilities require
 `trufor-fp32-v2`, so old workers and old precision results cannot silently mix.
 The immutable weights package and its artifact revision remain unchanged.
 FP16 timing figures above describe an experiment, not the current default.
-Compiled graphs retain at most four photo geometries.
+That review initially bounded compiled graphs to four geometries. The later RAM
+refactor removes the whole-forward compiled graph cache entirely (see above).
 
 Noninteractive regression tests now execute the actual Metal outline renderer
 on portrait and landscape maps, compare every pixel against clamped morphology,

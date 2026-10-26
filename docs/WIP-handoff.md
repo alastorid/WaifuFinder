@@ -1,4 +1,23 @@
+## TruFor RAM update (2026-10-25)
+
+The worker targets a 2 GB process budget while retaining the original 24 MP
+native-image envelope. No new pixel cap or silent resize. Encoder activations
+spill to private open-but-unlinked FP32 scratch files when the working-set
+estimate requires it; attention and fusion retain global context. Decoder,
+detection reductions and evidence serialization run in strips. Whole-forward
+compilation/shape caching and simultaneous input decoding are removed. A 1.7 GB
+physical-footprint guard provides headroom; libmalloc's free-page cache is trimmed
+separately from MLX. Streaming trades disk traffic/time for RAM. See `TruFor.md`
+and `TruFor-memory-validation.json`; reproduce with
+`python3 tools/validate-trufor-memory.py --model MODEL_DIRECTORY`.
+The earlier latency timings below predate these changes.
+
 # WIP handoff — session record (2026-10-25)
+
+The implementation and experiments recorded below have been committed and
+pushed to `main`; this file is historical context rather than a list of current
+uncommitted changes. Before any related TruFor Core ML/MLX/ANE measurement,
+read `docs/TruFor-M4-experiment-notes.md` first.
 
 **Review correction:** the FP16-default instructions below are historical.
 Production now pins FP32 (`trufor-fp32-v2` execution capability) and separates its
@@ -113,11 +132,9 @@ runtime in `Runtime/Sources/TruForMLX` + `WaifuTruFor`, publisher
 
 ## Open items
 
-- Commit decision for the whole uncommitted tree (user's call).
-- Untracked files `Sources/Waifu/UI/GoogleLensSearch.swift` and
-  `Tests/GoogleLensSearchTests.swift` / `Tests/GroupRowNavigationTests.swift`
-  belong to earlier work in this tree — untouched here, but they ride along in
-  any commit.
+- The flexible Core ML 1024×1024 variants reached the 1.6 GB worker safety
+  stop; do not retry without a new memory-reduction hypothesis. See
+  `docs/TruFor-M4-experiment-notes.md`.
 - Optional installer and fixture suites can still be skipped unless explicitly
   enabled and supplied with the required fixtures. The published SAFIRE and
   TruFor install tests have passed; see `docs/ImageLineage.md` and `docs/TruFor.md`.

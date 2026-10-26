@@ -20,12 +20,15 @@ struct SafireConfiguration: Sendable {
     static func validate(_ directory:URL) throws -> Self {
         let architecture=try JSONSerialization.jsonObject(with:Data(contentsOf:directory.appendingPathComponent("architecture.json"))) as? [String:Any]
         let validation=try JSONSerialization.jsonObject(with:Data(contentsOf:directory.appendingPathComponent("validation.json"))) as? [String:Any]
+        let packageRevision=architecture?["runtimeRevision"] as? String
+        let validationRevision=validation?["runtimeRevision"] as? String
+        let supportedCheckpointRevisions:Set<String>=["safire-native-v1",SafireSpatialResult.runtimeRevision]
         guard architecture?["architecture"] as? String == "safire-vit-b-adaptor",
               architecture?["sourceSHA256"] as? String == sourceSHA256,
-              architecture?["runtimeRevision"] as? String == SafireSpatialResult.runtimeRevision,
+              packageRevision == validationRevision,
+              packageRevision.map(supportedCheckpointRevisions.contains) == true,
               architecture?["preprocessingVersion"] as? String == SafireSpatialResult.preprocessingVersion,
               validation?["status"] as? String == "passed",
-              validation?["runtimeRevision"] as? String == SafireSpatialResult.runtimeRevision,
               validation?["sourceSHA256"] as? String == sourceSHA256,
               validation?["spatialParityPassed"] as? Bool == true else {
             throw ModelInstaller.fail("This SAFIRE package has not passed native reference and spatial validation. Install a validated release from Models.")
