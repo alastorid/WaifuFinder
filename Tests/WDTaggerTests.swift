@@ -37,27 +37,6 @@ private struct TaggerTestScorer: FrameScoring {
     }
 }
 
-/// Source-generated asymmetric RGB image; no checked-in media fixture.
-private func syntheticTaggerGradient() throws -> CGImage {
-    let side = 448
-    var pixels = [UInt8](repeating: 255, count: side * side * 4)
-    for y in 0..<side {
-        for x in 0..<side {
-            let offset = (y * side + x) * 4
-            pixels[offset] = UInt8(x * 255 / (side - 1))
-            pixels[offset + 1] = UInt8(y * 255 / (side - 1))
-            pixels[offset + 2] = 37
-        }
-    }
-    guard let provider = CGDataProvider(data: Data(pixels) as CFData),
-          let space = CGColorSpace(name: CGColorSpace.sRGB),
-          let image = CGImage(width: side, height: side, bitsPerComponent: 8,
-                              bitsPerPixel: 32, bytesPerRow: side * 4, space: space,
-                              bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                              provider: provider, decode: nil, shouldInterpolate: false,
-                              intent: .defaultIntent) else { throw TaggerError.preprocessing }
-    return image
-}
 private struct TaggerTestThumbnails: ThumbnailWriter {
     func write(_ image: CGImage, key: String) async throws {}
 }
@@ -85,7 +64,7 @@ func registerWDTaggerTests() {
         guard FileManager.default.fileExists(atPath: fixtures.appendingPathComponent("original-bgr-probabilities.bin").path) else {
             throw SkipTest(reason: "generate the synthetic FP32 reference with tools/make-wd-tagger-test-fixture.py")
         }
-        let image = try syntheticTaggerGradient()
+        let image = try ImageFixture.rgbGradient()
         let reference = try Data(contentsOf: fixtures.appendingPathComponent("original-bgr-probabilities.bin"))
         let expected = stride(from: 0, to: reference.count, by: 4).map { offset in
             Float(bitPattern: reference.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self).littleEndian })
@@ -121,7 +100,7 @@ func registerWDTaggerTests() {
         let directory = try taggerFixtureDirectory()
         let executable = try nativeTaggerTestExecutable()
         let backend = try WDTaggerBackend(directory:directory,executableURL:executable)
-        let light = try syntheticTaggerGradient()
+        let light = try ImageFixture.rgbGradient()
         let dark = try ImageFixture.cgImage(width:448,height:448,gray:0)
         let referenceLight = try await backend.tag(batch:[light])[0].encodedProbabilities
         let referenceDark = try await backend.tag(batch:[dark])[0].encodedProbabilities
@@ -145,7 +124,7 @@ func registerWDTaggerTests() {
         guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("model.safetensors").path) else {
             throw SkipTest(reason: "offline native weights absent")
         }
-        let image = try syntheticTaggerGradient()
+        let image = try ImageFixture.rgbGradient()
         let dark = try ImageFixture.cgImage(width: 448, height: 448, gray: 0)
         let executable = try nativeTaggerTestExecutable()
         let first = try WDTaggerBackend(directory: directory, executableURL: executable)

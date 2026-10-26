@@ -1236,6 +1236,10 @@ private func cancellationCase() async throws {
 /// Opt-in release verification uses actual downloaded SAFIRE weights and the
 /// production native worker on both sides of a real authenticated connection.
 /// No Photos mutation, global model pointer change, UI, or simulated masks.
+private func remoteForensicPNG() throws -> Data {
+    try SafireBackend.png(ImageFixture.rgbGradient())
+}
+
 func registerSafireNativeIntegrationTests() {
     Registry.shared.add(suite:"SAFIRE integration",TestCase(name:"published SAFIRE installs and returns identical real masks over encrypted loopback",knownBug:nil) {
         guard ProcessInfo.processInfo.environment["WAIFU_TEST_SAFIRE_INSTALL"]=="1" else {
@@ -1255,8 +1259,7 @@ func registerSafireNativeIntegrationTests() {
             guard let executable=SafireConfiguration.executable else { throw ModelInstaller.fail("Missing bundled SAFIRE worker") }
             let worker=try SafireWorker(model:installed,executable:executable)
             defer { worker.cancel() }
-            let imageURL=URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png")
-            let png=try Data(contentsOf:imageURL)
+            let png=try remoteForensicPNG()
             let photo=LineagePhoto(id:"native-safire-fixture",contentIdentity:LineageIdentity.hash(png.base64EncodedString()),name:"rgb-gradient.png",width:448,height:448,format:"PNG",url:URL(string:"waifu-photos://native-fixture")!,offset:0)
             let local=try await Task.detached { try worker.infer(png,photo:photo,configuration:config) }.value
             var catalog=StubCatalog.uncoverOnly()
@@ -1314,7 +1317,7 @@ func registerTruForLoopbackTests() {
     }
     Registry.shared.add(suite:"TruFor remote",TestCase(name:"evidence and score batches cross an encrypted loopback unchanged",knownBug:nil) {
         try await Task { @MainActor in
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             let pair=try LoopbackPair(catalog:catalog(TruForConfiguration.weightsSHA,TruForConfiguration.execution,TruForConfiguration.preprocessing),key:Array(repeating:0x64,count:32))
             defer { pair.tearDown() }
             guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
@@ -1345,7 +1348,7 @@ func registerTruForLoopbackTests() {
             let pair=try LoopbackPair(catalog:service,key:Array(repeating:0x67,count:32))
             defer { pair.tearDown() }
             guard await pair.connect() else { throw ModelInstaller.fail("TruFor loopback did not authenticate") }
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             let work=Task { try await pair.client.truforEvidence(png) }
             let startDeadline=Date().addingTimeInterval(3)
             while !probe.started,Date()<startDeadline { try await Task.sleep(for:.milliseconds(10)) }
@@ -1362,7 +1365,7 @@ func registerTruForLoopbackTests() {
     })
     Registry.shared.add(suite:"TruFor remote",TestCase(name:"a mismatched fingerprint, runtime or preprocessing is never offered",knownBug:nil) {
         try await Task { @MainActor in
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             for (fingerprint,runtime,preprocessing,reason) in [
                 ("0"+String(TruForConfiguration.weightsSHA.dropFirst()),TruForConfiguration.execution,TruForConfiguration.preprocessing,"weights revision"),
                 (TruForConfiguration.weightsSHA,"trufor-native-v0",TruForConfiguration.preprocessing,"runtime revision"),
@@ -1401,7 +1404,7 @@ func registerTruForNativeIntegrationTests() {
             checkEqual(try String(contentsOf:configRoot.appendingPathComponent("trufor-model.txt"),encoding:.utf8),installed.path,"installer activates in its isolated configuration")
             guard let executable=TruForConfiguration.executable else { throw ModelInstaller.fail("Missing bundled TruFor worker") }
             let backend=TruForBackend(configuration:configuration,executable:executable)
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             let localEvidence=try await backend.submit(images:[png],evidence:true)
             guard case .evidence(let local)=localEvidence else { throw ModelInstaller.fail("Missing local TruFor evidence") }
             var catalog=StubCatalog.uncoverOnly()
@@ -1461,7 +1464,7 @@ func registerSafireLoopbackTests() {
             defer { pair.tearDown() }
             guard await pair.connect() else { throw ModelInstaller.fail("SAFIRE loopback did not authenticate") }
             check(pair.client.offersSafire,"matching remote SAFIRE is offered without local weights")
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             let result=try await pair.client.safire(png:png,photo:photo)
             checkEqual(result.probabilities,[0,0.25,0.75,1],"probabilities are exact")
             checkEqual(result.partitions,[0,1,1,2],"partitions are exact")
@@ -1488,7 +1491,7 @@ func registerSafireLoopbackTests() {
             let pool=RemoteInferencePool(defaults:defaults,primary:pair.client,discoveryEnabled:false)
             checkEqual(pool.safireClients.count,1,"SAFIRE endpoint is selected")
             checkEqual(pool.truforClients.count,1,"TruFor endpoint is selected")
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             async let spatial=pair.client.safire(png:png,photo:photo)
             async let scores=pair.client.truforScores([png,png])
             let (result,values)=try await (spatial,scores)
@@ -1512,7 +1515,7 @@ func registerSafireLoopbackTests() {
             let pair=try LoopbackPair(catalog:service,key:remoteTestKey())
             defer { pair.tearDown() }
             guard await pair.connect() else { throw ModelInstaller.fail("SAFIRE loopback did not authenticate") }
-            let png=try Data(contentsOf:URL(fileURLWithPath:#filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/WDTagger/rgb-gradient.png"))
+            let png=try remoteForensicPNG()
             let work=Task { try await pair.client.safire(png:png,photo:photo) }
             let deadline=Date().addingTimeInterval(3)
             while !probe.started,Date()<deadline { try await Task.sleep(for:.milliseconds(10)) }

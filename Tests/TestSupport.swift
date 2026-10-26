@@ -34,6 +34,28 @@ enum Temporary {
 // MARK: - Images
 
 enum ImageFixture {
+    /// Source-generated asymmetric RGB image; no checked-in media fixture.
+    static func rgbGradient() throws -> CGImage {
+        let side = 448
+        var pixels = [UInt8](repeating: 255, count: side * side * 4)
+        for y in 0..<side {
+            for x in 0..<side {
+                let offset = (y * side + x) * 4
+                pixels[offset] = UInt8(x * 255 / (side - 1))
+                pixels[offset + 1] = UInt8(y * 255 / (side - 1))
+                pixels[offset + 2] = 37
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let image = CGImage(width: side, height: side, bitsPerComponent: 8,
+                                  bitsPerPixel: 32, bytesPerRow: side * 4, space: space,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false,
+                                  intent: .defaultIntent) else { throw TaggerError.preprocessing }
+        return image
+    }
+
     /// A solid-colour `NSImage`, the smallest thing the thumbnail writer accepts.
     static func solid(width: Int, height: Int, color: NSColor = .systemBlue) -> NSImage {
         let image = NSImage(size: NSSize(width: width, height: height))
