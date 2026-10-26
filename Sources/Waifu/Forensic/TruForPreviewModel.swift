@@ -6,9 +6,28 @@ enum TruForDisplay:String,CaseIterable,Identifiable,Sendable {
     case anomaly,reliability,outlines,combined,noiseprint
     var id:String { rawValue }
     var label:String { switch self { case .anomaly:"Anomaly map";case .reliability:"Reliability map";case .outlines:"Suspicious outlines";case .combined:"Combined overlay";case .noiseprint:"Noiseprint++" } }
+    var previewLabel: String {
+        switch self {
+        case .anomaly: "Suspicious areas"
+        case .reliability: "Confidence"
+        case .outlines: "Area outlines"
+        case .combined: "Overlay"
+        case .noiseprint: "Image noise"
+        }
+    }
+    var previewDetail: String {
+        switch self {
+        case .anomaly: "TruFor anomaly map: brighter areas indicate stronger signs of manipulation."
+        case .reliability: "TruFor reliability map: brighter areas indicate more reliable evidence."
+        case .outlines: "Outlines of areas with an anomaly score of at least 0.5."
+        case .combined: "Orange: reliable anomaly; violet: uncertain anomaly."
+        case .noiseprint: "Noiseprint++ contrast-scaled residual; this is not a probability map."
+        }
+    }
+
 }
 
-/// Only the selected layer is rendered. Evidence stays transient and switching
+/// Only the selected layer is retained at full resolution. Evidence stays transient and switching
 /// layers never requests another inference pass. One Metal pass composites the
 /// chosen layer over the photo; the outline mode takes its edges from a 3×3
 /// morphological gradient of the real anomaly threshold, never a synthetic mask.
@@ -61,6 +80,16 @@ actor TruForEvidenceRenderer {
             output[index*4u+3u]=255u;
         }
         """
+    func thumbnails(original: CGImage, evidence: TruForSpatial) throws -> [TruForDisplay: CGImage] {
+        var images: [TruForDisplay: CGImage] = [:]
+        for mode in TruForDisplay.allCases {
+            try Task.checkCancellation()
+            // Drop each temporary full-size composite before rendering the next.
+            images[mode] = EvidenceThumbnailRaster.make(try render(original: original, evidence: evidence, mode: mode))
+        }
+        return images
+    }
+
     func render(original:CGImage,evidence:TruForSpatial,mode:TruForDisplay)throws->CGImage {
         try evidence.validate()
         guard let device=source,let pipeline else { throw ModelInstaller.fail("TruFor evidence renderer unavailable") }
@@ -107,6 +136,8 @@ actor TruForEvidenceRenderer {
 }
 
 @MainActor final class TruForPreviewModel:ObservableObject {
+    @Published private(set) var inputID: UUID?
+    @Published private(set) var thumbnails: [TruForDisplay: CGImage] = [:]
     @Published private(set) var photoURL:URL?
     @Published private(set) var rendered:NSImage?
     @Published private(set) var loading=false
@@ -117,7 +148,7 @@ actor TruForEvidenceRenderer {
     private var original:CGImage?
     private var mode=TruForDisplay.combined
     func load(url:URL?,enabled:Bool,mode:TruForDisplay,input:PreviewEvidenceInput?)async {
-        let token=UUID();ticket=token;renderTicket=UUID();photoURL=url;rendered=nil;evidence=nil;original=nil;status="";loading=false;self.mode=mode
+        let token=UUID();ticket=token;renderTicket=UUID();photoURL=url;inputID=input?.id;thumbnails=[:];rendered=nil;evidence=nil;original=nil;status="";loading=false;self.mode=mode
         guard enabled,WaifuDistribution.isNonCommercialOnly,let url,let item=PhotosMedia.shared.item(url),item.isStill,let key=item.assetCacheKey else { return }
         guard let input,input.photoURL==url else { status="Loading photo…";return }
         loading=true
@@ -145,6 +176,9 @@ actor TruForEvidenceRenderer {
             guard !Task.isCancelled,ticket==token,PhotosMedia.shared.item(url)?.assetCacheKey==key else { return }
             evidence=map;original=image
             await display(self.mode)
+            let previews = try await TruForEvidenceRenderer.shared.thumbnails(original: image, evidence: map)
+            guard !Task.isCancelled, ticket == token else { return }
+            thumbnails = previews
         } catch is CancellationError {} catch {
             Diag.trace(.preview,message:"TruFor preview: \(error)")
             if ticket==token { status="TruFor evidence unavailable" }
@@ -154,9 +188,10 @@ actor TruForEvidenceRenderer {
         self.mode=mode
         guard let evidence,let original else { return }
         let token=UUID();renderTicket=token
+        let loadToken = ticket
         do {
             let image=try await TruForEvidenceRenderer.shared.render(original:original,evidence:evidence,mode:mode)
-            guard !Task.isCancelled,renderTicket==token else { return }
+            guard !Task.isCancelled,renderTicket==token,ticket==loadToken else { return }
             rendered=NSImage(cgImage:image,size:NSSize(width:image.width,height:image.height))
             status="TruFor · detection score "+String(format:"%.3f",evidence.score)+(mode == .noiseprint ? " · contrast-scaled residual, not a probability" : mode == .combined ? " · orange: reliable anomaly; violet: uncertain anomaly" : mode == .outlines ? " · anomaly ≥ 0.5" : "")
         } catch {

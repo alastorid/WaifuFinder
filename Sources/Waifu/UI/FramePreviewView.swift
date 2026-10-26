@@ -36,6 +36,7 @@ struct FramePreviewView: View {
     @StateObject private var safire=SafirePreviewModel()
     @State private var safireEnabled=false
     @State private var showSafireMask=false
+    @State private var showOriginalEvidence=false
     @State private var evidenceInput: PreviewEvidenceInput?
     @State private var evidenceRetry = UUID()
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
@@ -96,14 +97,13 @@ struct FramePreviewView: View {
                 Divider()
                 HStack(spacing: 0) {
                     content
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                         .layoutPriority(1)
                         .contextMenu {
                             if let photoInfoURL {
                                 Button("Open in Photos.app") { PhotosAppIntegration.reveal(photoInfoURL) }
                                 Divider()
                             }
-                            Button("Fit") { zoom = 1; zoomCenter = CGPoint(x: 0.5, y: 0.5) }
                             if googleLensEnabled {
                                 Button("Search with Google Lens") {
                                     let pixels = displayedFrameID == frame.id
@@ -116,19 +116,24 @@ struct FramePreviewView: View {
                     if inspectorExpanded, photoInfoURL != nil {
                         Divider()
                             .frame(maxHeight: .infinity)
-                        VStack(spacing: 0) {
-                            if animation == nil {
-                                evidenceControls
-                                Divider()
+                        ScrollView(.vertical) {
+                            VStack(spacing: 0) {
+                                PhotoMetadataInspectorView(metadata: photoMetadata,
+                                    isLoading: metadataLoading,
+                                    errorMessage: metadataError,
+                                    tags: metadataFrameID == frame.id ? orderedTopTags : metadataTags,
+                                    rating: metadataFrameID == frame.id ? frame.tagRating?.rawValue.capitalized : metadataRating,
+                                    scrollsDetails: false)
+                                if animation == nil {
+                                    Divider()
+                                    evidenceControls
+                                }
                             }
-                            PhotoMetadataInspectorView(metadata: photoMetadata,
-                                                   isLoading: metadataLoading,
-                                                   errorMessage: metadataError,
-                                                   tags: metadataFrameID == frame.id ? orderedTopTags : metadataTags,
-                                                   rating: metadataFrameID == frame.id ? frame.tagRating?.rawValue.capitalized : metadataRating)
+                            .frame(width: 350, alignment: .topLeading)
                         }
-                        .frame(width: truforEnabled ? 740 : safireEnabled ? 490 : 350, alignment: .topLeading)
-                        .frame(maxHeight: .infinity)
+                        .frame(width: 350)
+                        .frame(minHeight: 0, maxHeight: .infinity)
+                        .clipped()
                         .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
                     }
                 }
@@ -323,40 +328,79 @@ struct FramePreviewView: View {
         .padding(.vertical, 8)
     }
 
+    private var currentTruForEvidence: Bool {
+        trufor.photoURL == photoInfoURL && trufor.inputID == evidenceInput?.id && evidenceInput != nil
+    }
+
+    private var currentSafireEvidence: Bool {
+        safire.photoURL == photoInfoURL && safire.inputID == evidenceInput?.id && evidenceInput != nil
+    }
+
     private var evidenceControls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Photo analysis").font(.headline)
-            if WaifuDistribution.isNonCommercialOnly {
-                HStack(spacing: 8) {
-                    Toggle(isOn: $truforEnabled) {
-                        Text("TruFor").remoteMark(!inferencePool.truforClients.isEmpty)
+            HStack(spacing: 0) {
+                modelButton("Off", selected: !truforEnabled && !safireEnabled) {
+                    truforEnabled = false; safireEnabled = false
+                }
+                if WaifuDistribution.isNonCommercialOnly {
+                    modelButton("TruFor", selected: truforEnabled, remote: !inferencePool.truforClients.isEmpty) {
+                        safireEnabled = false; truforEnabled = true; showOriginalEvidence = false
                     }
-                    .toggleStyle(.checkbox).fixedSize()
-                    if truforEnabled {
-                        TruForDisplayButtons(selection: $truforDisplay)
-                        evidenceStatus(trufor.status, model: "TruFor", loading: trufor.loading)
-                    }
-                    Spacer(minLength: 0)
+                }
+                modelButton("SAFIRE", selected: safireEnabled, remote: !inferencePool.safireClients.isEmpty) {
+                    truforEnabled = false; safireEnabled = true; showOriginalEvidence = false
                 }
             }
-            HStack(spacing: 8) {
-                Toggle(isOn: $safireEnabled) {
-                    Text("SAFIRE").remoteMark(!inferencePool.safireClients.isEmpty)
-                }
-                .toggleStyle(.checkbox).fixedSize()
-                if safireEnabled {
-                    Picker("SAFIRE display", selection: $showSafireMask) {
-                        Text("Overlay").tag(false)
-                        Text("Mask").tag(true)
+            .accessibilityLabel("Photo analysis")
+            if truforEnabled || safireEnabled {
+                evidenceStatus(truforEnabled ? (currentTruForEvidence ? trufor.status : "Loading photo…") :
+                    (currentSafireEvidence ? safire.status : "Loading photo…"),
+                    model: truforEnabled ? "TruFor" : "SAFIRE",
+                    loading: truforEnabled ? trufor.loading : safire.loading)
+                LazyVGrid(columns: [GridItem(.fixed(155)), GridItem(.fixed(155))], spacing: 10) {
+                    EvidenceThumbnail(image: evidenceInput?.photoURL == photoInfoURL ? evidenceInput?.thumbnail : nil,
+                        label: "Original", detail: "Show the source image without analysis", selected: showOriginalEvidence) {
+                        showOriginalEvidence = true
                     }
-                    .pickerStyle(.segmented).labelsHidden().frame(width: 120)
-                    evidenceStatus(safire.status, model: "SAFIRE", loading: safire.loading)
+                    if truforEnabled {
+                        ForEach(TruForDisplay.allCases) { mode in
+                            EvidenceThumbnail(image: currentTruForEvidence ? trufor.thumbnails[mode] : nil,
+                                label: mode.previewLabel, detail: mode.previewDetail,
+                                selected: !showOriginalEvidence && truforDisplay == mode) {
+                                truforDisplay = mode; showOriginalEvidence = false
+                            }
+                        }
+                    } else {
+                        EvidenceThumbnail(image: currentSafireEvidence ? safire.overlayThumbnail : nil,
+                            label: "Overlay", detail: "SAFIRE regions highlighted over the photo",
+                            selected: !showOriginalEvidence && !showSafireMask) {
+                            showSafireMask = false; showOriginalEvidence = false
+                        }
+                        EvidenceThumbnail(image: currentSafireEvidence ? safire.maskThumbnail : nil,
+                            label: "Mask", detail: "SAFIRE region mask",
+                            selected: !showOriginalEvidence && showSafireMask) {
+                            showSafireMask = true; showOriginalEvidence = false
+                        }
+                    }
                 }
-                Spacer(minLength: 0)
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 350, alignment: .leading)
+        .clipped()
+    }
+
+    private func modelButton(_ title: String, selected: Bool, remote: Bool = false,
+                             action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).remoteMark(remote)
+                .font(.caption).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, minHeight: 26)
+                .background(selected ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.06))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func evidenceStatus(_ status: String, model: String, loading: Bool) -> some View {
@@ -370,12 +414,16 @@ struct FramePreviewView: View {
             if loading || (evidenceInput == nil && reading) { ProgressView().controlSize(.mini) }
             if !label.isEmpty {
                 Text("- " + label + (preview ? " · preview" : ""))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if !loading, status.contains("unavailable") {
-                Button("Retry") { evidenceRetry = UUID() }.buttonStyle(.borderless).fixedSize()
+                Button("Retry") { evidenceRetry = UUID() }.buttonStyle(.borderless)
+                    .lineLimit(1).truncationMode(.tail).frame(width: 38)
             }
         }
+        .frame(width: 322, height: 20, alignment: .leading)
+        .clipped()
         .help(detail)
     }
 
@@ -447,9 +495,9 @@ struct FramePreviewView: View {
     }
 
     private func previewImage(_ original:NSImage)->NSImage {
-        guard photoInfoURL != nil,displayedFrameID==frame.id else { return original }
-        if truforEnabled,trufor.photoURL==photoInfoURL { return trufor.rendered ?? original }
-        if safireEnabled,safire.photoURL==photoInfoURL { return (showSafireMask ? safire.mask:safire.overlay) ?? original }
+        guard !showOriginalEvidence, photoInfoURL != nil,displayedFrameID==frame.id else { return original }
+        if truforEnabled,currentTruForEvidence { return trufor.rendered ?? original }
+        if safireEnabled,currentSafireEvidence { return (showSafireMask ? safire.mask:safire.overlay) ?? original }
         return original
     }
 

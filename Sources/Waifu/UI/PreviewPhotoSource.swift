@@ -54,6 +54,14 @@ struct PreviewEvidenceInput: Sendable {
     let photoURL: URL
     let image: CGImage
     let isOriginal: Bool
+    let thumbnail: CGImage?
+
+    init(photoURL: URL, image: CGImage, isOriginal: Bool) {
+        self.photoURL = photoURL
+        self.image = image
+        self.isOriginal = isOriginal
+        self.thumbnail = EvidenceThumbnailRaster.make(image)
+    }
 
     /// Preview renditions must never reuse, or populate, original-image results.
     func contentIdentity(assetIdentity: String, png: Data) -> String {

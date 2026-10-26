@@ -2,6 +2,9 @@ import AppKit
 import Combine
 
 @MainActor final class SafirePreviewModel:ObservableObject {
+    @Published private(set) var inputID: UUID?
+    @Published private(set) var overlayThumbnail: CGImage?
+    @Published private(set) var maskThumbnail: CGImage?
     @Published private(set) var photoURL:URL?
     @Published private(set) var overlay:NSImage?
     @Published private(set) var mask:NSImage?
@@ -9,7 +12,7 @@ import Combine
     @Published private(set) var loading=false
     private var ticket=UUID()
     func load(url:URL?,enabled:Bool,input:PreviewEvidenceInput?) async {
-        let token=UUID();ticket=token;photoURL=url;overlay=nil;mask=nil;status="";loading=false
+        let token=UUID();ticket=token;photoURL=url;inputID=input?.id;overlayThumbnail=nil;maskThumbnail=nil;overlay=nil;mask=nil;status="";loading=false
         guard enabled,let url,let item=PhotosMedia.shared.item(url),item.isStill else { return }
         guard let input,input.photoURL==url else { status="Loading photo…";return }
         loading=true
@@ -47,6 +50,8 @@ import Combine
             guard !Task.isCancelled,ticket==token else { return }
             overlay=NSImage(cgImage:material.highlighted,size:NSSize(width:material.highlighted.width,height:material.highlighted.height))
             mask=NSImage(cgImage:material.mask,size:NSSize(width:material.mask.width,height:material.mask.height))
+            overlayThumbnail = EvidenceThumbnailRaster.make(material.highlighted)
+            maskThumbnail = EvidenceThumbnailRaster.make(material.mask)
             status="SAFIRE · "+summary.ratio.formatted(.percent.precision(.fractionLength(2)))+" mask area"
         } catch is CancellationError { }
         catch {

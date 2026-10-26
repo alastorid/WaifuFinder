@@ -8,14 +8,16 @@ struct PhotoMetadataInspectorView: View {
     let errorMessage: String?
     let tags: [String]
     let rating: String?
+    let scrollsDetails: Bool
 
     init(metadata: PhotoMetadata?, isLoading: Bool, errorMessage: String?,
-         tags: [String] = [], rating: String? = nil) {
+         tags: [String] = [], rating: String? = nil, scrollsDetails: Bool = true) {
         self.metadata = metadata
         self.isLoading = isLoading
         self.errorMessage = errorMessage
         self.tags = tags
         self.rating = rating
+        self.scrollsDetails = scrollsDetails
     }
 
     @State private var generalExpanded = true
@@ -38,7 +40,7 @@ struct PhotoMetadataInspectorView: View {
                     }
                 }
                 Divider()
-                ScrollView {
+                detailsContainer {
                     VStack(alignment: .leading, spacing: 8) {
                         DisclosureGroup("General", isExpanded: $generalExpanded) {
                             VStack(alignment: .leading, spacing: 7) {
@@ -120,14 +122,14 @@ struct PhotoMetadataInspectorView: View {
                             Label(message, systemImage: "icloud.slash")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .lineLimit(1).truncationMode(.tail)
+                                .help(message)
                                 .padding(.top, 4)
                         }
                     }
                     .font(.system(size: 12))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .scrollIndicators(.automatic)
                 HStack {
                     Spacer()
                     Button {
@@ -154,14 +156,23 @@ struct PhotoMetadataInspectorView: View {
                 Text(errorMessage)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1).truncationMode(.tail)
+                    .help(errorMessage)
                     .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
             }
-            if metadata == nil { Spacer(minLength: 0) }
+            if metadata == nil && scrollsDetails { Spacer(minLength: 0) }
         }
+        .lineLimit(1)
+        .truncationMode(.tail)
         .padding(14)
         .frame(width: 350)
-        .frame(maxHeight: .infinity)
+        .frame(maxHeight: scrollsDetails ? .infinity : nil)
+    }
+
+    @ViewBuilder
+    private func detailsContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if scrollsDetails { ScrollView(.vertical) { content() } }
+        else { content() }
     }
 
     private func summary(_ metadata: PhotoMetadata) -> some View {
@@ -202,7 +213,8 @@ struct PhotoMetadataInspectorView: View {
                     Text(metadata.summaryKeywordText)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .help(metadata.summaryKeywordText)
                         .textSelection(.enabled)
                 }
             }
@@ -220,7 +232,9 @@ struct PhotoMetadataInspectorView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .help(label + ": " + value)
     }
 
 }
