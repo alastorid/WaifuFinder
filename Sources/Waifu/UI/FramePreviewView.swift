@@ -53,6 +53,7 @@ struct FramePreviewView: View {
     @State private var completedReadFrameID: FrameID?
     /// Zoom as a multiple of the frame's fit-to-window size (1 = fit).
     @State private var zoom: CGFloat = 1
+    @State private var displayedImageScale: CGFloat = 1
     /// The point in the image kept at the viewport center while frames change.
     @State private var zoomCenter = CGPoint(x: 0.5, y: 0.5)
     /// The local key monitor installed while the preview is up.
@@ -316,16 +317,20 @@ struct FramePreviewView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Divider().frame(height: 16)
-            Button { zoom = max(0.25, zoom / 1.5) } label: { Image(systemName: "minus.magnifyingglass") }
-            Text(String(format: "%.0f%%", zoom * 100))
+            Button { zoom = FrameZoomGeometry.clampedRatio(zoom / 1.5, fitScale: currentFitScale) } label: { Image(systemName: "minus.magnifyingglass") }
+            Text(String(format: "%.0f%%", displayedImageScale * 100))
                 .font(.system(size: 11, design: .monospaced))
                 .frame(width: 46)
-            Button { zoom = min(16, zoom * 1.5) } label: { Image(systemName: "plus.magnifyingglass") }
+            Button { zoom = FrameZoomGeometry.clampedRatio(zoom * 1.5, fitScale: currentFitScale) } label: { Image(systemName: "plus.magnifyingglass") }
             Button("Close") { session.previewFrame = nil }
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.primary)
         .padding(.vertical, 8)
+    }
+
+    private var currentFitScale: CGFloat {
+        displayedImageScale / max(zoom, .leastNonzeroMagnitude)
     }
 
     private var currentTruForEvidence: Bool {
@@ -465,13 +470,13 @@ struct FramePreviewView: View {
             if let animation {
                 AnimatedPhotoPlayer(animation: animation, isActive: !reading, maximumPixelSize: 4096) { frameImage, index in
                     ZoomableFrameImage(image: frameImage, frameID: FrameID(sampleIndex: index),
-                                       zoomRatio: $zoom, center: $zoomCenter)
+                                       zoomRatio: $zoom, center: $zoomCenter, displayedScale: $displayedImageScale)
                 }
                 .id(animation.identity)
             } else if let image {
                 ZoomableFrameImage(image: previewImage(image),
                     frameID: displayedFrameID ?? frame.id,
-                                   zoomRatio: $zoom, center: $zoomCenter)
+                                   zoomRatio: $zoom, center: $zoomCenter, displayedScale: $displayedImageScale)
             } else {
                 VStack(spacing: 8) {
                     if showReadingStatus { ProgressView() }

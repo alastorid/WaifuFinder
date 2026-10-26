@@ -261,8 +261,29 @@ func registerFrameZoomGeometryTests() {
         // no consumer has to clamp a second time.
         for ratio in [-4, 0, 0.3, 2, 16, 900] as [CGFloat] {
             let geometry = FrameZoomGeometry(viewport: viewport, imageSize: landscape, ratio: ratio)
-            check(FrameZoomGeometry.ratioLimits.contains(geometry.ratio),
-                  "a ratio of \(ratio) is stored inside the limits")
+            checkEqual(geometry.ratio, FrameZoomGeometry.clampedRatio(ratio, fitScale: geometry.fitScale),
+                       "a ratio of \(ratio) is clamped for this fit scale")
+            check(FrameZoomGeometry.ratioLimits.contains(geometry.scale),
+                  "the displayed source scale remains within the image limits")
+        }
+    })
+
+    Registry.shared.add(suite: "Frame zoom", TestCase(name: "native 100 percent remains reachable from fit at every viewport size", knownBug: nil) {
+        for (viewport, image) in [
+            (CGSize(width: 800, height: 600), CGSize(width: 6000, height: 4000)),
+            (CGSize(width: 1200, height: 800), CGSize(width: 24000, height: 16000)),
+            (CGSize(width: 300, height: 200), CGSize(width: 64, height: 48))
+        ] {
+            let fitScale = FrameZoomGeometry.fitScale(viewport: viewport, imageSize: image)
+            let fit = FrameZoomGeometry(viewport: viewport, imageSize: image, ratio: 1)
+            let native = FrameZoomGeometry(viewport: viewport, imageSize: image, ratio: 1 / fitScale)
+            checkClose(Double(fit.scale), Double(fitScale), tolerance: 0.000001,
+                       "fit keeps the viewport-sized scale for \(image)")
+            checkClose(Double(native.scale), 1, tolerance: 0.000001,
+                       "the native ratio reaches one source pixel per point for \(image)")
+            checkClose(Double(FrameZoomGeometry.clampedRatio(1 / fitScale, fitScale: fitScale)),
+                       Double(1 / fitScale), tolerance: 0.000001,
+                       "the native ratio is not clipped by a fit-relative zoom limit")
         }
     })
 

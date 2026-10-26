@@ -8,9 +8,10 @@ struct ZoomableFrameImage: NSViewRepresentable {
     let frameID: FrameID
     @Binding var zoomRatio: CGFloat
     @Binding var center: CGPoint
+    @Binding var displayedScale: CGFloat
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(zoomRatio: $zoomRatio, center: $center)
+        Coordinator(zoomRatio: $zoomRatio, center: $center, displayedScale: $displayedScale)
     }
 
     func makeNSView(context: Context) -> FrameZoomScrollView {
@@ -18,14 +19,21 @@ struct ZoomableFrameImage: NSViewRepresentable {
         view.onStateChange = { [weak coordinator = context.coordinator] ratio, center in
             coordinator?.store(ratio: ratio, center: center)
         }
+        view.onScaleChange = { [weak coordinator = context.coordinator] scale in
+            coordinator?.store(scale: scale)
+        }
         return view
     }
 
     func updateNSView(_ view: FrameZoomScrollView, context: Context) {
         context.coordinator.zoomRatio = $zoomRatio
         context.coordinator.center = $center
+        context.coordinator.displayedScale = $displayedScale
         view.onStateChange = { [weak coordinator = context.coordinator] ratio, center in
             coordinator?.store(ratio: ratio, center: center)
+        }
+        view.onScaleChange = { [weak coordinator = context.coordinator] scale in
+            coordinator?.store(scale: scale)
         }
         view.show(image, id: frameID, zoomRatio: zoomRatio, center: center)
     }
@@ -33,10 +41,12 @@ struct ZoomableFrameImage: NSViewRepresentable {
     final class Coordinator {
         var zoomRatio: Binding<CGFloat>
         var center: Binding<CGPoint>
+        var displayedScale: Binding<CGFloat>
 
-        init(zoomRatio: Binding<CGFloat>, center: Binding<CGPoint>) {
+        init(zoomRatio: Binding<CGFloat>, center: Binding<CGPoint>, displayedScale: Binding<CGFloat>) {
             self.zoomRatio = zoomRatio
             self.center = center
+            self.displayedScale = displayedScale
         }
 
         func store(ratio: CGFloat, center point: CGPoint) {
@@ -47,6 +57,12 @@ struct ZoomableFrameImage: NSViewRepresentable {
                 || abs(center.wrappedValue.y - point.y) > 0.000001 {
                 center.wrappedValue = point
             }
+        }
+
+        func store(scale: CGFloat) {
+            guard scale.isFinite, scale > 0,
+                  abs(displayedScale.wrappedValue - scale) > 0.000001 else { return }
+            displayedScale.wrappedValue = scale
         }
     }
 }
@@ -70,8 +86,8 @@ struct ZoomableFrameImage: NSViewRepresentable {
 /// app never uses `NSScrollView`'s magnification* — see `FrameZoomScrollView` for why
 /// that is not a detail.
 struct FrameZoomGeometry: Equatable {
-    /// How far the zoom may leave the fit: a quarter of it is a small frame with room
-    /// around it, 16× is a close enough look at a pixel.
+    /// Image scale limits in source pixels per point. The fit-relative ratio limits
+    /// adjust with the viewport so the source's native 100% size remains reachable.
     static let ratioLimits: ClosedRange<CGFloat> = 0.25...16
 
     /// The visible area, in points.
@@ -85,21 +101,37 @@ struct FrameZoomGeometry: Equatable {
     init(viewport: CGSize, imageSize: CGSize, ratio: CGFloat) {
         self.viewport = viewport
         self.imageSize = imageSize
-        self.ratio = Self.clampedRatio(ratio)
+        self.ratio = Self.clampedRatio(ratio, fitScale: Self.fitScale(viewport: viewport, imageSize: imageSize))
     }
 
     /// `1` for a ratio that is not a number at all: a NaN from a division by a
     /// viewport that has not been laid out yet is not a zoom level to honour. An
     /// infinity is a zoom level that ran away, and stops at the nearest limit.
     static func clampedRatio(_ ratio: CGFloat) -> CGFloat {
+        clampedRatio(ratio, fitScale: 1)
+    }
+
+    /// Keep zoom limits in image scale (source pixels per point), while `ratio`
+    /// remains a multiple of fit for stable window-resize behavior.
+    static func clampedRatio(_ ratio: CGFloat, fitScale: CGFloat) -> CGFloat {
+        guard fitScale.isFinite, fitScale > 0 else {
+            guard !ratio.isNaN else { return 1 }
+            return min(ratioLimits.upperBound, max(ratioLimits.lowerBound, ratio))
+        }
+        let lower = min(1, ratioLimits.lowerBound / fitScale)
+        let upper = max(1, ratioLimits.upperBound / fitScale)
         guard !ratio.isNaN else { return 1 }
-        return min(ratioLimits.upperBound, max(ratioLimits.lowerBound, ratio))
+        return min(upper, max(lower, ratio))
     }
 
     /// The limiting axis, so the frame fills the viewport exactly on one axis and
     /// exactly all of the other. A degenerate size yields `1` — a scale to draw at,
     /// not a collapse to draw at zero.
     var fitScale: CGFloat {
+        Self.fitScale(viewport: viewport, imageSize: imageSize)
+    }
+
+    static func fitScale(viewport: CGSize, imageSize: CGSize) -> CGFloat {
         guard imageSize.width > 0, imageSize.height > 0,
               viewport.width > 0, viewport.height > 0 else { return 1 }
         return min(viewport.width / imageSize.width, viewport.height / imageSize.height)
@@ -185,6 +217,7 @@ struct FrameZoomGeometry: Equatable {
 /// draws, and its frame is the fitted rectangle.
 final class FrameZoomScrollView: NSScrollView {
     var onStateChange: ((CGFloat, CGPoint) -> Void)?
+    var onScaleChange: ((CGFloat) -> Void)?
 
     /// Never smaller than the viewport, so a frame that fits has room to be centred.
     private let canvas = NSView()
@@ -258,13 +291,15 @@ final class FrameZoomScrollView: NSScrollView {
 
     func show(_ image: NSImage, id: FrameID, zoomRatio: CGFloat, center: CGPoint) {
         let isNewFrame = displayedID != id
-        let ratio = FrameZoomGeometry.clampedRatio(zoomRatio)
+        let isNewImage = frameImageView.image !== image
+        let targetImageSize = isNewImage ? image.size : imageSize
+        let fitScale = FrameZoomGeometry.fitScale(viewport: contentView.bounds.size, imageSize: targetImageSize)
+        let ratio = FrameZoomGeometry.clampedRatio(zoomRatio, fitScale: fitScale)
         let focus = CGPoint(x: min(1, max(0, center.x)), y: min(1, max(0, center.y)))
         // A completed source read can replace the image already on screen, and
         // SwiftUI calls this on every state change, so an
         // unchanged request is otherwise left alone: re-applying on every update would
         // re-centre under the user's scroll.
-        let isNewImage = frameImageView.image !== image
         guard isNewFrame || isNewImage || ratio != requestedRatio || focus != requestedCenter else { return }
         if !isNewFrame, !isNewImage, ratio != requestedRatio {
             let pointer = window.map { contentView.convert($0.mouseLocationOutsideOfEventStream, from: nil) }
@@ -332,13 +367,15 @@ final class FrameZoomScrollView: NSScrollView {
         let point = CGPoint(x: anchor.x - contentView.bounds.minX,
                             y: anchor.y - contentView.bounds.minY)
         let focus = currentGeometry.focus(atCanvasPoint: anchor)
-        requestedRatio = FrameZoomGeometry.clampedRatio(ratio)
+        requestedRatio = FrameZoomGeometry.clampedRatio(ratio, fitScale: currentGeometry.fitScale)
         applyLayout(origin: currentGeometry.scrollOrigin(keeping: point, under: focus))
     }
 
     @objc private func toggleZoom(_ gesture: NSClickGestureRecognizer) {
         let anchor = gesture.location(in: contentView)
-        zoom(to: requestedRatio > 1.01 ? 1 : 2, atClipPoint: anchor)
+        let isFit = abs(requestedRatio - 1) <= 0.01
+        let targetRatio = isFit ? 1 / max(currentGeometry.fitScale, .leastNonzeroMagnitude) : 1
+        zoom(to: targetRatio, atClipPoint: anchor)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -351,6 +388,7 @@ final class FrameZoomScrollView: NSScrollView {
     private func publishState() {
         guard !applyingLayout, imageSize.width > 1, imageSize.height > 1 else { return }
         let geometry = currentGeometry
+        onScaleChange?(geometry.scale)
         // With nothing to scroll there is no position to report: the focus point stays
         // where the user left it, so magnifying back in returns there rather than to
         // the middle of a frame that is smaller than the window.
