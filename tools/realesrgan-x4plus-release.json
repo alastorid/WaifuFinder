@@ -1,0 +1,13 @@
+{
+  "repository": "alastorid/RealESRGAN-x4plus-Optimized-CoreML",
+  "revision": "6a598182cd47d83a307fa056db876d2fb23d1b0e",
+  "manifestSHA256": "a95379588b54346070eb98fe86d9ddadac294bc3c43b50fb02c8a6eb1f83a3e1",
+  "supportFilesSHA256": {
+    "LICENSE": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2",
+    "NOTICE": "1121a76a1798914d0938a73a3e79c764ec61c817dd9a3b3ce5b34754d156935a",
+    "README.md": "f3cf048f68fdc5b51aee7c7d7ca24dd845f76efc21e0029562567e3c9d998d65",
+    "validation.json": "57598640eafe49db809f112495d479e0b99622bb0782287e1d1a8b65b7b535c8",
+    "BasicSR-LICENSE": "5447872f21ddc29dc0dc060d5c885513c01c904e9da9931bba69898a6fb4d415",
+    "WaifuFinder-LICENSE": "2565967c852dfa92a04a6b97722c21f985973601b251ef55328c6fd957155540"
+  }
+}

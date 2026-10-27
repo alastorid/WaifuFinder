@@ -53,7 +53,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                         let hasTextFocus = window.firstResponder is NSTextView
                             || (window.firstResponder as? NSTextField)?.isEditable == true
                         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                        if !hasTextFocus, window.attachedSheet == nil, !session.showExportSheet,
+                        if !hasTextFocus, window.attachedSheet == nil, !session.showExportSheet, !session.showPreviewExportSheet,
                            session.errorMessage == nil {
                             if event.type == .keyDown, modifiers == .command,
                                event.charactersIgnoringModifiers?.lowercased() == "v",
@@ -66,7 +66,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                         if event.type == .keyDown, event.keyCode == 51, modifiers == .command,
                            self.isPhotosMode, !hasTextFocus,
                            session.uncover == nil, !session.progress.isRunning,
-                           !session.showExportSheet, session.errorMessage == nil,
+                           !session.showExportSheet, !session.showPreviewExportSheet, session.errorMessage == nil,
                            window.attachedSheet == nil {
                             if !event.isARepeat { session.deleteSelectedPhotos() }
                             return true
@@ -81,7 +81,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                             previewIsUp: session.previewFrame != nil,
                             canOpen: session.focusedFrameID.flatMap { session.frame(id: $0) } != nil,
                             blocked: session.uncover != nil || session.progress.isRunning || session.taggingProgress.isRunning ||
-                                session.showExportSheet || session.errorMessage != nil || window.attachedSheet != nil,
+                                session.showExportSheet || session.showPreviewExportSheet || session.errorMessage != nil || window.attachedSheet != nil,
                             hasTextFocus: hasTextFocus,
                             modifiers: event.modifierFlags)
                         switch outcome {

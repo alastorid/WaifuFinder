@@ -20,14 +20,25 @@ actor RemoteTaggerBackend: TaggerBackend {
     }
 
     func tag(batch: [CGImage]) async throws -> [TagResult] {
+        let vocabulary = try await checkedVocabulary()
+        let rows = try await client.tag(images: batch, codec: .rgba8)
+        return try rows.map { try $0.result(vocabulary: vocabulary, threshold: threshold) }
+    }
+
+    func tag(sources: [TaggingImageSource]) async throws -> [TagResult] {
+        let vocabulary = try await checkedVocabulary()
+        let rows = try await client.tag(sources: sources)
+        return try rows.map { try $0.result(vocabulary: vocabulary, threshold: threshold) }
+    }
+
+    private func checkedVocabulary() async throws -> TagVocabulary {
         guard let vocabulary = await client.remoteVocabulary, vocabulary.cacheFingerprint == fingerprint else {
             // Without the labels there is no rating, no top-tag list and no
             // filter vocabulary, so a row alone would be unusable.
             throw RemoteError.modelUnavailable(
                 "The server has not sent its tag labels yet. Reconnect to resync.")
         }
-        let rows = try await client.tag(images: batch, codec: .rgba8)
-        return try rows.map { try $0.result(vocabulary: vocabulary, threshold: threshold) }
+        return vocabulary
     }
 }
 

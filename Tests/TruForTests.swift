@@ -12,6 +12,35 @@ func registerTruForTests() {
         checkEqual(TruForConfiguration.execution,"trufor-fp32-v2","FP32 capability and score cache revision are fixed")
         checkEqual(TruForConfiguration(directory:URL(fileURLWithPath:"/unused")).fingerprint,TruForConfiguration.weightsSHA,"wire fingerprint names the weights, not the execution namespace")
     })
+    Registry.shared.add(suite:suite,TestCase(name:"FP32 setup describes native MLX without a companion",knownBug:nil) {
+        check(ManagedModel.trufor.detail.contains("FP32"),"model setup names actual precision")
+        check(!ManagedModel.trufor.detail.contains("Core ML"),"obsolete companion is not advertised")
+    })
+    Registry.shared.add(suite:suite,TestCase(name:"pipe evidence decodes planes and rejects truncated or oversized frames",knownBug:nil) {
+        func frame(width:UInt32=32,height:UInt32=32)->Data {
+            var data=Data("TFM1".utf8)
+            for value in [width,height,UInt32(3)] { var word=value.littleEndian;withUnsafeBytes(of:&word){data.append(contentsOf:$0)} }
+            var score:Float=0.25;withUnsafeBytes(of:&score){data.append(contentsOf:$0)}
+            for value:Float in [0.25,0.75,-0.5] {
+                let values=[Float](repeating:value,count:32*32)
+                values.withUnsafeBytes{data.append(contentsOf:$0)}
+            }
+            return data
+        }
+        func decode(_ data:Data,count:Int?=nil)throws->TruForSpatial {
+            let pipe=Pipe(),writer=pipe.fileHandleForWriting,reader=pipe.fileHandleForReading
+            DispatchQueue.global().async { try? writer.write(contentsOf:data);try? writer.close() }
+            defer { try? reader.close() }
+            return try TruForPipe.spatial(reader,byteCount:count ?? data.count)
+        }
+        let data=frame(),result=try decode(data)
+        checkEqual(result.width,32,"native width")
+        checkEqual(result.score,0.25,"FP32 score")
+        check(result.anomaly.allSatisfy{$0==0.25} && result.reliability.allSatisfy{$0==0.75} && result.noiseprint.allSatisfy{$0 == -0.5},"all three FP32 planes retain values")
+        _=checkThrows("truncated binary body") { try decode(data.dropLast(4),count:data.count) }
+        _=checkThrows("oversized dimensions before allocation") { try decode(frame(width:UInt32.max).prefix(20),count:data.count) }
+        _=checkThrows("response length must match geometry") { try decode(data.prefix(20),count:data.count+4) }
+    })
     Registry.shared.add(suite:suite,TestCase(name:"outline pixels match clamped morphology for portrait and landscape maps",knownBug:nil) {
         guard MTLCreateSystemDefaultDevice() != nil else { throw SkipTest(reason:"Metal unavailable") }
         for (width,height) in [(65,32),(32,65)] {

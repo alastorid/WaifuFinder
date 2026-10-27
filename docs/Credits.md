@@ -44,7 +44,7 @@ sequencing works independently, and grouping remains an optional control.
 | [lpalbou/mlx-gen](https://github.com/lpalbou/mlx-gen) and its contributors | Additional SeedVR2 implementation reference; MIT. | #MLXGen #SeedVR2 |
 | [AbstractFramework](https://huggingface.co/AbstractFramework/seedvr2-3b-4bit), [MLX community](https://huggingface.co/mlx-community/SeedVR2-3B-mlx) | Prepared SeedVR2 weights and positional embedding; Apache-2.0. | #AbstractFramework #MLXCommunity |
 | [OpenImagingLab/FlashVSR](https://github.com/OpenImagingLab/FlashVSR), [Junhao Zhuang](https://huggingface.co/JunhaoZhuang/FlashVSR-v1.1) | Streaming restoration graph and published model; Apache-2.0. | #FlashVSR #OpenImagingLab |
-| [Xintao Wang / Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Image restoration weights; BSD-3-Clause. | #RealESRGAN |
+| [Xintao Wang / Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | Official x2plus and x4plus restoration weights by Xintao Wang, Liangbin Xie, Chao Dong and Ying Shan; *Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data*. BSD-3-Clause. | #RealESRGAN |
 | [XPixelGroup/BasicSR](https://github.com/XPixelGroup/BasicSR) | Restoration reference architecture; Apache-2.0. | #BasicSR |
 | [SmilingWolf / WD SwinV2 Tagger v3](https://huggingface.co/SmilingWolf/wd-swinv2-tagger-v3) | Tag and rating model; Apache-2.0. | #SmilingWolf #WDTagger |
 | [Belisoful/InferKit](https://github.com/belisoful/InferKit) | Adapted face-restoration formulas; MIT. | #Belisoful #InferKit |

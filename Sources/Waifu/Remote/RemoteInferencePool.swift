@@ -103,6 +103,10 @@ final class RemoteInferencePool: ObservableObject {
         taggingClients.filter { $0.remoteVocabulary?.cacheFingerprint == fingerprint }
     }
 
+    func realESRGANClient(_ variant: RealESRGANVariant) -> RemoteClient? {
+        forensicClients { $0.status.isConnected && $0.capabilities?.offersRealESRGAN(variant) == true }.first
+    }
+
     /// Forensic inference uses one lane per connected endpoint, like tagging.
     private func forensicClients(where offers: (RemoteClient) -> Bool) -> [RemoteClient] {
         var seen = Set<String>()
@@ -118,8 +122,11 @@ final class RemoteInferencePool: ObservableObject {
     var serverNames: String { taggingClients.compactMap { $0.capabilities?.serverName }.joined(separator: ", ") }
 
     func loadVocabularyIfNeeded() async -> TagVocabulary? {
-        for entry in entries where entry.client.offersRemoteTagging {
-            await entry.client.loadVocabularyIfNeeded()
+        let clients = entries.map(\.client).filter(\.offersRemoteTagging)
+        await withTaskGroup(of: Void.self) { group in
+            for client in clients {
+                group.addTask { await client.loadVocabularyIfNeeded() }
+            }
         }
         refresh()
         return remoteVocabulary

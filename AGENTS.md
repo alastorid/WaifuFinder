@@ -2,27 +2,12 @@
 
 ## Interactive UI testing
 
-The user requested on 2026-10-24 that routine work must not include interactive
-UI tests, now or in future tasks. Do not run them unless the user explicitly
-requests interactive UI testing again. Background builds, automated noninteractive
-tests, rendering, and inference benchmarks may continue normally.
-
-If interactive UI testing is explicitly requested again, the following approval
-requirements still apply:
-
-The user actively shares this computer. Save interactive UI tests as reviewable,
-executable scripts and invoke them through `./run-ui-tests.sh SCRIPT [ARGUMENTS...]`.
-The launcher itself shows a native macOS message box naming the exact script and
-arguments, and executes that invocation only after the user clicks OK. Approval is
-for that script invocation, not an agent, conversation, or general testing session.
-Do not perform separate ad hoc UI actions under a script's approval. Another script
-or rerun needs its own prompt. Cancel, no response, elapsed time, and dialog failure
-must never authorize execution; do not add a bypass flag or cache approvals.
-After an approved script exits, the launcher must show a native macOS notification
-that the UI steps have finished and control is back with the user, including when
-the test script exits unsuccessfully.
-Background code edits, builds, and tests that do not interact with the user's UI
-can continue without this prompt.
+The user permanently prohibited interactive UI tests on 2026-10-26: no
+interactive UI tests may be created or run now or in any future task. Do not
+create or run them, request approval for them, or use the UI-test launcher as a
+workaround.
+Background builds, automated noninteractive tests, rendering, and inference
+benchmarks may continue normally when they do not interact with the user's UI.
 
 ## Licensing and media dependencies
 
@@ -44,6 +29,16 @@ memory probes, the 1024×1024 Core ML safety stop and the limits of counting
 ANE-service memory. Keep Python out of every inference path; Python may be used
 only for explicitly offline conversion/reference tooling. The nonprofit TruFor
 licence and the GPL/LGPL prohibition above still apply.
+
+Production TruFor, including the Noiseprint/noisemap body, must remain FP32
+throughout in native Swift/MLX with its validated optimized kernels. Do not
+reintroduce Core ML/FP16 companions, reduced-precision runtime overrides,
+activation scratch files, file-backed mappings, compression or disk spill to
+lower reported RAM. App/worker inputs and evidence travel through anonymous
+pipes. Persistent weights and scalar result caches are not calculation storage.
+Report whole-process physical footprint alongside MLX allocations, compressed
+memory and process swap-ins; do not describe RAM-only app storage as disabling
+macOS paging or claim universal optimality from limited benchmarks.
 
 ## WD Tagger ANE and Core ML trials
 

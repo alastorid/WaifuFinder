@@ -341,7 +341,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     @Published var showExportSheet: Bool = false
+    @Published var showPreviewExportSheet: Bool = false
     @Published private(set) var uncover: UncoverSession?
+
+    func requestExport() {
+        if previewFrame != nil { showPreviewExportSheet = true }
+        else { showExportSheet = true }
+    }
 
     func openUncover(at seconds: Double) {
         guard let video else { return }
@@ -509,6 +515,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         didSet { recomputeDisplayedFrames() }
     }
 
+    /// Photos favorites are resolved by the source asset identifier, before
+    /// group caps are applied. Video files have no favorite filter.
+    @Published var favoriteFilter: FrameFavoriteFilter = .all {
+        didSet { recomputeDisplayedFrames() }
+    }
+    private var favoriteAssetIdentifiers = Set<String>()
+
     @Published var tagFilter = TagFilter() {
         didSet { recomputeDisplayedFrames() }
     }
@@ -575,7 +588,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// from one Photos video resolve to the same asset and are deleted only once.
     func deleteSelectedPhotos() {
         guard !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
-              !progress.isRunning, uncover == nil, !showExportSheet,
+              !progress.isRunning, uncover == nil, !showExportSheet, !showPreviewExportSheet,
               let albumURL = photosAlbumURL else { return }
 
         var seen = Set<String>()
@@ -595,7 +608,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func deletePhotos(identifiers: [String], from albumURL: URL,
                       onSuccess: @escaping @MainActor (Set<String>) -> Void = { _ in }) {
         guard !identifiers.isEmpty, !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
-              !progress.isRunning, uncover == nil, !showExportSheet,
+              !progress.isRunning, uncover == nil, !showExportSheet, !showPreviewExportSheet,
               photosAlbumURL == albumURL,
               let collectionIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
         isDeletingPhotos = true
@@ -645,6 +658,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             ? displayOrderFrames.filter { selectedFrameIDs.contains($0.id) } : [frame]
         guard !targets.isEmpty else { return }
         let threshold = settings.taggerThreshold
+        let originalCacheKeys = TagResultCacheKeys.make(videoURL: sourceURL, frames: targets,
+            vocabulary: vocabulary, analysisWidth: settings.analysisWidth, analysisMode: settings.analysisMode)
         let status = photosKeywordJob
         isWritingPhotosTags = true
         status.progress = PhotosKeywordJobProgress(total: targets.count)
@@ -671,17 +686,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     self.keywordJobAssetIDs = assetIDs
                     if status.progress?.phase != .stopping { status.progress?.phase = .writing }
                 }
+                let outcome: Result<Void, Error>
                 do {
                     try await PhotosKeywordWriter.run(updates) { count in
                         await MainActor.run { status.progress?.completed = count }
                     }
+                    outcome = .success(())
                 } catch {
-                    // Partial writes still bump modification dates; snapshot them
-                    // too so a cancelled job's echoes are recognized as ours.
-                    await PhotosMedia.shared.recordKeywordWriteBaselines(for: Array(assetIDs))
-                    throw error
+                    outcome = .failure(error)
                 }
-                await PhotosMedia.shared.recordKeywordWriteBaselines(for: Array(assetIDs))
+                // Include partial/cancelled writes. The old album snapshot still
+                // carries pre-write dates, so rebuilding keys from it would make
+                // every written photo miss the disk cache on the next opening.
+                let updatedAssets = await PhotosMedia.shared.recordKeywordWriteBaselines(for: Array(assetIDs))
+                await TagResultMemory.shared.remember(frames: targets,
+                    keys: originalCacheKeys.afterPhotoMetadataWrite(updatedAssets))
+                try outcome.get()
             }
             do {
                 try await withTaskCancellationHandler {
@@ -870,6 +890,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var modelChanges: AnyCancellable?
     private var tagMemorySettingChanges: AnyCancellable?
     private var terminationObserver: AnyCancellable?
+    private var favoriteChanges: AnyCancellable?
+    private var appActivationChanges: AnyCancellable?
+    private var favoriteRefreshTask: Task<Void, Never>?
+    private var favoriteRefreshGeneration = UUID()
     private var analysisTask: Task<Void, Never>?
     private var analysisGeneration = UUID()
     private var photosAnalysisCheckpoint: PhotosAnalysisCheckpoint?
@@ -959,6 +983,23 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     self?.persistTagResultsAtExit()
                 }
             }
+        favoriteChanges = NotificationCenter.default.publisher(for: .photosFavoriteDidUpdate)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                MainActor.assumeIsolated {
+                    guard let identifiers = notification.userInfo?["assetIdentifiers"] as? [String],
+                          let isFavorite = notification.userInfo?["isFavorite"] as? Bool else { return }
+                    self?.applyFavoriteUpdate(identifiers: identifiers, isFavorite: isFavorite)
+                }
+            }
+        appActivationChanges = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let sourceURL = self?.photosAlbumURL else { return }
+                    self?.refreshFavoriteAssets(for: sourceURL)
+                }
+            }
         // The live knob starts where the persisted rule left off.
         groupingThreshold = settings.similarityThreshold
     }
@@ -987,6 +1028,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         video = nil
         photosAlbumURL = PhotosMedia.shared.album(url) == nil ? nil : url
+        favoriteFilter = .all
+        favoriteAssetIdentifiers = []
+        favoriteRefreshTask?.cancel()
+        if let photosAlbumURL { refreshFavoriteAssets(for: photosAlbumURL) }
         photosOrderSyncMessage = nil
         let preparedSource = photosAlbumURL.map { PreparedMedia(url: $0) }
         if let preparedSource { importedMedia = preparedSource }
@@ -1139,6 +1184,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         clearResults()
         video = nil
         photosAlbumURL = nil
+        favoriteFilter = .all
+        favoriteAssetIdentifiers = []
+        favoriteRefreshTask?.cancel()
         importedMedia = nil
         photosOrderSyncMessage = nil
         errorMessage = nil
@@ -1436,17 +1484,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             guard !lanes.isEmpty else { throw ModelInstaller.fail("No tagging server or local model is available.") }
             let tagger = BalancedTaggerBackend(lanes: lanes)
-            let next: @Sendable () async throws -> [PreparedTagFrame]? = {
-                guard let batch = try await self.nextTaggingBatch(token: token) else { return nil }
-                let images = try await TaggingImageLoader.load(batch.map(\.source))
-                return zip(batch, images).map { PreparedTagFrame(frame: $0.frame, image: $1) }
+            let next: @Sendable () async throws -> [PendingTagFrame]? = {
+                try await self.nextTaggingBatch(token: token)
             }
             let whenEmpty: @Sendable () async -> Bool = {
                 await self.finishTaggingIfDrained(token: token, elapsed: Date().timeIntervalSince(started))
             }
-            let process: @Sendable ([PreparedTagFrame]) async throws -> [AnalyzedFrame] = { batch in
+            let process: @Sendable ([PendingTagFrame]) async throws -> [AnalyzedFrame] = { batch in
                 try Task.checkCancellation()
-                let results = try await tagger.tag(batch: batch.map(\.image))
+                // Reserve a server before loading pixels. Each lane prepares and
+                // uploads independently while the other servers keep inferring.
+                let results = try await tagger.tag(sources: batch.map(\.source))
                 guard results.count == batch.count else {
                     throw ModelInstaller.fail("The tagger returned an unexpected frame count.")
                 }
@@ -2549,7 +2597,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         // Cache-based filters can outlive a live refresh. Resolve any repeated
         // IDs before ranking and group caps so one frame contributes once.
-        let displayCandidates = uniqueFramesByID(filteredDisplayCandidates(grouping: grouping))
+        let displayCandidates = uniqueFramesByID(filteredDisplayCandidates(grouping: grouping).filter { frame in
+            guard favoriteFilter != .all else { return true }
+            guard let sourceURL = photosAlbumURL else { return true }
+            guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: frame.timeSeconds) else {
+                return false
+            }
+            return favoriteFilter.admits(favoriteAssetIdentifiers.contains(identifier))
+        })
 
         let arrangement = FrameArrangement.arrange(
             frames,
@@ -2592,6 +2647,38 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             CappedGroupSummary(id: id, count: count,
                                label: earliestByGroup[id].map(timecode) ?? id.raw)
         }.sorted { $0.count == $1.count ? $0.id.raw < $1.id.raw : $0.count > $1.count }
+    }
+
+    private func refreshFavoriteAssets(for sourceURL: URL) {
+        favoriteRefreshTask?.cancel()
+        let generation = UUID()
+        favoriteRefreshGeneration = generation
+        favoriteRefreshTask = Task { [weak self] in
+            let identifiers = await PhotosMedia.shared.favoriteAssetIdentifiers(in: sourceURL)
+            guard !Task.isCancelled, let self,
+                  self.favoriteRefreshGeneration == generation,
+                  self.photosAlbumURL == sourceURL else { return }
+            guard self.favoriteAssetIdentifiers != identifiers else { return }
+            self.favoriteAssetIdentifiers = identifiers
+            self.recomputeDisplayedFrames()
+        }
+    }
+
+    private func applyFavoriteUpdate(identifiers: [String], isFavorite: Bool) {
+        guard let sourceURL = photosAlbumURL,
+              let album = PhotosMedia.shared.album(sourceURL) else { return }
+        favoriteRefreshTask?.cancel()
+        favoriteRefreshGeneration = UUID()
+        let albumIdentifiers = Set(album.items.map { $0.asset.localIdentifier })
+        var changed = false
+        for identifier in identifiers where albumIdentifiers.contains(identifier) {
+            if isFavorite {
+                changed = favoriteAssetIdentifiers.insert(identifier).inserted || changed
+            } else {
+                changed = favoriteAssetIdentifiers.remove(identifier) != nil || changed
+            }
+        }
+        if changed { recomputeDisplayedFrames() }
     }
 
     /// Visual order cannot change membership, representatives, score bounds or
@@ -3086,11 +3173,6 @@ private enum AnalysisError: Error, LocalizedError {
 private struct PendingTagFrame: Sendable {
     let frame: AnalyzedFrame
     let source: TaggingImageSource
-}
-
-private struct PreparedTagFrame: Sendable {
-    let frame: AnalyzedFrame
-    let image: CGImage
 }
 
 // MARK: - Thumbnail bridge

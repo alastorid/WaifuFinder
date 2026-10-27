@@ -20,6 +20,14 @@ actor BalancedTaggerBackend: TaggerBackend {
     }
 
     func tag(batch: [CGImage]) async throws -> [TagResult] {
+        try await perform { try await $0.tag(batch: batch) }
+    }
+
+    func tag(sources: [TaggingImageSource]) async throws -> [TagResult] {
+        try await perform { try await $0.tag(sources: sources) }
+    }
+
+    private func perform(_ work: @Sendable (any TaggerBackend) async throws -> [TagResult]) async throws -> [TagResult] {
         try Task.checkCancellation()
         // The pipeline limits submissions to the total lane capacity.
         let candidates = (0..<lanes.count).map { (cursor + $0) % lanes.count }
@@ -28,6 +36,6 @@ actor BalancedTaggerBackend: TaggerBackend {
         depths[index] += 1
         cursor = (index + 1) % lanes.count
         defer { depths[index] -= 1 }
-        return try await lanes[index].backend.tag(batch: batch)
+        return try await work(lanes[index].backend)
     }
 }

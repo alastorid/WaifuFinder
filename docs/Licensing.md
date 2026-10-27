@@ -46,7 +46,7 @@ So the restriction is enforced at build time instead. See
 | SeedVR2 text embedding | Apache-2.0 | Yes | [mlx-community/SeedVR2-3B-mlx](https://huggingface.co/mlx-community/SeedVR2-3B-mlx) |
 | `seedvr2-mlx-swift` port | MIT | Yes | [xocialize/seedvr2-mlx-swift](https://github.com/xocialize/seedvr2-mlx-swift) |
 | FlashVSR 1.1 Tiny weights | Apache-2.0 | Yes | [JunhaoZhuang/FlashVSR-v1.1](https://huggingface.co/JunhaoZhuang/FlashVSR-v1.1) |
-| Real-ESRGAN x2plus weights | BSD-3-Clause | Yes | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
+| Real-ESRGAN x2plus / x4plus weights | BSD-3-Clause | Yes | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) |
 | BasicSR reference architecture | Apache-2.0 | Yes | [XPixelGroup/BasicSR](https://github.com/XPixelGroup/BasicSR) |
 | MLX, MLX Swift | MIT | Yes | [ml-explore](https://github.com/ml-explore) |
 | MLX C, `{fmt}`, Metal-cpp (MLX dependencies) | MIT / Apache-2.0 | Yes | [ml-explore/mlx-swift](https://github.com/ml-explore/mlx-swift) |

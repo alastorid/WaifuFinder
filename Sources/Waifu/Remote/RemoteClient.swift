@@ -624,31 +624,30 @@ final class RemoteClient: ObservableObject {
 
     // MARK: Requests
 
+    private var losslessTagCodec: RemoteTagImageCodec {
+        capabilities?.tagger?.inputCodecs?.contains(RemoteTagImageCodec.rgba8LZ4.rawValue) == true
+            ? .rgba8LZ4 : .rgba8
+    }
+
     /// Sends a tagging batch. Returns one probability row per image.
     func tag(images: [CGImage], codec: RemoteTagImageCodec) async throws -> [QuantizedTagRow] {
         guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
         guard (1...WDTaggerBackend.batchSize).contains(images.count) else { throw TaggerError.invalidBatch }
-        let payload = try await Self.encodeTagBatch(images, codec: codec)
+        let payload = try await RemoteTagBatchPayload.encode(images: images,
+            codec: codec == .rgba8 ? losslessTagCodec : codec)
         let reply = try await connection.request(.tagBatch, payload: payload)
         let expected = capabilities?.tagger?.vocabularyFingerprint
         return try await Self.decodeTagResult(reply, count: images.count, fingerprint: expected)
     }
 
-    // Nonisolated async helpers run image conversion and probability decoding
-    // off the UI actor while other batches are travelling or running remotely.
-    private nonisolated static func encodeTagBatch(_ images: [CGImage], codec: RemoteTagImageCodec) async throws -> [UInt8] {
-        var payload = WireWriter()
-        payload.u8(UInt8(images.count))
-        payload.u8(codec.rawValue)
-        payload.u16(0)
-        for image in images {
-            try Task.checkCancellation()
-            switch codec {
-            case .encoded: payload.data(try ThumbnailCache.encodeJPEG(image))
-            case .rgba8: payload.raw(try RemoteTagImageDecoder.encodeRGBA8(image))
-            }
-        }
-        return payload.bytes
+    /// The source-aware path keeps video thumbnails encoded across the LAN.
+    /// Preparation is off the UI actor and overlaps requests to other servers.
+    func tag(sources: [TaggingImageSource]) async throws -> [QuantizedTagRow] {
+        guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
+        let payload = try await RemoteTagBatchPayload.encode(sources: sources, losslessCodec: losslessTagCodec)
+        let reply = try await connection.request(.tagBatch, payload: payload)
+        let expected = capabilities?.tagger?.vocabularyFingerprint
+        return try await Self.decodeTagResult(reply, count: sources.count, fingerprint: expected)
     }
 
     private nonisolated static func decodeTagResult(_ reply: RemoteEnvelope, count expectedCount: Int,

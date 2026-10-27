@@ -1,0 +1,20 @@
+{
+  "geometry" : [
+    "96x66",
+    "96x66",
+    "96x66",
+    "96x66"
+  ],
+  "loadSeconds" : 6.8517270088195801,
+  "passed" : true,
+  "peakPhysicalFootprintBytes" : 79544992,
+  "secondsPerImage" : [
+    0.061259031295776367,
+    0.043053030967712402,
+    0.042561054229736328,
+    0.042756080627441406
+  ],
+  "thermalStateAtEnd" : 0,
+  "thermalStateAtStart" : 0,
+  "units" : "all"
+}

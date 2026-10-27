@@ -8,8 +8,10 @@ import TruForMLX
 final class TruForMemoryMonitor: @unchecked Sendable {
     private let lock=NSLock()
     private var peak=0
+    private var peakCompressed=0
+    private var initialSwapins:Int64=0
     private let timer=DispatchSource.makeTimerSource(queue:DispatchQueue(label:"trufor-memory"))
-    static func footprint()->Int {
+    static func snapshot()->task_vm_info_data_t {
         var info=task_vm_info_data_t()
         var count=mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size/MemoryLayout<integer_t>.size)
         let status=withUnsafeMutablePointer(to:&info) { pointer in
@@ -20,8 +22,9 @@ final class TruForMemoryMonitor: @unchecked Sendable {
         guard status==KERN_SUCCESS else {
             fputs("TruFor stopped because its 2 GB memory monitor is unavailable.\n",stderr);_exit(75)
         }
-        return Int(info.phys_footprint)
+        return info
     }
+    static func footprint()->Int { Int(snapshot().phys_footprint) }
     init() {
         timer.schedule(deadline:.now(),repeating:.milliseconds(5))
         timer.setEventHandler { [weak self] in self?.sample() }
@@ -29,8 +32,9 @@ final class TruForMemoryMonitor: @unchecked Sendable {
     }
     deinit { timer.cancel() }
     @discardableResult func sample()->Int {
-        var bytes=Self.footprint()
-        lock.lock();peak=max(peak,bytes);lock.unlock()
+        let info=Self.snapshot()
+        var bytes=Int(info.phys_footprint)
+        lock.lock();peak=max(peak,bytes);peakCompressed=max(peakCompressed,Int(info.compressed));lock.unlock()
         if bytes>=TruForMemoryPolicy.stopBytes {
             TruForMemoryPolicy.releaseUnusedCPU();bytes=Self.footprint()
         }
@@ -44,16 +48,20 @@ final class TruForMemoryMonitor: @unchecked Sendable {
         return bytes
     }
     func reset() {
-        lock.lock();peak=Self.footprint();lock.unlock()
+        let info=Self.snapshot()
+        lock.lock();peak=Int(info.phys_footprint);peakCompressed=Int(info.compressed);initialSwapins=info.ledger_swapins;lock.unlock()
         Memory.peakMemory=0
     }
     func report(_ phase:String) {
         let current=sample()
         guard ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PROFILE"] != nil ||
             ProcessInfo.processInfo.environment["WAIFU_TRUFOR_MEMORY_REPORT"] == "1" else { return }
-        lock.lock();let maximum=peak;lock.unlock()
+        let info=Self.snapshot()
+        lock.lock();let maximum=peak,compressedMaximum=peakCompressed,swapins=max(0,info.ledger_swapins-initialSwapins);lock.unlock()
         let values:[String:Any]=["phase":phase,"physicalBytes":current,"peakPhysicalBytes":maximum,
             "peakMLXBytes":Memory.peakMemory,"activeMLXBytes":Memory.activeMemory,"cachedMLXBytes":Memory.cacheMemory,
+            "residentBytes":info.resident_size,"compressedBytes":info.compressed,"peakCompressedBytes":compressedMaximum,
+            "swapinsDuringRequest":swapins,"activationStorage":"owned FP32 RAM; no file backing",
             "budgetBytes":TruForMemoryPolicy.budgetBytes,"stopBytes":TruForMemoryPolicy.stopBytes]
         if let data=try? JSONSerialization.data(withJSONObject:values,options:.sortedKeys) {
             FileHandle.standardError.write(data);FileHandle.standardError.write(Data([10]))

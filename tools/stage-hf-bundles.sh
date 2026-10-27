@@ -13,6 +13,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "${1:-}" = --only-realesrgan-x4 ]; then
+    shift
+    exec python3 "$ROOT/tools/stage-realesrgan-x4.py" --stage "${1:-$ROOT/models/published}"
+fi
 STAGE="${1:-$ROOT/models/published}"
 PGT_SOURCE="${PGTFORMER_NATIVE_MODEL:-$ROOT/.native-runtime/pgtformer}"
 REAL_SOURCE="$ROOT/.native-runtime/realesrgan-optimized"

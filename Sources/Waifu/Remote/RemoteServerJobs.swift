@@ -24,22 +24,13 @@ extension RemoteServerSession {
         await resources.touch()
         do {
             try Task.checkCancellation()
-            var reader = WireReader(envelope.payload)
-            let batchCount = Int(try reader.u8())
-            guard let codec = RemoteTagImageCodec(rawValue: try reader.u8()), try reader.u16() == 0 else {
-                throw RemoteError.invalidRequest("Unknown image codec or reserved flags.")
-            }
-            guard (1...WDTaggerBackend.batchSize).contains(batchCount) else { throw TaggerError.invalidBatch }
-            var images: [CGImage] = []
-            images.reserveCapacity(batchCount)
-            for _ in 0..<batchCount { images.append(try RemoteTagImageDecoder.decode(codec: codec, bytes: try reader.raw())) }
-            guard reader.isAtEnd else { throw RemoteError.framing("trailing bytes after a tagging batch") }
+            let images = try await RemoteTagBatchPayload.decode(envelope.payload)
 
             guard await ModelLibrary.shared.active == nil else { throw RemoteError.busy }
             let backend = try await catalog.tagger()
             let results = try await backend.tag(batch: images)
             try Task.checkCancellation()
-            guard results.count == batchCount else { throw TaggerError.invalidProbabilities }
+            guard results.count == images.count else { throw TaggerError.invalidProbabilities }
             let payload = try RemoteTagScorePayload.encode(results, fingerprint: await catalog.vocabularyFingerprint())
             try await connection.send(.tagResult, payload: payload, streamID: envelope.streamID)
         } catch {
@@ -95,6 +86,12 @@ extension RemoteServerSession {
                   manifest.width > 0, manifest.height > 0,
                   manifest.regionWidth > 0, manifest.regionHeight > 0 else {
                 throw RemoteError.invalidRequest("Invalid reconstruction manifest.")
+            }
+            if let request = manifest.realESRGANImage {
+                guard let variant = algorithm.realESRGANVariant else { throw RemoteError.invalidRequest("Photo model differs from algorithm.") }
+                try request.validate(variant)
+                guard manifest.frames.count == 1, manifest.width == manifest.regionWidth, manifest.height == manifest.regionHeight,
+                      variant.accepts(width:manifest.width,height:manifest.height) else { throw RemoteError.tooLarge }
             }
             let backend = catalog.backend(algorithm)
             let capabilities = await backend.capabilities()

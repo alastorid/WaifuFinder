@@ -368,3 +368,27 @@ fewer than five frames disable Reconstruct with a visible explanation.
 The algorithm selector uses native small segmented buttons: SeedVR2 / FlashVSR 1.1.
 While inference or export runs, the canvas is replaced by progress. Source seeking,
 comparison and playback are disabled until the job finishes; Cancel remains available.
+
+
+## Independent RealESRGAN x2plus and x4plus
+
+RealESRGAN x2 and x4 are independent Uncover algorithms and model-library entries.
+The original x2 configuration and legacy imports remain compatible. x4 uses the
+actual official 23-block x4plus network, not a cascade of x2 networks. In Uncover,
+the chosen network restores degraded frames and the existing ROI output contract
+resizes the result to the selected reconstruction geometry. Photo-preview jobs
+use an explicit native-image contract and preserve genuine 2× or 4× dimensions.
+
+Both variants enforce CPU + ANE inference and CPU image processing. The current
+M3 tuning uses 512px x4 tensors, 192px interior cores and unchanged 160px source
+context; 384px tensors remain the fallback on unmeasured hardware. Leading cores
+are coalesced, output pixels go directly into one owned RGB allocation, and small
+images use adaptive input shapes. x2 additionally fuses dense residual scales and
+identity skips into existing convolutions while preserving its input fusion.
+Image output remains bounded to 256 million pixels (16,384px per side).
+See [CPU + ANE measurements](RealESRGAN-ANE.md) for accepted FP16 candidates,
+quality gates, footprint scope and rejected W8A8 experiments. Earlier evidence
+in `realesrgan-x4-optimization.json` is preserved.
+
+Both variants are credited to Xintao Wang and collaborators and BasicSR
+contributors; BSD-3-Clause and Apache-2.0 notices accompany the downloads.

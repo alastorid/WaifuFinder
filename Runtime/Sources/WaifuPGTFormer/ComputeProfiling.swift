@@ -23,6 +23,7 @@ func devicePlan(_ url: URL, _ config: MLModelConfiguration) throws -> [String:An
         do {
             let plan = try await MLComputePlan.load(contentsOf:url,configuration:config)
             var counts = [String:Int]()
+            var operators = [String:[String:Int]]()
             if case .program(let program) = plan.modelStructure {
                 func visit(_ block: MLModelStructure.Program.Block) {
                     for operation in block.operations {
@@ -34,12 +35,13 @@ func devicePlan(_ url: URL, _ config: MLModelConfiguration) throws -> [String:An
                         default: device = "unknown"
                         }
                         counts[device,default:0] += 1
+                        operators[operation.operatorName, default: [:]][device, default: 0] += 1
                         for nested in operation.blocks { visit(nested) }
                     }
                 }
                 for function in program.functions.values { visit(function.block) }
             }
-            result = .success(["preferredOperationCounts":counts,"evidence":"Core ML anticipated placement; not hardware counters"])
+            result = .success(["preferredOperationCounts":counts,"preferredOperators":operators,"evidence":"Core ML anticipated placement; not hardware counters"])
         } catch { result = .failure(error) }
         semaphore.signal()
     }

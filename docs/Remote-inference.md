@@ -20,7 +20,15 @@ are excluded. `BalancedTaggerBackend` reserves the least-loaded lane before send
 a batch, counting requests through preparation, transport and completion. Equal depths
 rotate fairly. Each remote lane has an eight-batch window. Option-start adds a local
 lane with capacity two, after verifying that local labels match. Each frame is inferred
-once. Completed frame updates commit immediately so a slow server cannot hold up
+once. Source batches enter the scheduler before pixel loading, so preparation runs
+independently in the selected lanes instead of serially limiting every server. Video
+thumbnails upload as the original cached JPEG bytes, without client decoding, resizing
+or another lossy encoding. Photos upload the exact model-input RGBA bytes; peers that
+advertise `rgba8LZ4` receive losslessly compressed inputs, with a raw fallback when
+compression would enlarge a frame. Older version-2 servers keep receiving raw RGBA8.
+Image decoding on the server runs off its request-dispatch actor. Vocabulary downloads
+from connected servers start concurrently. Completed frame updates commit immediately
+so a slow server cannot hold up
 refilling a faster server's queue. Follow-up tagging preserves the local participation
 choice; cancellation joins in-flight tasks before releasing local model resources.
 
@@ -136,9 +144,11 @@ Connection control uses stream zero. Requests use nonzero client-assigned stream
 responses and progress use the same ID. Protocol cancellation can refer to the request
 ID on stream zero. App-side task cancellation closes the current connection, waking
 all its readers and cancelling server work; normal transient reconnect can follow.
-Remote tagging keeps up to eight batches (64 images) in flight. Image preparation,
-upload, server inference and result delivery overlap; the client commits results in
-source order. The server bounds tagging tasks to eight and the model serializes GPU
+Remote tagging keeps up to eight batches (64 images) in flight **per server**. Two
+servers have independent windows of eight, for sixteen pending batches in total.
+Image preparation, upload, server inference and result delivery overlap; independent
+frame updates commit on completion so a faster server keeps taking new work. The
+server bounds tagging tasks to eight and the model serializes GPU
 access. Two additional request slots allow control work. Buffered messages remain
 capped at 64 MiB and 1,024 envelopes. Cancelling the pipeline joins pending work.
 
@@ -146,9 +156,12 @@ JSON encodes control values, including Codable handshake nonces and proofs. Medi
 probability rows and compressed vocabulary travel as binary payloads, never JSON.
 `WireWriter` and `WireReader` define their little-endian binary layout:
 
-- Tag batch: u8 count (1–8), u8 codec (0 encoded image, 1 RGBA8), u16 reserved zero,
-  then count × { u32 byte length, bytes }. RGBA8 is 448×448. The current backend
-  renders model input pixels on the client; the encoded convenience API creates JPEGs.
+- Tag batch: u8 count (1–8), u8 codec (0 encoded image, 1 RGBA8, 2 RGBA8/LZ4),
+  u16 reserved zero, then count × { u32 byte length, bytes }. RGBA8 is 448×448.
+  Codec 2 requires the server's optional `tagger.inputCodecs` capability to include
+  `2`. Each frame begins with a mode byte: `0` followed by exactly 802,816 raw bytes,
+  or `1` followed by Apple LZ4 bytes that decode to exactly 802,816 bytes. In either
+  case model pixels are unchanged. Cached video JPEGs use codec 0 verbatim.
 - Tag result: u8 count, u64 vocabulary fingerprint, then count × { u32 byte length,
   `WDT4` bytes }. Each row decompresses to four rating bytes, a UInt16 trait-pair
   count, then sparse UInt16 head index / UInt8 score pairs. Apple LZ4 compression
@@ -190,6 +203,34 @@ busy rejection of a second client, kick and reconnect. These tests validate
 the transport and integration; they do not measure hardware model accuracy or LAN
 multicast routing. Run `./run-tests.sh --only remote` or the full `./run-tests.sh`.
 
-The app links only Apple frameworks for this feature: Network, CryptoKit and Compression. No third-party dependency or media executable is added. Interactive
-Settings checks must use `./run-ui-tests.sh SCRIPT [ARGUMENTS...]` as required by
-`AGENTS.md`.
+Tagging scaling regressions fill two independent servers' request windows before
+allowing model replies, verify byte-exact cached-JPEG and lossless RGBA input, and
+compare one versus two servers over real encrypted loopback sockets. The throughput
+case uses a serialized 150 ms model stub on each server and 128 generated images;
+it checks scheduling and transport scaling, not physical GPU or LAN performance.
+The October 26, 2026 run completed in **2.55 s with one server** and **1.29 s with
+two servers (1.98× throughput)**. Both servers filled their eight-request windows;
+cached-JPEG and lossless-RGBA pixel parity checks passed.
+
+The app links only Apple frameworks for this feature: Network, CryptoKit and Compression. No third-party dependency or media executable is added. Interactive UI tests
+are prohibited by `AGENTS.md`; use noninteractive protocol and runtime checks.
+
+
+## RealESRGAN photo reconstruction
+
+The existing reconstruction transport also carries native photo requests. x2 and
+x4 advertise distinct algorithm identifiers plus optional photo-model fingerprint
+and runtime revision fields. Older servers remain valid for their existing
+reconstruction jobs; clients do not infer native-photo support from those older
+capabilities. A compatible enabled server gives the corresponding x2 or x4 button
+the existing raised R indicator.
+
+Native photo requests pin the variant, official checkpoint fingerprint and runtime
+revision in the prepared manifest. The server executes the same native Swift/Core
+ML backend as local inference. Replies must name the selected model, report its
+native scale, and decode to the exact expected dimensions. Cancellation abandons
+only the photo stream through the existing cancel-job control, and a two-minute
+photo timeout cancels that stream. Ordinary video reconstruction retains its
+existing cancellation and timeout policy. Stale preview generations cannot commit
+late results. Prepared upload/result PNGs are temporary and removed after the job;
+completed preview images are cached in RAM with a 128 MiB bound.

@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// A `TemporalVideoUpscaler` that reconstructs on the server.
 ///
@@ -69,16 +70,32 @@ extension RemoteClient {
                        progress: @escaping @Sendable (String) -> Void) async throws
         -> (model: String, serverSeconds: Double, outputScale: Int) {
         guard let connection else { throw RemoteError.framing("Not connected to an inference server.") }
+        if let request = manifest.realESRGANImage {
+            guard algorithm == request.variant.algorithm, capabilities?.offersRealESRGAN(request.variant) == true else {
+                throw RemoteError.modelUnavailable("This server does not advertise the matching RealESRGAN photo model and runtime.")
+            }
+            try request.validate(request.variant)
+        }
         let streamID = try await connection.beginRequest()
+        let timeout: Task<Void,Never>? = manifest.realESRGANImage == nil ? nil : Task {
+            do { try await Task.sleep(for:.seconds(120)) } catch { return }
+            await connection.cancelRequest(streamID)
+        }
+        defer { timeout?.cancel() }
+
         do {
             let result = try await withTaskCancellationHandler {
                 try await exchangeUncover(connection: connection, streamID: streamID, manifest: manifest,
                                           algorithm: algorithm, allowUnsafeMemory: allowUnsafeMemory,
                                           prepared: prepared, progress: progress)
-            } onCancel: { Task { await connection.stop() } }
+            } onCancel: { Task {
+                if manifest.realESRGANImage != nil { await connection.cancelRequest(streamID) }
+                else { await connection.stop() }
+            } }
             await connection.endRequest()
             return result
         } catch {
+            if manifest.realESRGANImage != nil { await connection.cancelRequest(streamID) }
             await connection.endRequest()
             throw error
         }
@@ -136,6 +153,11 @@ extension RemoteClient {
                 guard !receivedHeader, scale > 0, scale <= 64, seconds.isFinite, seconds >= 0 else {
                     throw RemoteError.framing("Invalid result metadata")
                 }
+                if let request = manifest.realESRGANImage {
+                    guard name == request.variant.modelName, scale == request.variant.scale else {
+                        throw RemoteError.framing("RealESRGAN response model identity or scale differs.")
+                    }
+                }
                 receivedHeader = true
                 model = name
                 serverSeconds = seconds
@@ -143,6 +165,14 @@ extension RemoteClient {
             case .uncoverResult:
                 guard receivedHeader, received < expected else {
                     throw RemoteError.framing("The server sent more frames than the manifest declares.")
+                }
+                if let request = manifest.realESRGANImage {
+                    guard let source = CGImageSourceCreateWithData(envelope.data as CFData,nil),
+                          let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
+                          properties[kCGImagePropertyPixelWidth] as? Int == manifest.regionWidth * request.variant.scale,
+                          properties[kCGImagePropertyPixelHeight] as? Int == manifest.regionHeight * request.variant.scale else {
+                        throw RemoteError.framing("RealESRGAN response has incorrect image dimensions.")
+                    }
                 }
                 try envelope.data.write(to: RegionImages.frameURL(prepared.directory, "reconstructed", received))
                 received += 1

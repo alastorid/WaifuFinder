@@ -15,8 +15,7 @@ let package = Package(
                .executable(name: "waifu-wdtagger-validation", targets: ["WaifuWDTaggerValidation"])],
     dependencies: [.package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.2")],
     targets: (allowTruFor ? [
-        .target(name:"TruForMLX",dependencies:[.product(name:"MLX",package:"mlx-swift")],
-                linkerSettings:[.linkedFramework("CoreML")]),
+        .target(name:"TruForMLX",dependencies:[.product(name:"MLX",package:"mlx-swift")]),
         .executableTarget(name:"WaifuTruFor",dependencies:["TruForMLX",.product(name:"MLX",package:"mlx-swift")]),
         .target(name:"TruForDirectANE",path:"Sources/TruForDirectANE",publicHeadersPath:"include",
                 cSettings:[.unsafeFlags(["-fobjc-arc"])],

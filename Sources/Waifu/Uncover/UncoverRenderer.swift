@@ -9,7 +9,7 @@ struct UncoverRenderedFrame: @unchecked Sendable {
 }
 
 actor UncoverRenderer {
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    private let context = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
 
     func preview(source: URL, seconds: Double) async throws -> CGImage {
         try await PhotosMedia.shared.image(source, seconds: seconds)

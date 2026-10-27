@@ -9,7 +9,15 @@ import TruForMLX
 func option(_ key:String)->String? { CommandLine.arguments.firstIndex(of:key).flatMap{$0+1<CommandLine.arguments.count ? CommandLine.arguments[$0+1] : nil} }
 func fail(_ text:String)->Never { FileHandle.standardError.write(Data((text+"\n").utf8));exit(1) }
 func image(_ path:String)throws->(TruForInput,Int,Int) {
-    guard let source=CGImageSourceCreateWithURL(URL(fileURLWithPath:path) as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary),
+    guard let source=CGImageSourceCreateWithURL(URL(fileURLWithPath:path) as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary) else { throw TruForError.invalid("Invalid native image") }
+    return try image(source)
+}
+func image(_ data:Data)throws->(TruForInput,Int,Int) {
+    guard let source=CGImageSourceCreateWithData(data as CFData,[kCGImageSourceShouldCache:false] as CFDictionary) else { throw TruForError.invalid("Invalid native image") }
+    return try image(source)
+}
+func image(_ source:CGImageSource)throws->(TruForInput,Int,Int) {
+    guard
           let properties=CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
           let width=properties[kCGImagePropertyPixelWidth] as? Int,let height=properties[kCGImagePropertyPixelHeight] as? Int else { throw TruForError.invalid("Invalid native image") }
     // Reject unsafe geometry before ImageIO allocates the decoded bitmap.
@@ -25,8 +33,13 @@ func image(_ path:String)throws->(TruForInput,Int,Int) {
     guard stride(from:3,to:rgba.count,by:4).allSatisfy({rgba[$0]==255}) else { throw TruForError.invalid("TruFor requires an opaque Photos rendition") }
     return (try TruForInput(rgba:rgba,width:image.width,height:image.height),image.width,image.height)
 }
-func run(_ model:TruForModel,paths:[String],output:String,evidence:Bool)throws {
-    guard !paths.isEmpty,paths.count<=4,(!evidence || paths.count==1) else { throw TruForError.invalid("Invalid batch") }
+func run(_ model:TruForModel,paths:[String],output:String,evidence:Bool,sizes:[Int]?=nil)throws {
+    let count=sizes?.count ?? paths.count
+    func decode(_ index:Int)throws->(TruForInput,Int,Int) {
+        if let sizes { return try image(pipeRead(.standardInput,count:sizes[index])) }
+        return try image(paths[index])
+    }
+    guard count>0,count<=4,(!evidence || count==1) else { throw TruForError.invalid("Invalid batch") }
     let profiling=ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PROFILE"] != nil
     func mark(_ name:String,_ start:ContinuousClock.Instant)->ContinuousClock.Instant {
         if profiling {
@@ -37,18 +50,25 @@ func run(_ model:TruForModel,paths:[String],output:String,evidence:Bool)throws {
     }
     var start=ContinuousClock.now
     if evidence {
-        let decoded=try autoreleasepool { try image(paths[0]) };TruForMemoryPolicy.releaseUnusedCPU();start=mark("decode",start)
+        let decoded=try autoreleasepool { try decode(0) };TruForMemoryPolicy.releaseUnusedCPU();start=mark("decode",start)
         let result=try model.predict(decoded.0,evidence:true);start=mark("predict",start)
         let score=result.score.item(Float.self),maps=[result.anomaly!,result.reliability!,result.noiseprint!]
         eval(maps);start=mark("maps-sync",start)
         var header=Data("TFM1".utf8)
         for value in [UInt32(decoded.1),UInt32(decoded.2),UInt32(3)] { var v=value.littleEndian;withUnsafeBytes(of:&v){header.append(contentsOf:$0)} }
         var value=score;withUnsafeBytes(of:&value){header.append(contentsOf:$0)}
-        let destination=URL(fileURLWithPath:output),temporary=destination.deletingLastPathComponent().appendingPathComponent(".trufor-\(UUID().uuidString).tmp")
-        guard FileManager.default.createFile(atPath:temporary.path,contents:nil,attributes:[.posixPermissions:0o600]) else { throw TruForError.invalid("Unable to write TruFor evidence") }
-        defer { try? FileManager.default.removeItem(at:temporary) }
-        let handle=try FileHandle(forWritingTo:temporary)
-        defer { try? handle.close() }
+        // The app protocol streams final evidence through a pipe. CLI exports
+        // are explicit diagnostics, never activation storage or memory spill.
+        let destination=URL(fileURLWithPath:output)
+        let handle:FileHandle
+        if sizes != nil {
+            handle = .standardOutput
+            try handle.write(contentsOf:Data("OK \(20+decoded.1*decoded.2*12)\n".utf8))
+        } else {
+            guard FileManager.default.createFile(atPath:destination.path,contents:nil,attributes:[.posixPermissions:0o600]) else { throw TruForError.invalid("Unable to write TruFor evidence") }
+            handle=try FileHandle(forWritingTo:destination)
+        }
+        defer { if sizes == nil { try? handle.close() } }
         try handle.write(contentsOf:header)
         let rows=max(1,65_536/decoded.1)
         for map in maps {
@@ -59,27 +79,51 @@ func run(_ model:TruForModel,paths:[String],output:String,evidence:Bool)throws {
                 }
             }
         }
-        try handle.close()
-        guard rename(temporary.path,destination.path)==0 else { throw TruForError.invalid("Unable to finalize TruFor evidence") }
         start=mark("serialize",start)
     } else {
         // Bound the request to one decoded image and one model forward at a time.
-        let scores=try paths.map { path in
+        let scores=try (0..<count).map { index in
             try autoreleasepool { () throws -> Float in
-                let decoded=try autoreleasepool { try image(path) }
+                let decoded=try autoreleasepool { try decode(index) }
                 TruForMemoryPolicy.releaseUnusedCPU()
                 return try model.predict(decoded.0,evidence:false).score.item(Float.self)
             }
         }
-        start=mark("predict+\(paths.count)",start)
-        try JSONSerialization.data(withJSONObject:["scores":scores],options:[.sortedKeys]).write(to:URL(fileURLWithPath:output),options:.atomic);start=mark("serialize",start)
+        start=mark("predict+\(count)",start)
+        let data=try JSONSerialization.data(withJSONObject:["scores":scores],options:[.sortedKeys])
+        if sizes != nil {
+            try FileHandle.standardOutput.write(contentsOf:Data("OK \(data.count)\n".utf8))
+            try FileHandle.standardOutput.write(contentsOf:data)
+        } else { try data.write(to:URL(fileURLWithPath:output),options:.atomic) }
+        start=mark("serialize",start)
     }
 }
+struct PipeRequest:Decodable { let sizes:[Int];let evidence:Bool }
+func pipeRead(_ handle:FileHandle,count:Int)throws->Data {
+    var data=Data();data.reserveCapacity(count)
+    while data.count<count {
+        guard let part=try handle.read(upToCount:min(65_536,count-data.count)),!part.isEmpty else { throw TruForError.invalid("Truncated pipe request") }
+        data.append(part)
+    }
+    return data
+}
+func pipeLine(_ handle:FileHandle)throws->Data? {
+    var line=Data()
+    while line.count<8192 {
+        guard let byte=try handle.read(upToCount:1),!byte.isEmpty else {
+            if line.isEmpty { return nil }
+            throw TruForError.invalid("Truncated pipe header")
+        }
+        if byte[0]==10 { return line }
+        line.append(byte)
+    }
+    throw TruForError.invalid("Oversized pipe header")
+}
 let memoryMonitor=TruForMemoryMonitor()
-func perform(_ model:TruForModel,paths:[String],output:String,evidence:Bool)throws {
+func perform(_ model:TruForModel,paths:[String],output:String,evidence:Bool,sizes:[Int]?=nil)throws {
     Memory.clearCache();TruForMemoryPolicy.releaseUnusedCPU();memoryMonitor.reset()
     defer { Memory.clearCache();TruForMemoryPolicy.releaseUnusedCPU();memoryMonitor.report("request-memory") }
-    try autoreleasepool { try run(model,paths:paths,output:output,evidence:evidence) }
+    try autoreleasepool { try run(model,paths:paths,output:output,evidence:evidence,sizes:sizes) }
 }
 do {
     guard let path=option("--model") else { fail("Missing native model directory") }
@@ -101,6 +145,26 @@ do {
         try save(arrays:["anomaly":result.anomaly!,"reliability":result.reliability!,"noiseprint":result.noiseprint!,"score":result.score],url:root.appendingPathComponent("outputs.safetensors"))
         Memory.clearCache();memoryMonitor.report("activation-memory")
         print("Native TruFor activations written")
+    } else if CommandLine.arguments.contains("--serve-pipe") {
+        // Read headers directly from the same handle as binary bodies: stdio's
+        // readLine buffering would steal bytes from the following PNG payload.
+        let input=FileHandle.standardInput,output=FileHandle.standardOutput
+        try output.write(contentsOf:Data("TRF2 FP32 MLX RAM\n".utf8))
+        while let line=try pipeLine(input) {
+            do {
+                let request=try JSONDecoder().decode(PipeRequest.self,from:line)
+                guard !request.sizes.isEmpty,request.sizes.count<=4,
+                      request.sizes.allSatisfy({$0>0 && $0<=TruForMemoryPolicy.maximumPixels*4+1_048_576}),
+                      (!request.evidence || request.sizes.count==1) else { throw TruForError.invalid("Invalid pipe request") }
+                try perform(model,paths:[],output:"",evidence:request.evidence,sizes:request.sizes)
+            } catch {
+                // Stop after a malformed frame or partially written response;
+                // it cannot safely be interpreted as the next request.
+                let message="ERROR \(String(describing:error).replacingOccurrences(of:"\n",with:" "))\n"
+                try? output.write(contentsOf:Data(message.utf8))
+                exit(1)
+            }
+        }
     } else if CommandLine.arguments.contains("--serve") {
         print("TRF1");fflush(stdout)
         while let line=readLine() {
@@ -109,6 +173,7 @@ do {
                 try perform(model,paths:paths,output:output,evidence:request["mode"] as? String == "evidence");print("OK")
             } catch { print("ERROR \(error)") };fflush(stdout)
         }
+
     } else if let input=option("--image"),let output=option("--output") { try perform(model,paths:[input],output:output,evidence:CommandLine.arguments.contains("--evidence")) }
     else { fail("Missing inference command") }
 } catch { fail("TruFor: \(error)") }

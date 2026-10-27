@@ -1,0 +1,2595 @@
+{
+  "date": "2026-10-26",
+  "hardware": {
+    "chip": "Apple M3",
+    "model": "Mac15,12",
+    "memoryGiB": 16,
+    "unavailable": [
+      "M4"
+    ]
+  },
+  "fixture": {
+    "path": "Tests/Fixtures/RealESRGAN/nasa-collins-896x1134.jpg",
+    "width": 896,
+    "height": 1134,
+    "pixels": 1016064,
+    "sha256": "5956adbb2c9ac382e99aaa8be2890fa6c74fb09e0489c1e178cdbf8d701abdf7",
+    "credit": "NASA",
+    "license": "Public domain (US federal work)",
+    "source": "https://commons.wikimedia.org/wiki/File:Eileen_Collins,_early_NASA_portrait.jpg"
+  },
+  "policy": {
+    "inference": "cpuAndNeuralEngine",
+    "preprocessing": "CPU",
+    "postprocessing": "CPU",
+    "GPUUsed": false,
+    "interactiveUITests": false
+  },
+  "comparison": [
+    {
+      "model": "x2plus",
+      "variant": "Starting FP16",
+      "medianSeconds": 1.615710973739624,
+      "peakPhysicalFootprintBytes": 171443040,
+      "quality": "Reference",
+      "benchmark": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "1792x2268",
+          "1792x2268",
+          "1792x2268"
+        ],
+        "loadSeconds": 6.808754086494446,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 171443040,
+        "predictionSeconds": 3.498035192489624,
+        "predictionSizes": [
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522
+        ],
+        "scale": 2,
+        "secondsPerImage": [
+          1.6315419673919678,
+          1.615001916885376,
+          1.615710973739624
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    },
+    {
+      "model": "x2plus",
+      "variant": "Optimized FP16",
+      "medianSeconds": 1.5322810411453247,
+      "peakPhysicalFootprintBytes": 161760072,
+      "quality": {
+        "edgeGradientMeanAbsoluteError": 0.0009519633314681642,
+        "height": 2268,
+        "maximumAbsoluteError": 0.01568627450980392,
+        "maximumAllowedByteDifference": 5,
+        "meanAbsoluteError": 0.0005677180851759483,
+        "meanRGBBias": [
+          0.0002792089057843036,
+          0.0003270945723965839,
+          0.0004216269841266222
+        ],
+        "passed": true,
+        "psnrDB": 56.51784919417771,
+        "ssim8x8Luma": 0.9989624496351869,
+        "width": 1792
+      },
+      "benchmark": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "1792x2268",
+          "1792x2268",
+          "1792x2268"
+        ],
+        "loadSeconds": 5.701897025108337,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 161760072,
+        "predictionSeconds": 3.209891200065613,
+        "predictionSizes": [
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522,
+          522
+        ],
+        "scale": 2,
+        "secondsPerImage": [
+          1.5472099781036377,
+          1.5139679908752441,
+          1.5322810411453247
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    },
+    {
+      "model": "x4plus",
+      "variant": "Starting FP16",
+      "medianSeconds": 87.11440253257751,
+      "peakPhysicalFootprintBytes": 179094368,
+      "quality": "Reference",
+      "benchmark": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "3584x4536",
+          "3584x4536"
+        ],
+        "loadSeconds": 7.7265260219573975,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 179094368,
+        "predictionSeconds": 169.9905185699463,
+        "predictionSizes": [
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384,
+          384
+        ],
+        "scale": 4,
+        "secondsPerImage": [
+          85.24509799480438,
+          88.98370707035065
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "remeasurement": "realesrgan-x4-remeasurement-20261026.json"
+    },
+    {
+      "model": "x4plus",
+      "variant": "Optimized FP16",
+      "medianSeconds": 19.882516980171204,
+      "peakPhysicalFootprintBytes": 161366832,
+      "quality": {
+        "edgeGradientMeanAbsoluteError": 0.00032524758281853185,
+        "height": 4536,
+        "maximumAbsoluteError": 0.00784313725490196,
+        "maximumAllowedByteDifference": 5,
+        "meanAbsoluteError": 0.00016999091624850238,
+        "meanRGBBias": [
+          1.6451410811238024e-07,
+          -2.1251749156452634e-07,
+          -5.25866210681802e-08
+        ],
+        "passed": true,
+        "psnrDB": 61.76053252962467,
+        "ssim8x8Luma": 0.9996444672091787,
+        "width": 3584
+      },
+      "benchmark": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "3584x4536",
+          "3584x4536"
+        ],
+        "loadSeconds": 10.511187076568604,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 161366832,
+        "predictionSeconds": 36.723307967185974,
+        "predictionSizes": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "scale": 4,
+        "secondsPerImage": [
+          19.52798295021057,
+          20.237051010131836
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    }
+  ],
+  "quantization": [
+    {
+      "model": "x2plus",
+      "precision": "W8A8",
+      "accepted": false,
+      "nativeValidation": {
+        "loadSeconds": 9.057148933410645,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.6494141221046448,
+            "meanAbsoluteError": 0.06023405894542044,
+            "name": "texture-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03414201736450195,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.6494141221046448,
+            "meanAbsoluteError": 0.06023405894542044,
+            "name": "texture-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03350508213043213,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.48604750633239746,
+            "meanAbsoluteError": 0.05734911219356869,
+            "name": "gradient-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.033061981201171875,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.48604750633239746,
+            "meanAbsoluteError": 0.05734911219356869,
+            "name": "gradient-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.034620046615600586,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.008361484855413437,
+            "meanAbsoluteError": 0.001947042018097515,
+            "name": "flat-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03394496440887451,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.008361484855413437,
+            "meanAbsoluteError": 0.001947042018097515,
+            "name": "flat-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.0343860387802124,
+            "size": 256
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": false,
+        "peakPhysicalFootprintBytes": 61407928,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 2262,
+            "unknown": 4725
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 4374
+            },
+            "ios18.add": {
+              "ane": 24
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.constexpr_blockwise_shift_scale": {
+              "unknown": 351
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.dequantize": {
+              "ane": 677
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "ios18.quantize": {
+              "ane": 653
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 2,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "quality": {
+        "passed": false,
+        "reference": "native FP16 output",
+        "measurements": [
+          {
+            "name": "texture-256",
+            "psnrDB": 21.33042736326637,
+            "ssim8x8Luma": 0.8118195951394341,
+            "maximumAbsoluteError": 0.6502685546875,
+            "meanAbsoluteError": 0.06025558098524825,
+            "meanRGBBias": [
+              0.01512784820994692,
+              -0.006131556996128015,
+              -0.0505847839647503
+            ],
+            "edgeGradientMeanAbsoluteError": 0.04220547026525902
+          },
+          {
+            "name": "gradient-256",
+            "psnrDB": 22.215412882459532,
+            "ssim8x8Luma": 0.879378862842879,
+            "maximumAbsoluteError": 0.485260009765625,
+            "meanAbsoluteError": 0.0573707939257913,
+            "meanRGBBias": [
+              0.051690310423883085,
+              0.01441787740672052,
+              -0.012153791743103739
+            ],
+            "edgeGradientMeanAbsoluteError": 0.03420306271822099
+          },
+          {
+            "name": "flat-256",
+            "psnrDB": 49.000440278448266,
+            "ssim8x8Luma": 0.9843383266521275,
+            "maximumAbsoluteError": 0.0083465576171875,
+            "meanAbsoluteError": 0.0020056565602620444,
+            "meanRGBBias": [
+              -0.002079010009765625,
+              -0.0006678104400634766,
+              -0.0026140213012695312
+            ],
+            "edgeGradientMeanAbsoluteError": 0.0034314791361490884
+          }
+        ]
+      },
+      "calibration": {
+        "precision": "w8a8",
+        "calibrationSamples": 3,
+        "calibrationComputeUnits": "cpuOnly",
+        "calibrationGroupSize": 128,
+        "coremltools": "9.0",
+        "validated": false
+      }
+    },
+    {
+      "model": "x2plus",
+      "precision": "W8A16",
+      "accepted": false,
+      "nativeValidation": {
+        "loadSeconds": 6.39705502986908,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.11900591850280762,
+            "meanAbsoluteError": 0.012737214825401287,
+            "name": "texture-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03713691234588623,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.11900591850280762,
+            "meanAbsoluteError": 0.012737214825401287,
+            "name": "texture-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.037899017333984375,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.13291692733764648,
+            "meanAbsoluteError": 0.015023363204299929,
+            "name": "gradient-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03791999816894531,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.13291692733764648,
+            "meanAbsoluteError": 0.015023363204299929,
+            "name": "gradient-256",
+            "passed": false,
+            "scale": 2,
+            "seconds": 0.03779399394989014,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.002753879874944687,
+            "meanAbsoluteError": 0.0009714621216213951,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.03752708435058594,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.002753879874944687,
+            "meanAbsoluteError": 0.0009714621216213951,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.03753507137298584,
+            "size": 256
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": false,
+        "peakPhysicalFootprintBytes": 49742544,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 932,
+            "unknown": 2742
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 2391
+            },
+            "ios18.add": {
+              "ane": 24
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.constexpr_blockwise_shift_scale": {
+              "unknown": 351
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 2,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "quality": null,
+      "calibration": {
+        "precision": "w8a16",
+        "calibrationSamples": 0,
+        "calibrationComputeUnits": "cpuOnly",
+        "calibrationGroupSize": 128,
+        "coremltools": "9.0",
+        "validated": false
+      }
+    },
+    {
+      "model": "x4plus",
+      "precision": "W8A8",
+      "accepted": false,
+      "nativeValidation": {
+        "loadSeconds": 12.185472965240479,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.6097778677940369,
+            "meanAbsoluteError": 0.09969259029034483,
+            "name": "texture-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.03623402118682861,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.6097778677940369,
+            "meanAbsoluteError": 0.09969259029034483,
+            "name": "texture-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.037880897521972656,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.6858310699462891,
+            "meanAbsoluteError": 0.11322241772683302,
+            "name": "gradient-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.03766202926635742,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.6858310699462891,
+            "meanAbsoluteError": 0.11322241772683302,
+            "name": "gradient-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.037863969802856445,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.012902944348752499,
+            "meanAbsoluteError": 0.00461083581346126,
+            "name": "flat-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.03665602207183838,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.012902944348752499,
+            "meanAbsoluteError": 0.00461083581346126,
+            "name": "flat-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.03665006160736084,
+            "size": 128
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": false,
+        "peakPhysicalFootprintBytes": 66618064,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 2584,
+            "unknown": 5070
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 4719
+            },
+            "ios18.add": {
+              "ane": 93
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.constexpr_blockwise_shift_scale": {
+              "unknown": 351
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.dequantize": {
+              "ane": 815
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "ios18.mul": {
+              "ane": 23
+            },
+            "ios18.quantize": {
+              "ane": 745
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 4,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "quality": {
+        "passed": false,
+        "reference": "native FP16 output",
+        "measurements": [
+          {
+            "name": "texture-128",
+            "psnrDB": 16.426296942475904,
+            "ssim8x8Luma": 0.8133441584993083,
+            "maximumAbsoluteError": 0.61090087890625,
+            "meanAbsoluteError": 0.09982461855805726,
+            "meanRGBBias": [
+              -0.02169483263146554,
+              -0.020145537940699138,
+              -0.15842976999815192
+            ],
+            "edgeGradientMeanAbsoluteError": 0.02952393411676807
+          },
+          {
+            "name": "gradient-128",
+            "psnrDB": 15.618561999162509,
+            "ssim8x8Luma": 0.7952329030732858,
+            "maximumAbsoluteError": 0.6865234375,
+            "meanAbsoluteError": 0.1133186366265029,
+            "meanRGBBias": [
+              -0.021851387905313612,
+              -0.024598477716387013,
+              -0.1510274744782451
+            ],
+            "edgeGradientMeanAbsoluteError": 0.03528287735173088
+          },
+          {
+            "name": "flat-128",
+            "psnrDB": 44.39493933225745,
+            "ssim8x8Luma": 0.9069306923123542,
+            "maximumAbsoluteError": 0.0128936767578125,
+            "meanAbsoluteError": 0.004620502392450969,
+            "meanRGBBias": [
+              0.0040968358516693115,
+              0.002555340528488159,
+              0.004410833120346069
+            ],
+            "edgeGradientMeanAbsoluteError": 0.005290991730160183
+          }
+        ]
+      },
+      "calibration": {
+        "precision": "w8a8",
+        "calibrationSamples": 3,
+        "calibrationComputeUnits": "cpuOnly",
+        "calibrationGroupSize": 128,
+        "coremltools": "9.0",
+        "validated": false
+      }
+    },
+    {
+      "model": "x4plus",
+      "precision": "W8A16",
+      "accepted": false,
+      "nativeValidation": {
+        "loadSeconds": 6.5198729038238525,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.22596949338912964,
+            "meanAbsoluteError": 0.02430702965772933,
+            "name": "texture-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.041041016578674316,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.22596949338912964,
+            "meanAbsoluteError": 0.02430702965772933,
+            "name": "texture-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.04103493690490723,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.21786552667617798,
+            "meanAbsoluteError": 0.027205578871501736,
+            "name": "gradient-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.0417710542678833,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.21786552667617798,
+            "meanAbsoluteError": 0.027205578871501736,
+            "name": "gradient-128",
+            "passed": false,
+            "scale": 4,
+            "seconds": 0.04121196269989014,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0015444348100572824,
+            "meanAbsoluteError": 0.00019779866973597868,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04023301601409912,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0015444348100572824,
+            "meanAbsoluteError": 0.00019779866973597868,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.040544986724853516,
+            "size": 128
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": false,
+        "peakPhysicalFootprintBytes": 44974776,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 932,
+            "unknown": 2742
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 2391
+            },
+            "ios18.add": {
+              "ane": 24
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.constexpr_blockwise_shift_scale": {
+              "unknown": 351
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 4,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "quality": null,
+      "calibration": {
+        "precision": "w8a16",
+        "calibrationSamples": 0,
+        "calibrationComputeUnits": "cpuOnly",
+        "calibrationGroupSize": 128,
+        "coremltools": "9.0",
+        "validated": false
+      }
+    }
+  ],
+  "selected": {
+    "x2plus": {
+      "fusion": "identity",
+      "nativeValidation": {
+        "loadSeconds": 6.259443998336792,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0029891133308410645,
+            "meanAbsoluteError": 0.00037371115824618616,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.04655492305755615,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0029891133308410645,
+            "meanAbsoluteError": 0.00037371115824618616,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.04575300216674805,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0022889375686645508,
+            "meanAbsoluteError": 0.00038791432442487173,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.10356497764587402,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0022889375686645508,
+            "meanAbsoluteError": 0.00038791432442487173,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.1019829511642456,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003245532512664795,
+            "meanAbsoluteError": 0.00039369828749253975,
+            "name": "texture-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.19889700412750244,
+            "size": 522
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003245532512664795,
+            "meanAbsoluteError": 0.00039369828749253975,
+            "name": "texture-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.19413602352142334,
+            "size": 522
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.005240947008132935,
+            "meanAbsoluteError": 0.0003729358719875247,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.04705405235290527,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.005240947008132935,
+            "meanAbsoluteError": 0.0003729358719875247,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.046518921852111816,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.004708826541900635,
+            "meanAbsoluteError": 0.00037790214277599643,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.10472595691680908,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.004708826541900635,
+            "meanAbsoluteError": 0.00037790214277599643,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.10203397274017334,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003843247890472412,
+            "meanAbsoluteError": 0.00037049352024459394,
+            "name": "gradient-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.2030940055847168,
+            "size": 522
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003843247890472412,
+            "meanAbsoluteError": 0.00037049352024459394,
+            "name": "gradient-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.19641602039337158,
+            "size": 522
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0002503165742382407,
+            "meanAbsoluteError": 9.318052131372194e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.04599595069885254,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0002503165742382407,
+            "meanAbsoluteError": 9.318052131372194e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.046331048011779785,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00028081017080694437,
+            "meanAbsoluteError": 8.052076736930758e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.09975194931030273,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00028081017080694437,
+            "meanAbsoluteError": 8.052076736930758e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.10034501552581787,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00037251412868499756,
+            "meanAbsoluteError": 0.000150505977217108,
+            "name": "flat-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.1913360357284546,
+            "size": 522
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00037251412868499756,
+            "meanAbsoluteError": 0.000150505977217108,
+            "name": "flat-522",
+            "passed": true,
+            "scale": 2,
+            "seconds": 0.19401395320892334,
+            "size": 522
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 76382904,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 932,
+            "unknown": 2742
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 2742
+            },
+            "ios18.add": {
+              "ane": 24
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 2,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "algebraValidation": [
+        {
+          "name": "texture",
+          "maximumAbsoluteError": 7.510185241699219e-06,
+          "meanAbsoluteError": 7.993592703314789e-07
+        },
+        {
+          "name": "gradient",
+          "maximumAbsoluteError": 5.543231964111328e-06,
+          "meanAbsoluteError": 6.899869617882359e-07
+        },
+        {
+          "name": "flat",
+          "maximumAbsoluteError": 6.146728992462158e-08,
+          "meanAbsoluteError": 3.294068662285099e-08
+        }
+      ]
+    },
+    "x4plus": {
+      "fusion": "none",
+      "tileSize": 512,
+      "halo": 160,
+      "nativeValidation": {
+        "loadSeconds": 10.45639705657959,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003488779067993164,
+            "meanAbsoluteError": 0.00033465437893099697,
+            "name": "texture-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.041203975677490234,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003488779067993164,
+            "meanAbsoluteError": 0.00033465437893099697,
+            "name": "texture-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04121994972229004,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0034692883491516113,
+            "meanAbsoluteError": 0.00032678959001962774,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.1671750545501709,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0034692883491516113,
+            "meanAbsoluteError": 0.00032678959001962774,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.16810905933380127,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003957927227020264,
+            "meanAbsoluteError": 0.0003351528053446725,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.38751494884490967,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003957927227020264,
+            "meanAbsoluteError": 0.0003351528053446725,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.3906819820404053,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003645479679107666,
+            "meanAbsoluteError": 0.0003440797338963196,
+            "name": "gradient-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04319500923156738,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003645479679107666,
+            "meanAbsoluteError": 0.0003440797338963196,
+            "name": "gradient-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.0427250862121582,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0041661858558654785,
+            "meanAbsoluteError": 0.00034113647192512053,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.17188799381256104,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0041661858558654785,
+            "meanAbsoluteError": 0.00034113647192512053,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.17175698280334473,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0038261711597442627,
+            "meanAbsoluteError": 0.0003483633412117681,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.39608097076416016,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0038261711597442627,
+            "meanAbsoluteError": 0.0003483633412117681,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.3987079858779907,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00023509247694164515,
+            "meanAbsoluteError": 3.306439733326746e-05,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04234302043914795,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00023509247694164515,
+            "meanAbsoluteError": 3.306439733326746e-05,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.0428999662399292,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00021982943871989846,
+            "meanAbsoluteError": 3.107230683478216e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.16917192935943604,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00021982943871989846,
+            "meanAbsoluteError": 3.107230683478216e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.16792595386505127,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00029613112565129995,
+            "meanAbsoluteError": 3.515763516285612e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.3838449716567993,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00029613112565129995,
+            "meanAbsoluteError": 3.515763516285612e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.3867340087890625,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.003957927227020264,
+            "meanAbsoluteError": 0.0003351528053446725,
+            "name": "texture-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.7480040788650513,
+            "size": 512
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.003957927227020264,
+            "meanAbsoluteError": 0.0003351528053446725,
+            "name": "texture-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.758389949798584,
+            "size": 512
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.004166126251220703,
+            "meanAbsoluteError": 0.0003484962416462919,
+            "name": "gradient-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.7632290124893188,
+            "size": 512
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.004166126251220703,
+            "meanAbsoluteError": 0.0003484962416462919,
+            "name": "gradient-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.7583210468292236,
+            "size": 512
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00029613112565129995,
+            "meanAbsoluteError": 3.515763516285612e-05,
+            "name": "flat-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.7268819808959961,
+            "size": 512
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00029613112565129995,
+            "meanAbsoluteError": 3.515763516285612e-05,
+            "name": "flat-512",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.7294230461120605,
+            "size": 512
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 110723768,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 1024,
+            "unknown": 2765
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 2765
+            },
+            "ios18.add": {
+              "ane": 93
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.conv": {
+              "ane": 351
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            },
+            "ios18.mul": {
+              "ane": 23
+            },
+            "upsample_nearest_neighbor": {
+              "ane": 2
+            }
+          }
+        },
+        "scale": 4,
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "fallbackTileSize": 384,
+      "tunedHardware": "Mac15,12"
+    }
+  },
+  "rejected": {
+    "x4ResidualFusion": {
+      "reason": "Full-photo outliers: max 17/255; do not promote this candidate",
+      "quality": {
+        "edgeGradientMeanAbsoluteError": 0.0013491635050876722,
+        "height": 4536,
+        "maximumAbsoluteError": 0.06666666666666667,
+        "meanAbsoluteError": 0.0009307699255453768,
+        "meanRGBBias": [
+          -0.0004428164977406745,
+          -0.0004225402545273581,
+          0.00030133460598718816
+        ],
+        "passed": false,
+        "psnrDB": 54.118355802491706,
+        "ssim8x8Luma": 0.9978936938943667,
+        "width": 3584
+      }
+    },
+    "x4Transpose": {
+      "reason": "Algebraically valid; slower tensor predictions than nearest-conv candidate; no end-to-end benefit established",
+      "nativeValidation": {
+        "loadSeconds": 6.6857670545578,
+        "measurements": [
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.005441904067993164,
+            "meanAbsoluteError": 0.0003822309010578463,
+            "name": "texture-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.048467040061950684,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.005441904067993164,
+            "meanAbsoluteError": 0.0003822309010578463,
+            "name": "texture-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04734206199645996,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.004934132099151611,
+            "meanAbsoluteError": 0.0003918389228292915,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.18847501277923584,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.004934132099151611,
+            "meanAbsoluteError": 0.0003918389228292915,
+            "name": "texture-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.18937206268310547,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.005422770977020264,
+            "meanAbsoluteError": 0.00039543791420080447,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.42013394832611084,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.005422770977020264,
+            "meanAbsoluteError": 0.00039543791420080447,
+            "name": "texture-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.41498899459838867,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.004651546478271484,
+            "meanAbsoluteError": 0.0004292122602187484,
+            "name": "gradient-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04867100715637207,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.004651546478271484,
+            "meanAbsoluteError": 0.0004292122602187484,
+            "name": "gradient-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.04881298542022705,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.005764484405517578,
+            "meanAbsoluteError": 0.00043755589090108707,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.1867079734802246,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.005764484405517578,
+            "meanAbsoluteError": 0.00043755589090108707,
+            "name": "gradient-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.18237102031707764,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.006252706050872803,
+            "meanAbsoluteError": 0.00043367082359632757,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.420306921005249,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.006252706050872803,
+            "meanAbsoluteError": 0.00043367082359632757,
+            "name": "gradient-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.4216930866241455,
+            "size": 384
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0002521239221096039,
+            "meanAbsoluteError": 3.742303063821358e-05,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.047752976417541504,
+            "size": 128
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0002521239221096039,
+            "meanAbsoluteError": 3.742303063821358e-05,
+            "name": "flat-128",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.047206997871398926,
+            "size": 128
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.0004047076217830181,
+            "meanAbsoluteError": 6.561306266424556e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.1826920509338379,
+            "size": 256
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.0004047076217830181,
+            "meanAbsoluteError": 6.561306266424556e-05,
+            "name": "flat-256",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.17983794212341309,
+            "size": 256
+          },
+          {
+            "iteration": 0,
+            "maximumAbsoluteError": 0.00038946187123656273,
+            "meanAbsoluteError": 6.116400315174057e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.40674102306365967,
+            "size": 384
+          },
+          {
+            "iteration": 1,
+            "maximumAbsoluteError": 0.00038946187123656273,
+            "meanAbsoluteError": 6.116400315174057e-05,
+            "name": "flat-384",
+            "passed": true,
+            "scale": 4,
+            "seconds": 0.41179394721984863,
+            "size": 384
+          }
+        ],
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 71074488,
+        "plan": {
+          "evidence": "Core ML anticipated placement; not hardware counters",
+          "preferredOperationCounts": {
+            "ane": 930,
+            "unknown": 2738
+          },
+          "preferredOperators": {
+            "const": {
+              "unknown": 2738
+            },
+            "ios18.add": {
+              "ane": 24
+            },
+            "ios18.concat": {
+              "ane": 276
+            },
+            "ios18.conv": {
+              "ane": 349
+            },
+            "ios18.conv_transpose": {
+              "ane": 2
+            },
+            "ios18.leaky_relu": {
+              "ane": 279
+            }
+          }
+        },
+        "scale": 4,
+        "specialization": "default",
+        "thermalStateAtEnd": 1,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    },
+    "x4Copying512": {
+      "reason": "Peak process memory regressed before direct RGB output assembly",
+      "benchmark": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "3584x4536",
+          "3584x4536"
+        ],
+        "loadSeconds": 10.427520036697388,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 244892536,
+        "predictionSeconds": 35.4184033870697,
+        "predictionSizes": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "scale": 4,
+        "secondsPerImage": [
+          19.508266925811768,
+          20.4340980052948
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    }
+  },
+  "validation": {
+    "graphAlgebraTests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "releaseBuild": "passed",
+    "nativeTiledIntegration": {
+      "height": 260,
+      "kind": "correctness only; no profiling",
+      "maximumAbsoluteError": 0.006102025508880615,
+      "meanAbsoluteError": 0.0010305546760872443,
+      "passed": true,
+      "width": 1284
+    },
+    "fullRegression": {
+      "passed": 511,
+      "failed": 0,
+      "optionalFixturesSkipped": 13,
+      "seconds": 96.8,
+      "interactiveUITests": false
+    },
+    "licenseAudit": {
+      "passed": false,
+      "scope": "whole repository",
+      "preexistingFindings": [
+        ".build/trufor-coreml-venv/lib/python3.13/site-packages/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE"
+      ],
+      "conversionEnvironment": ".build/realesrgan-x4/venv",
+      "newDependenciesAdded": false,
+      "flaggedEnvironmentInvoked": false
+    },
+    "scopedLicenseAudits": [
+      {
+        "path": ".build/realesrgan-x4/venv",
+        "passed": true,
+        "errors": [],
+        "files": 21524,
+        "licenseFiles": 44,
+        "packageRecords": 24
+      },
+      {
+        "path": ".native-runtime/realesrgan-ane-v2",
+        "passed": true,
+        "errors": [],
+        "files": 24,
+        "licenseFiles": 2,
+        "packageRecords": 0
+      },
+      {
+        "path": ".build/realesrgan-ane/WaifuFinder.app",
+        "passed": true,
+        "errors": [],
+        "files": 67,
+        "licenseFiles": 0,
+        "packageRecords": 0
+      }
+    ],
+    "codeSignature": "verified: --deep --strict",
+    "stagedModelSmoke": {
+      "x2": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "96x66",
+          "96x66"
+        ],
+        "loadSeconds": 6.2651660442352295,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 40043216,
+        "predictionSeconds": 0.0860680341720581,
+        "predictionSizes": [
+          256,
+          256
+        ],
+        "scale": 2,
+        "secondsPerImage": [
+          0.04388999938964844,
+          0.0437929630279541
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      },
+      "x4": {
+        "actualComputeUnits": "ane",
+        "geometry": [
+          "192x132",
+          "192x132"
+        ],
+        "loadSeconds": 10.832840085029602,
+        "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+        "passed": true,
+        "peakPhysicalFootprintBytes": 42664680,
+        "predictionSeconds": 0.3483790159225464,
+        "predictionSizes": [
+          256,
+          256
+        ],
+        "scale": 4,
+        "secondsPerImage": [
+          0.17541801929473877,
+          0.17828094959259033
+        ],
+        "specialization": "default",
+        "thermalStateAtEnd": 0,
+        "thermalStateAtStart": 0,
+        "units": "ane",
+        "warmups": 1
+      }
+    }
+  },
+  "limitations": [
+    "Standalone benchmark process footprint excludes unowned Core ML/ANE service memory; not a system-wide RAM measurement.",
+    "Final timing includes input packing, inference and CGImage assembly; PNG encoding is excluded. Loading is reported separately.",
+    "Core ML plans are anticipated placement, not hardware counters. All new runtime configurations exclude GPU.",
+    "Image quality is measured against the starting FP16 output; native tensor gates separately compare with official CPU FP32 weights.",
+    "SSIM is the mean over non-overlapping 8x8 luma windows, not Gaussian 11x11 SSIM.",
+    "W8A8 calibration uses three NASA-image views for the final trials; this is a bounded experiment, not a comprehensive quantization study.",
+    "M4 hardware and reliable power/energy counters were unavailable.",
+    "Starting x4 FP16 was remeasured with the same explicit small warm-up and two runs as W8A8; previous measurements remain under measurementHistory. Optimized FP16 rows retain their earlier measurements."
+  ],
+  "integration": {
+    "modelRoot": ".native-runtime/realesrgan-ane-v2",
+    "originalConfigurationsSaved": ".native-runtime/realesrgan-ane-v2/previous-configuration",
+    "modelsActivated": true,
+    "updatedApp": ".build/realesrgan-ane/WaifuFinder.app",
+    "originalModelsPreserved": true,
+    "hostedReleasesModified": false
+  },
+  "measurementHistory": [
+    {
+      "reason": "Prior comparison preserved before requested x4 starting-FP16 remeasurement",
+      "comparison": [
+        {
+          "model": "x2plus",
+          "variant": "Starting FP16",
+          "medianSeconds": 1.615710973739624,
+          "peakPhysicalFootprintBytes": 171443040,
+          "quality": "Reference",
+          "benchmark": {
+            "actualComputeUnits": "ane",
+            "geometry": [
+              "1792x2268",
+              "1792x2268",
+              "1792x2268"
+            ],
+            "loadSeconds": 6.808754086494446,
+            "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+            "passed": true,
+            "peakPhysicalFootprintBytes": 171443040,
+            "predictionSeconds": 3.498035192489624,
+            "predictionSizes": [
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522
+            ],
+            "scale": 2,
+            "secondsPerImage": [
+              1.6315419673919678,
+              1.615001916885376,
+              1.615710973739624
+            ],
+            "specialization": "default",
+            "thermalStateAtEnd": 0,
+            "thermalStateAtStart": 0,
+            "units": "ane",
+            "warmups": 1
+          }
+        },
+        {
+          "model": "x2plus",
+          "variant": "Optimized FP16",
+          "medianSeconds": 1.5322810411453247,
+          "peakPhysicalFootprintBytes": 161760072,
+          "quality": {
+            "edgeGradientMeanAbsoluteError": 0.0009519633314681642,
+            "height": 2268,
+            "maximumAbsoluteError": 0.01568627450980392,
+            "maximumAllowedByteDifference": 5,
+            "meanAbsoluteError": 0.0005677180851759483,
+            "meanRGBBias": [
+              0.0002792089057843036,
+              0.0003270945723965839,
+              0.0004216269841266222
+            ],
+            "passed": true,
+            "psnrDB": 56.51784919417771,
+            "ssim8x8Luma": 0.9989624496351869,
+            "width": 1792
+          },
+          "benchmark": {
+            "actualComputeUnits": "ane",
+            "geometry": [
+              "1792x2268",
+              "1792x2268",
+              "1792x2268"
+            ],
+            "loadSeconds": 5.701897025108337,
+            "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+            "passed": true,
+            "peakPhysicalFootprintBytes": 161760072,
+            "predictionSeconds": 3.209891200065613,
+            "predictionSizes": [
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522,
+              522
+            ],
+            "scale": 2,
+            "secondsPerImage": [
+              1.5472099781036377,
+              1.5139679908752441,
+              1.5322810411453247
+            ],
+            "specialization": "default",
+            "thermalStateAtEnd": 0,
+            "thermalStateAtStart": 0,
+            "units": "ane",
+            "warmups": 1
+          }
+        },
+        {
+          "model": "x4plus",
+          "variant": "Starting FP16",
+          "medianSeconds": 92.92775297164917,
+          "peakPhysicalFootprintBytes": 174408496,
+          "quality": "Reference",
+          "benchmark": {
+            "actualComputeUnits": "ane",
+            "geometry": [
+              "3584x4536"
+            ],
+            "loadSeconds": 7.364948987960815,
+            "passed": true,
+            "peakPhysicalFootprintBytes": 174408496,
+            "scale": 4,
+            "secondsPerImage": [
+              92.92775297164917
+            ],
+            "specialization": "default",
+            "thermalStateAtEnd": 0,
+            "thermalStateAtStart": 0,
+            "units": "ane"
+          }
+        },
+        {
+          "model": "x4plus",
+          "variant": "Optimized FP16",
+          "medianSeconds": 19.882516980171204,
+          "peakPhysicalFootprintBytes": 161366832,
+          "quality": {
+            "edgeGradientMeanAbsoluteError": 0.00032524758281853185,
+            "height": 4536,
+            "maximumAbsoluteError": 0.00784313725490196,
+            "maximumAllowedByteDifference": 5,
+            "meanAbsoluteError": 0.00016999091624850238,
+            "meanRGBBias": [
+              1.6451410811238024e-07,
+              -2.1251749156452634e-07,
+              -5.25866210681802e-08
+            ],
+            "passed": true,
+            "psnrDB": 61.76053252962467,
+            "ssim8x8Luma": 0.9996444672091787,
+            "width": 3584
+          },
+          "benchmark": {
+            "actualComputeUnits": "ane",
+            "geometry": [
+              "3584x4536",
+              "3584x4536"
+            ],
+            "loadSeconds": 10.511187076568604,
+            "memoryScope": "whole benchmark process; includes image IO; excludes unowned Core ML/ANE services",
+            "passed": true,
+            "peakPhysicalFootprintBytes": 161366832,
+            "predictionSeconds": 36.723307967185974,
+            "predictionSizes": [
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512,
+              512
+            ],
+            "scale": 4,
+            "secondsPerImage": [
+              19.52798295021057,
+              20.237051010131836
+            ],
+            "specialization": "default",
+            "thermalStateAtEnd": 0,
+            "thermalStateAtStart": 0,
+            "units": "ane",
+            "warmups": 1
+          }
+        }
+      ]
+    }
+  ],
+  "x4Remeasurement": {
+    "report": "realesrgan-x4-remeasurement-20261026.json",
+    "summary": {
+      "fp16MedianSeconds": 87.11440253257751,
+      "w8a8MedianSeconds": 72.02652603387833,
+      "throughputSpeedup": 1.2094766654663098,
+      "latencyReductionPercent": 17.319611981562854,
+      "fp16PeakMiB": 170.79769897460938,
+      "w8a8PeakMiB": 171.68832397460938,
+      "ramReductionPercent": -0.5214502334322413,
+      "ramChangeMiB": 0.890625
+    },
+    "w8a8QualityAccepted": false,
+    "productionSelectionChanged": false
+  }
+}

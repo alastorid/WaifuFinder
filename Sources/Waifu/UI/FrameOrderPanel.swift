@@ -428,18 +428,40 @@ struct FrameOrderPanel: View {
             Text("Show")
                 .font(.headline)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Faces")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Picker("Faces", selection: $session.faceFilter) {
-                    ForEach(FrameFaceFilter.allCases) { filter in
-                        Text(filter.label).tag(filter)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("Faces")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 58, alignment: .leading)
+                    Picker("Faces", selection: $session.faceFilter) {
+                        ForEach(FrameFaceFilter.allCases) { filter in
+                            Text(filter.label).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                }
+
+                if session.photosAlbumURL != nil {
+                    HStack(spacing: 8) {
+                        Text("Favorite")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 58, alignment: .leading)
+                        Picker("Favorite", selection: $session.favoriteFilter) {
+                            ForEach(FrameFavoriteFilter.allCases) { filter in
+                                Text(filter.label).tag(filter)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
             }
         }
     }

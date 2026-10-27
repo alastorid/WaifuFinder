@@ -2,14 +2,6 @@ import CoreML
 import CryptoKit
 import Foundation
 
-struct ModelCompanionRelease: Decodable, Sendable {
-    let repository: String
-    let revision: String
-    let manifestSHA256: String
-    let supportFilesSHA256: [String: String]
-    let pathPrefix: String?
-}
-
 struct ModelRelease: Decodable, Sendable {
     let repository: String
     let revision: String
@@ -17,11 +9,10 @@ struct ModelRelease: Decodable, Sendable {
     let supportFilesSHA256: [String: String]
     let pathPrefix: String?
     var downloadBaseURL: String? = nil
-    let coreMLNoiseprintFP16: ModelCompanionRelease?
 }
 
 enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
-    case seed3 = "seedvr2-3b", seed7 = "seedvr2-7b", flash = "flashvsr", real = "realesrgan", pgt = "pgtformer", tagger = "wd-tagger", safire = "safire", trufor = "trufor"
+    case seed3 = "seedvr2-3b", seed7 = "seedvr2-7b", flash = "flashvsr", real = "realesrgan", real4 = "realesrgan-x4plus", pgt = "pgtformer", tagger = "wd-tagger", safire = "safire", trufor = "trufor"
     var id: String { rawValue }
     var name: String {
         switch self {
@@ -29,6 +20,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .seed7: "SeedVR2 7B"
         case .flash: "FlashVSR 1.1 Tiny"
         case .real: "RealESRGAN x2plus"
+        case .real4: "RealESRGAN x4plus"
         case .pgt: "PGTFormer"
         case .tagger: "WD SwinV2 Tagger"
         case .safire: "SAFIRE"
@@ -40,11 +32,11 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .seed3: "Video restoration · optimized 4-bit · about 2.4 GB"
         case .seed7: "Video restoration · optimized 4-bit · about 5.14 GB"
         case .flash: "Streaming video restoration · BF16 · 4× · about 3.51 GB"
-        case .real: "Frame restoration · Core ML FP16 · about 33 MB download"
+        case .real, .real4: "Frame restoration · Core ML FP16 · about 33 MB download"
         case .pgt: "Temporal face restoration · Core ML · about 381 MB"
         case .tagger: "Frame traits · optimized native GPU · about 225 MB"
         case .safire: "Photos forensics · optimized native GPU · about 388 MB"
-        case .trufor: "Photos forensics · Core ML FP16 noiseprint + native GPU · about 276 MB"
+        case .trufor: "Photos forensics · FP32 · optimized Swift/MLX GPU · about 276 MB"
         }
     }
     var licenseNotice: (summary: String, detail: String)? {
@@ -65,6 +57,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .seed7: "seedvr2-7b-release"
         case .flash: "flashvsr-release"
         case .real: "realesrgan-release"
+        case .real4: "realesrgan-x4plus-release"
         case .pgt: "pgtformer-release"
         case .tagger: "wd-tagger-release"
         case .safire: "safire-release"
@@ -96,7 +89,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .tagger: "waifu-wdtagger"
         case .safire: "waifu-safire"
         case .trufor: "waifu-trufor"
-        case .real: nil
+        case .real, .real4: nil
         }
     }
     var algorithm: UncoverAlgorithm? {
@@ -105,6 +98,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .seed7: .seedVR2SevenB
         case .flash: .flashVSR11
         case .real: .realESRGAN
+        case .real4: .realESRGANFour
         case .pgt: .pgtFormer
         case .tagger, .safire, .trufor: nil
         }
@@ -216,19 +210,11 @@ actor ModelInstaller {
                 progress("File \(index + 1) of \(files.count) · \(message)", (Double(index) + (fraction ?? 0)) / Double(files.count))
             })
         }
-        if model == .trufor, let companion = release.coreMLNoiseprintFP16 {
-            do { try await installCoreMLNoiseprint(companion, stage: stage, progress: progress) }
-            catch {
-                progress("Core ML FP16 unavailable · using validated native FP32 fallback", nil)
-                try? FileManager.default.removeItem(at: stage.appendingPathComponent("CoreMLNoiseprint", isDirectory: true))
-                try? FileManager.default.removeItem(at: stage.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc"))
-            }
-        }
         progress("Download complete · setting up \(model.name)", nil)
         // The pinned Core ML bundles contain .mlpackage sources. Compiled Core ML is tied
         // to the local compiler and macOS version, so it is built here on the machine
         // that will run it rather than published.
-        if model == .real {
+        if model == .real || model == .real4 {
             guard let package = try Self.package(stage, hashes, "RealESRGANValidated.mlpackage") else {
                 throw Self.fail("The \(model.name) release does not contain its Core ML package.")
             }
@@ -257,8 +243,7 @@ actor ModelInstaller {
         let name: String
         if model == .tagger { name = "wd-tagger-native-v2" }
         else if model == .pgt || model == .safire || model == .trufor {
-            let companion = model == .trufor ? release.coreMLNoiseprintFP16.map { "-coreml-" + String($0.revision.prefix(12)) } ?? "" : ""
-            name = model.rawValue + "-" + String(release.revision.prefix(12)) + companion
+            name = model.rawValue + "-" + String(release.revision.prefix(12))
         } else { name = model.rawValue }
         return root.appendingPathComponent(name, isDirectory: true)
     }
@@ -280,39 +265,6 @@ actor ModelInstaller {
         guard let digest = hashes[marker] else { return nil }
         return try checkedFile(root, marker, digest).deletingLastPathComponent()
     }
-    private static func baseURL(repository: String, revision: String, pathPrefix: String?) -> URL {
-        let suffix = pathPrefix.map { $0 + "/" } ?? ""
-        return URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(suffix)")!
-    }
-    private func installCoreMLNoiseprint(_ release: ModelCompanionRelease, stage: URL,
-                                         progress: @escaping Progress) async throws {
-        let component = stage.appendingPathComponent("CoreMLNoiseprint", isDirectory: true)
-        try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
-        let base = Self.baseURL(repository: release.repository, revision: release.revision, pathPrefix: release.pathPrefix)
-        let manifest = component.appendingPathComponent("manifest.json")
-        try await fetch(base.appendingPathComponent("manifest.json"), to: manifest,
-                        hash: release.manifestSHA256, progress: progress)
-        let hashes = try Self.hashes(component)
-        let files = hashes.merging(release.supportFilesSHA256) { original, _ in original }
-        for (index, name) in files.keys.sorted().enumerated() {
-            let relative = "CoreMLNoiseprint/\(name)"
-            let target = try Self.checkedFile(stage, relative, files[name]!)
-            progress("File \(index + 1) of \(files.count) · Core ML FP16 · \(name)",
-                     Double(index) / Double(files.count))
-            try await fetch(base.appendingPathComponent(name), to: target, hash: files[name]!, progress: { message, fraction in
-                progress("Core ML FP16 · \(message)", fraction)
-            })
-        }
-        guard let package = try Self.package(component, hashes, "model.mlpackage") else {
-            throw Self.fail("The TruFor FP16 companion does not contain its Core ML package.")
-        }
-        progress("Setting up TruFor · compiling Core ML FP16 model", nil)
-        let compiled = try await MLModel.compileModel(at: package)
-        defer { try? FileManager.default.removeItem(at: compiled) }
-        let target = stage.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
-        try FileManager.default.copyItem(at: compiled, to: target)
-        _ = try MLModel(contentsOf: target)
-    }
     func validate(_ model: ManagedModel, directory: URL, progress: @escaping Progress) throws {
         // A legacy RealESRGAN import is a bare compiled model with no manifest.
         // It cannot be checksum-verified, so it is only accepted when the user
@@ -327,26 +279,6 @@ actor ModelInstaller {
             for (name,hash) in try Self.hashes(directory) {
                 progress("Setting up TruFor · verifying \(name)",nil)
                 guard try Self.digest(Self.checkedFile(directory,name,hash))==hash else { throw Self.fail("Missing or damaged TruFor file: \(name)") }
-            }
-            if let companion = try Self.release(.trufor).coreMLNoiseprintFP16,
-               FileManager.default.fileExists(atPath: directory.appendingPathComponent("CoreMLNoiseprint/manifest.json").path) {
-                let component = directory.appendingPathComponent("CoreMLNoiseprint", isDirectory: true)
-                let manifest = component.appendingPathComponent("manifest.json")
-                guard try Self.digest(manifest) == companion.manifestSHA256 else {
-                    throw Self.fail("The TruFor Core ML FP16 companion does not match its pinned release.")
-                }
-                let companionHashes = try Self.hashes(component)
-                let companionFiles = companionHashes.merging(companion.supportFilesSHA256) { original, _ in original }
-                for (name, hash) in companionFiles {
-                    progress("Setting up TruFor · verifying Core ML FP16 \(name)", nil)
-                    guard try Self.digest(Self.checkedFile(component, name, hash)) == hash else {
-                        throw Self.fail("Missing or damaged TruFor Core ML FP16 file: \(name)")
-                    }
-                }
-                let compiledModel = directory.appendingPathComponent("CoreMLNoiseprintFP16.mlmodelc")
-                if FileManager.default.fileExists(atPath: compiledModel.path) {
-                    _ = try? MLModel(contentsOf: compiledModel)
-                }
             }
             return
         }
@@ -366,8 +298,8 @@ actor ModelInstaller {
             _ = try WDTaggerBackend(directory: directory)
         }
         if model == .safire { _ = try SafireConfiguration.validate(directory) }
-        if model == .real {
-            _ = try NativeSpatialUpscaler(modelURL: directory.appendingPathComponent("model.mlmodelc"))
+        if model == .real || model == .real4 {
+            _ = try NativeSpatialUpscaler(modelURL: directory.appendingPathComponent("model.mlmodelc"), variant: model == .real4 ? .x4plus : .x2plus)
         }
     }
     func configure(_ model: ManagedModel, directory: URL, progress: @escaping Progress) async throws {
@@ -399,6 +331,7 @@ actor ModelInstaller {
         case .flash: configName = "flashvsr.json"
         case .pgt: configName = "pgtformer.json"
         case .real: configName = "realesrgan-model.txt"
+        case .real4: configName = "realesrgan-x4plus-model.txt"
         case .tagger: configName = "wd-tagger-model.txt"
         case .safire: configName = "safire-model.txt"
         case .trufor: configName = "trufor-model.txt"
@@ -408,9 +341,9 @@ actor ModelInstaller {
         do {
             if model == .tagger || model == .safire || model == .trufor {
                 try Data(directory.path.utf8).write(to: configURL, options: .atomic)
-            } else if model == .real {
+            } else if model == .real || model == .real4 {
                 let actual = directory.pathExtension == "mlmodelc" ? directory : directory.appendingPathComponent("model.mlmodelc")
-                try Data(actual.path.utf8).write(to: configRoot.appendingPathComponent("realesrgan-model.txt"), options: .atomic)
+                try Data(actual.path.utf8).write(to: configURL, options: .atomic)
             } else {
                 guard let name = model.workerName,
                       let worker = Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "Runtime"),

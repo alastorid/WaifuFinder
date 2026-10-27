@@ -6,8 +6,8 @@ enum TaggingImageSource: Sendable {
     case thumbnail(Data)
 }
 
-/// Keeps at most four image requests active. The batch pipeline retains only the
-/// current batch and one prepared following batch, even for large Photos albums.
+/// Keeps at most four image requests active per batch. The tagging scheduler
+/// bounds the number of batches preparing and running across all server lanes.
 enum TaggingImageLoader {
     static func load(
         _ sources: [TaggingImageSource],

@@ -6,6 +6,10 @@ import ImageIO
 import Photos
 import SwiftUI
 
+extension Notification.Name {
+    static let photosFavoriteDidUpdate = Notification.Name("WaifuPhotosFavoriteDidUpdate")
+}
+
 struct PhotosAlbum: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
@@ -143,6 +147,20 @@ final class PhotosMedia: @unchecked Sendable {
         guard let identifier = item(url)?.asset.localIdentifier else { return nil }
         return await Task.detached(priority: .utility) {
             PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil).firstObject?.isFavorite
+        }.value
+    }
+    /// Fetch current favorite flags for a loaded album away from the main actor.
+    func favoriteAssetIdentifiers(in url: URL) async -> Set<String> {
+        guard let identifiers = album(url)?.items.map({ $0.asset.localIdentifier }), !identifiers.isEmpty else {
+            return []
+        }
+        return await Task.detached(priority: .utility) {
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+            var favorites = Set<String>()
+            assets.enumerateObjects { asset, _, _ in
+                if asset.isFavorite { favorites.insert(asset.localIdentifier) }
+            }
+            return favorites
         }.value
     }
     func photoItemURL(for sourceURL: URL, seconds: Double) -> URL? {
@@ -510,16 +528,24 @@ final class PhotosMedia: @unchecked Sendable {
     /// touched, so those keyword-only bumps never read as content changes.
     /// Recording all attempted identifiers also covers the partial writes of a
     /// cancelled job: an untouched photo's baseline is simply its current date.
-    func recordKeywordWriteBaselines(for identifiers: [String]) async {
-        guard !identifiers.isEmpty else { return }
-        await Task.detached(priority: .utility) {
+    @discardableResult
+    func recordKeywordWriteBaselines(for identifiers: [String]) async -> [AssetCacheKey] {
+        guard !identifiers.isEmpty else { return [] }
+        return await Task.detached(priority: .utility) {
             let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
             var baselines: [String: Double] = [:]
+            var cacheKeys: [AssetCacheKey] = []
             fetched.enumerateObjects { asset, _, _ in
-                baselines[asset.localIdentifier] =
-                    (asset.modificationDate ?? asset.creationDate ?? .distantPast).timeIntervalSince1970
+                let modified = (asset.modificationDate ?? asset.creationDate ?? .distantPast).timeIntervalSince1970
+                baselines[asset.localIdentifier] = modified
+                if asset.mediaType == .image {
+                    cacheKeys.append(AssetCacheKey(identifier: asset.localIdentifier,
+                        modifiedMilliseconds: UInt64(max(0, modified * 1_000)),
+                        pixelWidth: UInt32(clamping: asset.pixelWidth), pixelHeight: UInt32(clamping: asset.pixelHeight)))
+                }
             }
             self.lock.withLock { self.keywordBaselines.merge(baselines) { _, new in new } }
+            return cacheKeys
         }.value
     }
 
@@ -823,7 +849,7 @@ final class PhotosMedia: @unchecked Sendable {
             return .animated(PhotosAnimatedImage(source: source, identity: "\(item.asset.localIdentifier):\(modified)", orientation: orientation))
         }
         guard let input = CIImage(data: imageData)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(input, from: input.extent) else {
+              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         return .still(image)
@@ -838,7 +864,7 @@ final class PhotosMedia: @unchecked Sendable {
         if !item.isStill { return try await PreviewFrameReader(asset: try await videoAsset(resolved).value).image(at: time) }
         let (data, orientation) = try await originalPreviewData(resolved, priority: .background)
         guard let input = CIImage(data: data)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(input, from: input.extent) else {
+              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()

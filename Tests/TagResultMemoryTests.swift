@@ -7,6 +7,53 @@ import Foundation
 func registerTagResultMemoryTests() {
     let suite = "Tag result memory"
 
+    Registry.shared.add(suite: suite, TestCase(name: "keyword writes preserve tags across ten cache restarts without accepting later edits", knownBug: nil) {
+        let vocabulary = try tagVocabularyFixture()
+        let directory = try Temporary.directory("tag-result-keyword-revisions")
+        let fileURL = directory.appendingPathComponent("tag-results.db")
+        func asset(_ revision: UInt64, width: UInt32 = 4_000, identifier: String = "keyword-photo") -> PhotosMedia.AssetCacheKey {
+            PhotosMedia.AssetCacheKey(identifier: identifier, modifiedMilliseconds: revision,
+                                      pixelWidth: width, pixelHeight: 3_000)
+        }
+        func keys(_ revision: UInt64, index: Int = 0) -> TagResultCacheKeys {
+            TagResultCacheKeys(source: nil, bySampleIndex: [index:
+                TagResultCacheIdentity(photosAssetKey: asset(revision), vocabulary: vocabulary)!])
+        }
+        let blank = AnalyzedFrame(sampleIndex: 0, timeSeconds: 0, artScore: 0, faceScore: nil,
+                                  faceCount: 0, faceAreaFraction: nil, featurePrint: nil)
+        var scores = [Float](repeating: 0, count: TagVocabulary.headCount)
+        scores[0] = 0.9
+        scores[vocabulary.index(for: "cat ears")!] = 0.9
+        var tagged = blank
+        tagged.tagProbabilities = TagProbabilityCodec.encode(scores)
+        tagged.tagVocabularyFingerprint = vocabulary.cacheFingerprint
+
+        let memory = await MainActor.run { TagResultMemory(disk: TagResultDiskCache(fileURL: fileURL)) }
+        await memory.remember(frames: [tagged], keys: keys(1))
+        let missed = await memory.restore([blank], keys: keys(2), vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(missed.restoredCount, 0, "a keyword date bump previously made the cached photo unreachable")
+
+        for revision in UInt64(2)...11 {
+            let postWrite = keys(revision - 1).afterPhotoMetadataWrite([asset(revision)])
+            await memory.remember(frames: [tagged], keys: postWrite)
+            let reopened = await MainActor.run { TagResultMemory(disk: TagResultDiskCache(fileURL: fileURL)) }
+            let moved = AnalyzedFrame(sampleIndex: 7_000_000, timeSeconds: 7, artScore: 0,
+                                      faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: nil)
+            let restored = await reopened.restore([moved], keys: keys(revision, index: moved.id.sampleIndex),
+                                                 vocabulary: vocabulary, threshold: 0.35)
+            checkEqual(restored.restoredCount, 1, "keyword write \(revision - 1) survives restart and a new album position")
+            check(restored.frames[0].hasTaggingResult, "no inference is needed again")
+            checkEqual(restored.frames[0].topTags?.first, "cat ears", "the original scores survive")
+        }
+        let edited = await memory.restore([blank], keys: keys(12), vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(edited.restoredCount, 0, "an unconfirmed later edit still invalidates the result")
+        check(keys(11).afterPhotoMetadataWrite([asset(12, width: 3_000)]).isEmpty,
+              "changed pixel geometry cannot inherit the old tags")
+        check(keys(11).afterPhotoMetadataWrite([asset(12, identifier: "other-photo")]).isEmpty,
+              "a missing or unwritten photo never borrows another photo's tags")
+        check(keys(11).afterPhotoMetadataWrite([]).isEmpty, "a failed fetch does not guess a revision")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "scores rounded across the sparse threshold survive a restart", knownBug: nil) {
         let vocabulary = try tagVocabularyFixture()
         let directory = try Temporary.directory("tag-result-threshold")

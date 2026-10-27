@@ -53,7 +53,7 @@ final class ModelLibrary: ObservableObject {
               let owned = defaults.string(forKey: "ownedModel.\(entry.id)") else { return false }
         let root = URL(fileURLWithPath: owned).resolvingSymlinksInPath()
         let actual = location.resolvingSymlinksInPath()
-        return actual == root || (entry.model == .real && actual == root.appendingPathComponent("model.mlmodelc"))
+        return actual == root || ((entry.model == .real || entry.model == .real4) && actual == root.appendingPathComponent("model.mlmodelc"))
     }
     static func configuredLocation(_ model: ManagedModel) -> URL? {
         let root = SeedVR2Configuration.configurationURL.deletingLastPathComponent()
@@ -65,6 +65,7 @@ final class ModelLibrary: ObservableObject {
         case .tagger: return WDTaggerConfiguration.availableDirectory
         case .safire: return SafireConfiguration.availableDirectory
         case .trufor: return TruForConfiguration.availableDirectory
+        case .real4: return RealESRGANVariant.x4plus.modelURL
         case .real:
             if let data = try? Data(contentsOf: root.appendingPathComponent("realesrgan-model.txt")),
                let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
@@ -268,6 +269,8 @@ final class ModelLibrary: ObservableObject {
         case .trufor: try removeFile("trufor-model.txt")
         case .flash: try removeFile("flashvsr.json")
         case .pgt: try removeFile("pgtformer.json")
+        case .real4:
+            try removeFile("realesrgan-x4plus-model.txt")
         case .real:
             try removeFile("realesrgan-model.txt")
             // Also clear the legacy fallback so disconnect cannot silently reactivate it.

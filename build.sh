@@ -165,6 +165,7 @@ cp "$ROOT/ThirdParty/cuopt/NOTICE" "$APP/Contents/Resources/ThirdPartyLicenses/c
 # build offers PGTFormer and is therefore non-commercial. See
 # Sources/Waifu/Model/WaifuDistribution.swift and docs/Licensing.md.
 RELEASES=(seedvr2 seedvr2-7b flashvsr realesrgan wd-tagger)
+if [ -f "$ROOT/tools/realesrgan-x4plus-release.json" ]; then RELEASES+=(realesrgan-x4plus); fi
 if [ -f "$ROOT/tools/safire-release.json" ]; then RELEASES+=(safire); fi
 SWIFT_FLAGS=()
 if [ "${WAIFU_COMMERCIAL_DISTRIBUTION:-0}" = "1" ]; then

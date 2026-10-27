@@ -24,6 +24,7 @@ enum TruForDisplay:String,CaseIterable,Identifiable,Sendable {
         case .noiseprint: "Noiseprint++ contrast-scaled residual; this is not a probability map."
         }
     }
+    var exportSuffix: String { "trufor-\(rawValue)" }
 
 }
 
@@ -147,6 +148,12 @@ actor TruForEvidenceRenderer {
     private var evidence:TruForSpatial?
     private var original:CGImage?
     private var mode=TruForDisplay.combined
+    func exportSnapshot(inputID expectedInputID: UUID) throws -> TruForExportSnapshot {
+        guard inputID == expectedInputID, let evidence, let original else {
+            throw PhotosMedia.failure("TruFor is still preparing this photo. Wait for its analysis to finish, then export again.")
+        }
+        return TruForExportSnapshot(inputID: expectedInputID, original: original, evidence: evidence)
+    }
     func load(url:URL?,enabled:Bool,mode:TruForDisplay,input:PreviewEvidenceInput?)async {
         let token=UUID();ticket=token;renderTicket=UUID();photoURL=url;inputID=input?.id;thumbnails=[:];rendered=nil;evidence=nil;original=nil;status="";loading=false;self.mode=mode
         guard enabled,WaifuDistribution.isNonCommercialOnly,let url,let item=PhotosMedia.shared.item(url),item.isStill,let key=item.assetCacheKey else { return }
@@ -199,4 +206,10 @@ actor TruForEvidenceRenderer {
             if renderTicket==token { status="TruFor display unavailable" }
         }
     }
+}
+
+struct TruForExportSnapshot: Sendable {
+    let inputID: UUID
+    let original: CGImage
+    let evidence: TruForSpatial
 }

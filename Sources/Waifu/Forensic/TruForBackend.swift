@@ -1,49 +1,41 @@
 import Foundation
+import Darwin
 
-/// One warm native worker. This protocol carries only private file paths; PNGs
-/// and transient evidence are deleted after use. Scoring exports scalars only.
+/// One warm FP32 Swift/MLX worker. PNGs and evidence travel through pipes;
+/// neither transport nor activation storage uses scratch files.
 private final class TruForWorker:@unchecked Sendable {
-    let root:URL
     let process=Process()
     private let input:FileHandle
     private let output:FileHandle
     init(configuration:TruForConfiguration,executable:URL)throws {
-        root=FileManager.default.temporaryDirectory.appendingPathComponent("trufor-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         let incoming=Pipe(),outgoing=Pipe();input=incoming.fileHandleForWriting;output=outgoing.fileHandleForReading
-        process.executableURL=executable;process.arguments=["--model",configuration.directory.path,"--serve"];process.qualityOfService = .utility
-        // A diagnostic shell override must not silently alter persisted app scores.
+        process.executableURL=executable;process.arguments=["--model",configuration.directory.path,"--serve-pipe"];process.qualityOfService = .utility
         process.environment=TruForConfiguration.workerEnvironment(ProcessInfo.processInfo.environment)
         process.standardInput=incoming;process.standardOutput=outgoing
-        FileManager.default.createFile(atPath:root.appendingPathComponent("worker.log").path,contents:nil)
-        process.standardError=try FileHandle(forWritingTo:root.appendingPathComponent("worker.log"))
-        try process.run();try incoming.fileHandleForReading.close();try outgoing.fileHandleForWriting.close()
-        guard try line()=="TRF1" else { cancel();throw ModelInstaller.fail("Incompatible TruFor worker") }
+        process.standardError=FileHandle.standardError
+        // A cancelled/failed worker must produce a write error, never SIGPIPE
+        // in the app while a large PNG is still being sent.
+        guard fcntl(input.fileDescriptor,F_SETNOSIGPIPE,1) != -1 else { throw ModelInstaller.fail("Unable to configure TruFor pipe") }
+        try process.run()
+        do {
+            try incoming.fileHandleForReading.close();try outgoing.fileHandleForWriting.close()
+            guard try TruForPipe.line(output)=="TRF2 FP32 MLX RAM" else { throw ModelInstaller.fail("Incompatible TruFor worker; rebuild the FP32 runtime") }
+        } catch { cancel();throw error }
     }
-    deinit { cancel();try? FileManager.default.removeItem(at:root) }
+    deinit { cancel();try? input.close();try? output.close() }
     func cancel() { if process.isRunning { process.terminate() } }
-    private func line()throws->String {
-        var bytes=Data()
-        while bytes.count<8192 {
-            guard let byte=try output.read(upToCount:1),!byte.isEmpty else {
-                let log=(try? String(contentsOf:root.appendingPathComponent("worker.log"),encoding:.utf8)) ?? ""
-                let detail=log.split(separator:"\n").last.map(String.init) ?? ""
-                throw ModelInstaller.fail(detail.hasPrefix("TruFor stopped") ? detail:"TruFor worker stopped")
-            }
-            if byte[0]==10 { return String(decoding:bytes,as:UTF8.self) };bytes.append(byte)
-        }
-        throw ModelInstaller.fail("Invalid TruFor worker reply")
-    }
     func run(_ images:[Data],evidence:Bool)throws->TruForJobResult {
-        let files=images.indices.map{root.appendingPathComponent("input-\($0).png")},result=root.appendingPathComponent("result.bin")
-        defer { for url in files+[result] { try? FileManager.default.removeItem(at:url) } }
-        for (index,data) in images.enumerated() { try data.write(to:files[index],options:.atomic) }
-        var request=try JSONSerialization.data(withJSONObject:["inputs":files.map(\.path),"output":result.path,"mode":evidence ? "evidence":"scores"]);request.append(10)
+        guard !images.isEmpty,images.count<=4,(!evidence || images.count==1),
+              images.allSatisfy({!$0.isEmpty && $0.count<=24_000_000*4+1_048_576}) else { throw ModelInstaller.fail("Invalid TruFor request") }
+        var request=try JSONSerialization.data(withJSONObject:["sizes":images.map(\.count),"evidence":evidence]);request.append(10)
         try input.write(contentsOf:request)
-        let response=try line();guard response=="OK" else { throw ModelInstaller.fail(response.replacingOccurrences(of:"ERROR ",with:"")) }
-        if evidence { return .evidence(try TruForSpatial.decode(Data(contentsOf:result,options:.mappedIfSafe))) }
+        for image in images { try input.write(contentsOf:image) }
+        let response=try TruForPipe.line(output)
+        guard response.hasPrefix("OK "),let count=Int(response.dropFirst(3)),count>0 else { throw ModelInstaller.fail(response.replacingOccurrences(of:"ERROR ",with:"")) }
+        if evidence { return .evidence(try TruForPipe.spatial(output,byteCount:count)) }
+        guard count<=4096 else { throw ModelInstaller.fail("Oversized TruFor score response") }
         struct Scores:Decodable { let scores:[Float] }
-        let values=try JSONDecoder().decode(Scores.self,from:Data(contentsOf:result)).scores
+        let values=try JSONDecoder().decode(Scores.self,from:TruForPipe.read(output,count:count)).scores
         guard values.count==images.count,values.allSatisfy({$0.isFinite && (0...1).contains($0)}) else { throw ModelInstaller.fail("Invalid TruFor detection scores") }
         return .scores(values)
     }

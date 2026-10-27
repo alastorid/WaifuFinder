@@ -39,6 +39,8 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
         /// one this server speaks for, and stores it beside the CSV so a stale
         /// copy is never mistaken for a current one.
         var vocabularyFingerprint: UInt64?
+        /// Absent on older peers, which support encoded containers and raw RGBA8.
+        var inputCodecs: [UInt8]? = nil
     }
 
     struct UncoverCapability: Codable, Sendable, Equatable {
@@ -54,6 +56,8 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
         var maximumOutputPixels: Int?
         var outputScale: Int
         var supportsStillPhotos: Bool
+        var imageModelFingerprint: String? = nil
+        var imageRuntimeRevision: String? = nil
     }
 
     struct VisionCapability: Codable, Sendable, Equatable {
@@ -73,6 +77,13 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
         guard let capability = uncover(algorithm), capability.available else { return false }
         guard let scale else { return true }
         return capability.scales.contains(scale.rawValue)
+    }
+
+    func offersRealESRGAN(_ variant: RealESRGANVariant) -> Bool {
+        guard let capability = uncover(variant.algorithm) else { return false }
+        return capability.available && capability.supportsStillPhotos
+            && capability.imageModelFingerprint == variant.weightsSHA256
+            && capability.imageRuntimeRevision == RealESRGANVariant.runtimeRevision
     }
 
     var offersAnyUncover: Bool { uncover.contains { $0.available } }
@@ -123,7 +134,8 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
             tagger = TaggerCapability(available: true, imageSize: WDTaggerBackend.imageSize,
                                       batchSize: WDTaggerBackend.batchSize,
                                       headCount: TagVocabulary.headCount,
-                                      vocabularyFingerprint: fingerprint)
+                                      vocabularyFingerprint: fingerprint,
+                                      inputCodecs: RemoteTagImageCodec.allCases.map(\.rawValue))
         }
         var uncover: [UncoverCapability] = []
         for algorithm in UncoverAlgorithm.allCases {
@@ -136,7 +148,9 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
                 requiresUnsafeMemoryOptIn: local.requiresUnsafeMemoryOptIn,
                 maximumPaddedArea: local.maximumPaddedArea, maximumOutputPixels: local.maximumOutputPixels,
                 outputScale: algorithm == .flashVSR11 ? FlashVSRBackend.outputScale : 1,
-                supportsStillPhotos: algorithm.supportsStillPhotos))
+                supportsStillPhotos: algorithm.supportsStillPhotos,
+                imageModelFingerprint: algorithm.realESRGANVariant?.weightsSHA256,
+                imageRuntimeRevision: algorithm.realESRGANVariant == nil ? nil : RealESRGANVariant.runtimeRevision))
         }
         return Self(protocolVersion: protocolVersion, appVersion: appVersion, serverName: serverName,
                     sessionID: sessionID, tagger: tagger, uncover: uncover,

@@ -30,6 +30,7 @@ struct FramePreviewView: View {
     @ObservedObject var session: WaifuSession
 
     @ObservedObject private var inferencePool=RemoteInferencePool.shared
+    @StateObject private var realESRGAN = RealESRGANPreviewModel()
     @StateObject private var trufor=TruForPreviewModel()
     @State private var truforEnabled=false
     @State private var truforDisplay=TruForDisplay.combined
@@ -127,6 +128,8 @@ struct FramePreviewView: View {
                                     scrollsDetails: false)
                                 if animation == nil {
                                     Divider()
+                                    realESRGANControls
+                                    Divider()
                                     evidenceControls
                                 }
                             }
@@ -142,11 +145,22 @@ struct FramePreviewView: View {
             }
             .padding(24)
         }
+        .background {
+            PreviewExportPanel(session: session, isPresented: $session.showPreviewExportSheet,
+                frame: frame, photoURL: photoInfoURL, evidenceInput: evidenceInput,
+                realESRGAN: realESRGAN, trufor: trufor, truforEnabled: truforEnabled,
+                safire: safire, safireEnabled: safireEnabled)
+                .frame(width: 0, height: 0)
+        }
         .task(id: "\(metadataTaskID)|\(session.thumbnailGeneration)|\(downloadFromICloud)") {
             await load(frame)
             await preloadNeighbours(of: frame)
         }
         .task(id: metadataTaskID) { await loadPhotoMetadata(for: frame) }
+        .task(id:"\(metadataTaskID)|\(evidenceInput?.id.uuidString ?? "")|\(evidenceRetry)|\(realESRGAN.selection?.rawValue ?? "off")|\(inferencePool.realESRGANClient(realESRGAN.selection ?? .x2plus)?.remoteIdentity ?? "local")") {
+            await realESRGAN.load(input: animation == nil && evidenceInput?.photoURL == photoInfoURL ? evidenceInput : nil,
+                remote: realESRGAN.selection.flatMap { inferencePool.realESRGANClient($0) })
+        }
         .task(id:"\(metadataTaskID)|\(evidenceInput?.id.uuidString ?? "")|\(evidenceRetry)|\(safireEnabled)|\(animation == nil)") {
             await safire.load(url:photoInfoURL,enabled:safireEnabled && animation==nil,input:evidenceInput)
         }
@@ -178,6 +192,7 @@ struct FramePreviewView: View {
             Diag.trace(.preview, .focus, message: "overlay onDisappear | \(Diag.responderDescription())")
             removeKeyMonitor()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .waifuModelsChanged)) { _ in evidenceRetry = UUID() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in stopArrows() }
         .onReceive(session.previewFrameUpdates) { frame in
             if frame == nil, session.previewFrame == nil { stopArrows() }
@@ -341,22 +356,52 @@ struct FramePreviewView: View {
         safire.photoURL == photoInfoURL && safire.inputID == evidenceInput?.id && evidenceInput != nil
     }
 
-    private var evidenceControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var realESRGANControls: some View {
+        HStack(spacing: 8) {
+            Text("RealESRGAN").font(.caption).lineLimit(1)
+                .frame(width: 80, alignment: .leading)
             HStack(spacing: 0) {
-                modelButton("Off", selected: !truforEnabled && !safireEnabled) {
-                    truforEnabled = false; safireEnabled = false
-                }
-                if WaifuDistribution.isNonCommercialOnly {
-                    modelButton("TruFor", selected: truforEnabled, remote: !inferencePool.truforClients.isEmpty) {
-                        safireEnabled = false; truforEnabled = true; showOriginalEvidence = false
-                    }
-                }
-                modelButton("SAFIRE", selected: safireEnabled, remote: !inferencePool.safireClients.isEmpty) {
-                    truforEnabled = false; safireEnabled = true; showOriginalEvidence = false
+                modelButton("Off", selected: realESRGAN.selection == nil) { realESRGAN.select(nil) }
+                ForEach(RealESRGANVariant.allCases) { variant in
+                    modelButton(variant.label, selected: realESRGAN.selection == variant,
+                        remote: inferencePool.realESRGANClient(variant) != nil) { realESRGAN.select(variant) }
+                        .help(inferencePool.realESRGANClient(variant).map { "Run \(variant.modelName) on \($0.capabilities?.serverName ?? $0.manualAddress)" }
+                            ?? "Run \(variant.modelName) locally. Download it in Settings → Models.")
                 }
             }
-            .accessibilityLabel("Photo analysis")
+            if realESRGAN.loading { ProgressView().controlSize(.mini).frame(width: 12) }
+            else if realESRGAN.selection != nil {
+                Image(systemName: realESRGAN.status.contains("AI reconstruction") ? "sparkles" : "info.circle")
+                    .font(.caption).frame(width:12)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .frame(width:350,alignment:.leading).clipped()
+        .help(realESRGAN.status + "\nNon-destructive AI reconstruction. TruFor and SAFIRE always analyze and display original source pixels. Forensic evidence takes display priority while selected.")
+        .accessibilityLabel("RealESRGAN reconstruction")
+    }
+
+    private var evidenceControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Forensic").font(.caption).lineLimit(1)
+                    .frame(width: 80, alignment: .leading)
+                HStack(spacing: 0) {
+                    modelButton("Off", selected: !truforEnabled && !safireEnabled) {
+                        truforEnabled = false; safireEnabled = false
+                    }
+                    if WaifuDistribution.isNonCommercialOnly {
+                        modelButton("TruFor", selected: truforEnabled, remote: !inferencePool.truforClients.isEmpty) {
+                            safireEnabled = false; truforEnabled = true; showOriginalEvidence = false
+                        }
+                    }
+                    modelButton("SAFIRE", selected: safireEnabled, remote: !inferencePool.safireClients.isEmpty) {
+                        truforEnabled = false; safireEnabled = true; showOriginalEvidence = false
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .accessibilityLabel("Forensic")
             if truforEnabled || safireEnabled {
                 evidenceStatus(truforEnabled ? (currentTruForEvidence ? trufor.status : "Loading photo…") :
                     (currentSafireEvidence ? safire.status : "Loading photo…"),
@@ -390,7 +435,8 @@ struct FramePreviewView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
         .frame(width: 350, alignment: .leading)
         .clipped()
     }
@@ -500,10 +546,11 @@ struct FramePreviewView: View {
     }
 
     private func previewImage(_ original:NSImage)->NSImage {
-        guard !showOriginalEvidence, photoInfoURL != nil,displayedFrameID==frame.id else { return original }
+        guard photoInfoURL != nil,displayedFrameID==frame.id else { return original }
+        if showOriginalEvidence && (truforEnabled || safireEnabled) { return original }
         if truforEnabled,currentTruForEvidence { return trufor.rendered ?? original }
         if safireEnabled,currentSafireEvidence { return (showSafireMask ? safire.mask:safire.overlay) ?? original }
-        return original
+        return realESRGAN.image(for:evidenceInput) ?? original
     }
 
     // MARK: - Loading and zoom

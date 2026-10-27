@@ -80,6 +80,13 @@ every cached tag was thrown away. Per-photo keys mean that reopening an album in
 a different order reuses everything, editing one photo invalidates only that
 photo, and a photo already tagged in another album is not tagged again.
 
+Writing keywords through WaifuFinder also bumps PhotoKit's modification date,
+even though the image pixels are unchanged. After a keyword job, WaifuFinder
+fetches the resulting asset revisions and saves the same tags under those keys
+as well. This includes partial writes from failed or cancelled jobs and persists
+across app restarts. Missing assets and changed pixel geometry are not carried
+forward; a later image edit still invalidates the saved result.
+
 Entries written by earlier builds used an album-wide key under
 `photos-rendition-v3/`. They are simply never matched again and expire with the
 rest of the cache.

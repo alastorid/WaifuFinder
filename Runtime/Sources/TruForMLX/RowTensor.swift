@@ -64,7 +64,7 @@ public final class TruForInput {
         }
     }
     public init(_ rgb:MLXArray)throws {
-        guard rgb.ndim==4,rgb.dim(0)==1,rgb.dim(3)==3 else { throw TruForError.invalid("Expected one native RGB image") }
+        guard rgb.ndim==4,rgb.dim(0)==1,rgb.dim(3)==3,rgb.dtype == .float32 else { throw TruForError.invalid("Expected one native FP32 RGB image") }
         width=rgb.dim(2);height=rgb.dim(1);rgba=nil
         try TruForMemoryPolicy.validate(width:width,height:height)
         let streamed=Memory.activeMemory+width*height*384>1_000_000_000 || ProcessInfo.processInfo.environment["WAIFU_TRUFOR_STREAM_ROWS"]=="1"

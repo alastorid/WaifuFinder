@@ -58,7 +58,9 @@ Production always uses the original FP32 checkpoint with the optimized native ML
 path: fused pixel conversion, fast LayerNorm and attention, halo-tiled Noiseprint,
 and bounded decoder/encoder strips. A compiled `CoreMLNoiseprintFP16.mlmodelc`
 companion is ignored, and the app strips the Core ML override from worker environments.
-The runtime no longer selects that companion. Execution stays `trufor-fp32-v2`;
+The runtime no longer includes the companion loader or links Core ML. Model setup
+neither downloads nor compiles that companion and describes Swift/MLX FP32.
+Non-FP32 checkpoint tensors and reduced-precision worker requests are rejected. Execution stays `trufor-fp32-v2`;
 FP16/Core ML experimental results cannot populate its score cache or join its remote pool.
 
 ## RAM budget (2026-10-25)
@@ -72,32 +74,54 @@ independent-tile replacement for global attention. Production remains FP32.
 - Decode in strips of at most 8,192 feature positions rather than expanding
   all four 512-channel feature maps across the full image simultaneously.
 - Choose encoder streaming when estimated live activations exceed the working
-  budget. Stage the RGB input and FP32 features in private, open-but-unlinked
-  scratch files with filesystem data caching disabled. Query
+  budget. Keep original RGBA pixels and owned FP32 feature chunks in RAM;
+  release consumed rows as each operator advances. There are no activation
+  scratch files, file mappings, compression or spill. Query
   strips attend to the complete reduced K/V sequence; rectification and fusion
   retain global channel statistics. Layerwise convolution halos preserve image
-  boundaries. Files are reclaimed on normal completion, errors and process exit.
+  boundaries. Consumed RAM chunks are released during the forward.
 - Reduce detection statistics in bounded strips with stable accumulation and
-  write evidence incrementally. Large CPU staging allocations are explicitly
+  stream evidence incrementally through pipes. Large CPU staging allocations are explicitly
   returned to macOS's allocator between phases and requests.
 - Disable MLX's reusable buffer cache and set its allocation guideline to 1.2 GB.
   These settings alone are not a process limit. A separate 5 ms physical-footprint
   monitor reclaims unused CPU pages and stops the worker at 1.7 GB, leaving
-  headroom for in-flight allocations below 2 GB. The app surfaces that error.
+  headroom for in-flight allocations below 2 GB. Reports include resident and
+  compressed bytes, peak compressed bytes, and process swap-ins during the request;
+  physical footprint includes memory outside MLX. The worker does not control
+  macOS paging, so RAM-only storage is not a promise that the OS cannot swap.
 
-Streaming uses temporary disk space and can be slower. FP32 global reductions
+Row streaming retains FP32 data in RAM and can be slower. FP32 global reductions
 have a different accumulation order, so the reference gates are checked rather
 than claiming bit-identical output. The monitor is an early-stop safeguard,
 not an operating-system allocation quota; measured cases establish the practical
 memory bound on the tested machine.
 
-The reproducible check is `tools/validate-trufor-memory.py`: Apple-generated PNG
+The historical reproducible check is `tools/validate-trufor-memory.py`: Apple-generated PNG
 fixtures, both encoder paths against the saved official reference, odd-geometry
 strip comparisons against the previous FP32 worker, full-resolution score and
 evidence, repeated mixed geometries and four-image requests. It records MLX
 active/cache/peak counters and process physical footprint separately in
 [TruFor-memory-validation.json](TruFor-memory-validation.json), including an
 independent `/usr/bin/time -l` process peak.
+
+## Pipe transport correction (2026-10-26)
+
+The app starts `--serve-pipe` and requires `TRF2 FP32 MLX RAM`. Length-framed
+PNG bytes and final FP32 evidence travel over anonymous pipes; there are no
+per-request input PNGs, result files, mapped evidence files or worker log files.
+Each image is decoded and scored before reading the next image in a batch.
+Evidence is copied in 64 KiB chunks directly into its final owned arrays rather
+than holding an additional full binary blob. Original model files and the scalar
+result cache remain persistent assets, not calculation scratch storage.
+
+`tools/validate-trufor-pipe.swift` is a native, noninteractive check of the actual
+production pipe protocol, saved FP32 evidence parity, forced row streaming,
+four-image scores, repeated warm-worker evidence, and complete worker memory
+reports. Its results are recorded separately in
+[TruFor-pipe-fp32-validation.json](TruFor-pipe-fp32-validation.json); earlier
+measurements above remain historical. CLI file exports and the legacy `--serve`
+protocol remain available only for explicitly invoked offline diagnostic tools.
 
 ## Earlier latency optimization
 
@@ -114,7 +138,8 @@ Earlier experiments, each measured:
   memory-bounding evaluations survive. This removed most of the per-request
   graph-construction overhead (1.79 s → 1.46 s at 1024×768 on a quiet M3).
 - **FP16 weights and activations (experiment)** with FP32 islands — every LayerNorm, every
-  BN including the DnCNN BN rows, and the whole detection head. FP16 remains an explicit worker benchmark option; production uses FP32,
+  BN including the DnCNN BN rows, and the whole detection head. The production
+  worker no longer supports that experimental option; it requires FP32,
   which passes the strict validation gate.
   Measured against the official FP32 reference: detection score within 0.002,
   anomaly and reliability maps within 0.012, Noiseprint++ relative RMS 0.087,

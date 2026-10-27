@@ -1,0 +1,1949 @@
+{
+  "date": "2026-10-26",
+  "hardware": {
+    "chip": "Apple M3",
+    "unifiedMemoryGB": 16
+  },
+  "precision": "FP16 weights, activations and model interface; FP32 offline reference",
+  "sourceCheckpointSHA256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
+  "selectedComputeUnits": "all",
+  "selectedSpecialization": "default",
+  "nativeValidation": {
+    "all": {
+      "loadSeconds": 7.605870962142944,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.0677649974822998,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04454696178436279,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2099609375,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.1897439956665039,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4514310359954834,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.42319798469543457,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.06827795505523682,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.0459979772567749,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.20848798751831055,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.1855928897857666,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4499499797821045,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.43013501167297363,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07144200801849365,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04696094989776611,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.20944595336914062,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18775498867034912,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4523249864578247,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4325670003890991,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07018506526947021,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04611194133758545,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.20205700397491455,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18117499351501465,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.43803298473358154,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.42182397842407227,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07399904727935791,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04787898063659668,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.21410202980041504,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18921303749084473,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4604640007019043,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.45948898792266846,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 79938184,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1024,
+          "unknown": 2765
+        },
+        "preferredOperators": {
+          "const": {
+            "unknown": 2765
+          },
+          "ios18.add": {
+            "ane": 93
+          },
+          "ios18.concat": {
+            "ane": 276
+          },
+          "ios18.conv": {
+            "ane": 351
+          },
+          "ios18.leaky_relu": {
+            "ane": 279
+          },
+          "ios18.mul": {
+            "ane": 23
+          },
+          "upsample_nearest_neighbor": {
+            "ane": 2
+          }
+        }
+      },
+      "scale": 4,
+      "specialization": "default",
+      "thermalStateAtEnd": 1,
+      "thermalStateAtStart": 1,
+      "units": "all"
+    },
+    "ane": {
+      "loadSeconds": 7.2311670780181885,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.06438899040222168,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04468107223510742,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04598808288574219,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.20482206344604492,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.1887120008468628,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18762695789337158,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4668840169906616,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4428110122680664,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4493560791015625,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.08617496490478516,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04692399501800537,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.045678019523620605,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.22124898433685303,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18172001838684082,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18199503421783447,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4405890703201294,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.43146395683288574,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4344569444656372,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.0721060037612915,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04791700839996338,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04785799980163574,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.21360599994659424,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18909001350402832,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.19221293926239014,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.47499799728393555,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4623680114746094,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4589979648590088,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07841801643371582,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04854404926300049,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04884791374206543,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.21274197101593018,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.1894519329071045,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18796300888061523,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.44220805168151855,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.41850101947784424,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4094059467315674,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07332801818847656,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04670405387878418,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.04658007621765137,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.20887601375579834,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.183771014213562,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.18518304824829102,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.45548999309539795,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.43149495124816895,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4311560392379761,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 74678896,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1024,
+          "unknown": 2765
+        },
+        "preferredOperators": {
+          "const": {
+            "unknown": 2765
+          },
+          "ios18.add": {
+            "ane": 93
+          },
+          "ios18.concat": {
+            "ane": 276
+          },
+          "ios18.conv": {
+            "ane": 351
+          },
+          "ios18.leaky_relu": {
+            "ane": 279
+          },
+          "ios18.mul": {
+            "ane": 23
+          },
+          "upsample_nearest_neighbor": {
+            "ane": 2
+          }
+        }
+      },
+      "scale": 4,
+      "specialization": "default",
+      "thermalStateAtEnd": 1,
+      "thermalStateAtStart": 1,
+      "units": "ane"
+    },
+    "gpu": {
+      "loadSeconds": 0.7497459650039673,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0028470754623413086,
+          "meanAbsoluteError": 0.00021130902170111936,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.44437897205352783,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0028470754623413086,
+          "meanAbsoluteError": 0.00021130902170111936,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2277289628982544,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0028470754623413086,
+          "meanAbsoluteError": 0.00021130902170111936,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.22778701782226562,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0026412010192871094,
+          "meanAbsoluteError": 0.00020741075540955635,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.0896300077438354,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0026412010192871094,
+          "meanAbsoluteError": 0.00020741075540955635,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.9008289575576782,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0026412010192871094,
+          "meanAbsoluteError": 0.00020741075540955635,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.8941650390625,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0021552443504333496,
+          "meanAbsoluteError": 0.0002081698612907227,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.2573100328445435,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0021552443504333496,
+          "meanAbsoluteError": 0.0002081698612907227,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.04013991355896,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0021552443504333496,
+          "meanAbsoluteError": 0.0002081698612907227,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.031005024909973,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0023830533027648926,
+          "meanAbsoluteError": 0.0002081409357517111,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.46238088607788086,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0023830533027648926,
+          "meanAbsoluteError": 0.0002081409357517111,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.22783899307250977,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0023830533027648926,
+          "meanAbsoluteError": 0.0002081409357517111,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.22480595111846924,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.002029210329055786,
+          "meanAbsoluteError": 0.00020369605469299453,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.075618028640747,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.002029210329055786,
+          "meanAbsoluteError": 0.00020369605469299453,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.8792020082473755,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.002029210329055786,
+          "meanAbsoluteError": 0.00020369605469299453,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.8783190250396729,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0018781721591949463,
+          "meanAbsoluteError": 0.00020251342660225564,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.229322075843811,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0018781721591949463,
+          "meanAbsoluteError": 0.00020251342660225564,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.984147071838379,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0018781721591949463,
+          "meanAbsoluteError": 0.00020251342660225564,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.0519720315933228,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.007275581359863281,
+          "meanAbsoluteError": 0.00021225688785448115,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4548989534378052,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.007275581359863281,
+          "meanAbsoluteError": 0.00021225688785448115,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2240990400314331,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.007275581359863281,
+          "meanAbsoluteError": 0.00021225688785448115,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.22669410705566406,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.005309760570526123,
+          "meanAbsoluteError": 0.00020909081527820255,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.1120960712432861,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.005309760570526123,
+          "meanAbsoluteError": 0.00020909081527820255,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.8823089599609375,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.005309760570526123,
+          "meanAbsoluteError": 0.00020909081527820255,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.8954819440841675,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0062811970710754395,
+          "meanAbsoluteError": 0.00021567626662922707,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.2670589685440063,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0062811970710754395,
+          "meanAbsoluteError": 0.00021567626662922707,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.3079949617385864,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0062811970710754395,
+          "meanAbsoluteError": 0.00021567626662922707,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.659132957458496,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 7.708277553319931e-05,
+          "meanAbsoluteError": 8.061078309159106e-06,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4907839298248291,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 7.708277553319931e-05,
+          "meanAbsoluteError": 8.061078309159106e-06,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.3186659812927246,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 7.708277553319931e-05,
+          "meanAbsoluteError": 8.061078309159106e-06,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.34190595149993896,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 9.61916521191597e-05,
+          "meanAbsoluteError": 8.964183507487178e-06,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.66982102394104,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 9.61916521191597e-05,
+          "meanAbsoluteError": 8.964183507487178e-06,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.565424919128418,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 9.61916521191597e-05,
+          "meanAbsoluteError": 8.964183507487178e-06,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.2030229568481445,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 8.855108171701431e-05,
+          "meanAbsoluteError": 8.120835142714592e-06,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.7055280208587646,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 8.855108171701431e-05,
+          "meanAbsoluteError": 8.120835142714592e-06,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.9802390336990356,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 8.855108171701431e-05,
+          "meanAbsoluteError": 8.120835142714592e-06,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 2.9269579648971558,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0014396309852600098,
+          "meanAbsoluteError": 0.00020566934289916724,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.46207094192504883,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0014396309852600098,
+          "meanAbsoluteError": 0.00020566934289916724,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.32944798469543457,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0014396309852600098,
+          "meanAbsoluteError": 0.00020566934289916724,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.3821899890899658,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0015395283699035645,
+          "meanAbsoluteError": 0.00020063494132600967,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.6139370203018188,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0015395283699035645,
+          "meanAbsoluteError": 0.00020063494132600967,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.4020339250564575,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0015395283699035645,
+          "meanAbsoluteError": 0.00020063494132600967,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 1.7112540006637573,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0016461014747619629,
+          "meanAbsoluteError": 0.000201426064947116,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 4.3788979053497314,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0016461014747619629,
+          "meanAbsoluteError": 0.000201426064947116,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 3.5106470584869385,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0016461014747619629,
+          "meanAbsoluteError": 0.000201426064947116,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 3.779741048812866,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 960758624,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "gpu": 1024,
+          "unknown": 2765
+        },
+        "preferredOperators": {
+          "const": {
+            "unknown": 2765
+          },
+          "ios18.add": {
+            "gpu": 93
+          },
+          "ios18.concat": {
+            "gpu": 276
+          },
+          "ios18.conv": {
+            "gpu": 351
+          },
+          "ios18.leaky_relu": {
+            "gpu": 279
+          },
+          "ios18.mul": {
+            "gpu": 23
+          },
+          "upsample_nearest_neighbor": {
+            "gpu": 2
+          }
+        }
+      },
+      "scale": 4,
+      "specialization": "default",
+      "thermalStateAtEnd": 1,
+      "thermalStateAtStart": 1,
+      "units": "gpu"
+    },
+    "fast": {
+      "loadSeconds": 22.418304920196533,
+      "measurements": [
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.06902599334716797,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.041857004165649414,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003606349229812622,
+          "meanAbsoluteError": 0.0003319570246465749,
+          "name": "square-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.0426410436630249,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.19519400596618652,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.1727670431137085,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00483432412147522,
+          "meanAbsoluteError": 0.00033235452944516646,
+          "name": "square-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.17894697189331055,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.4715430736541748,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5416649580001831,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.004833728075027466,
+          "meanAbsoluteError": 0.0003295535220239024,
+          "name": "square-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6773459911346436,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.11297905445098877,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07372796535491943,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0035172104835510254,
+          "meanAbsoluteError": 0.0003478806480890467,
+          "name": "landscape-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07399201393127441,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.3487839698791504,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.29294800758361816,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0032543838024139404,
+          "meanAbsoluteError": 0.00034064005268180495,
+          "name": "landscape-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2789109945297241,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6688859462738037,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5747630596160889,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0035661160945892334,
+          "meanAbsoluteError": 0.00033884268088182196,
+          "name": "landscape-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5446820259094238,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.09881699085235596,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.05189704895019531,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00599554181098938,
+          "meanAbsoluteError": 0.0003188705720808267,
+          "name": "portrait-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.05286705493927002,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.24879002571105957,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2320319414138794,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.006220638751983643,
+          "meanAbsoluteError": 0.0003106731509200437,
+          "name": "portrait-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.23444104194641113,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5304499864578247,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6115880012512207,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.006004512310028076,
+          "meanAbsoluteError": 0.0003154826848198201,
+          "name": "portrait-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6390500068664551,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.11098802089691162,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07191598415374756,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00023509247694164515,
+          "meanAbsoluteError": 3.306439733326746e-05,
+          "name": "singleton-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.07219910621643066,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.34731101989746094,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.30605602264404297,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00021982943871989846,
+          "meanAbsoluteError": 3.107230683478216e-05,
+          "name": "singleton-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.298753023147583,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6196670532226562,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5260450839996338,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.00029613112565129995,
+          "meanAbsoluteError": 3.515763516285612e-05,
+          "name": "singleton-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5377730131149292,
+          "size": 384
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.0974879264831543,
+          "size": 128
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.05765700340270996,
+          "size": 128
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003488779067993164,
+          "meanAbsoluteError": 0.00033465437893099697,
+          "name": "odd-edge-128",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.06398296356201172,
+          "size": 128
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2679060697555542,
+          "size": 256
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.2344430685043335,
+          "size": 256
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.0034692883491516113,
+          "meanAbsoluteError": 0.00032678959001962774,
+          "name": "odd-edge-256",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.25378501415252686,
+          "size": 256
+        },
+        {
+          "iteration": 0,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.6085131168365479,
+          "size": 384
+        },
+        {
+          "iteration": 1,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5864189863204956,
+          "size": 384
+        },
+        {
+          "iteration": 2,
+          "maximumAbsoluteError": 0.003957927227020264,
+          "meanAbsoluteError": 0.0003351528053446725,
+          "name": "odd-edge-384",
+          "passed": true,
+          "scale": 4,
+          "seconds": 0.5826859474182129,
+          "size": 384
+        }
+      ],
+      "passed": true,
+      "peakPhysicalFootprintBytes": 79610480,
+      "plan": {
+        "evidence": "Core ML anticipated placement; not hardware counters",
+        "preferredOperationCounts": {
+          "ane": 1024,
+          "unknown": 2765
+        },
+        "preferredOperators": {
+          "const": {
+            "unknown": 2765
+          },
+          "ios18.add": {
+            "ane": 93
+          },
+          "ios18.concat": {
+            "ane": 276
+          },
+          "ios18.conv": {
+            "ane": 351
+          },
+          "ios18.leaky_relu": {
+            "ane": 279
+          },
+          "ios18.mul": {
+            "ane": 23
+          },
+          "upsample_nearest_neighbor": {
+            "ane": 2
+          }
+        }
+      },
+      "scale": 4,
+      "specialization": "fastPrediction",
+      "thermalStateAtEnd": 1,
+      "thermalStateAtStart": 1,
+      "units": "all"
+    }
+  },
+  "hardwarePlacement": {
+    "instrument": "Instruments Core ML template via xctrace",
+    "hardware": "Apple M3",
+    "scope": "128-square tensors, 100 validated x4 predictions",
+    "anePredictionIntervals": 100,
+    "anePredictionTotalNanoseconds": 6494837585,
+    "evidence": "RealESRGAN_main_*_Op0_AneInference Prediction intervals in ane-hw-intervals-internal",
+    "limitation": "Correlates native predictions with ANE activity; does not claim zero host CPU overhead or measure total ANE-service memory."
+  },
+  "rejectedTilingCandidates": {
+    "width": 321,
+    "height": 65,
+    "scale": 4,
+    "tileSize": 128,
+    "overlap": 0,
+    "referenceSize": 384,
+    "comparisons": [
+      {
+        "halo": 0,
+        "size": 128,
+        "maximumAbsoluteError": 0.7644074559211731,
+        "meanAbsoluteError": 0.010671141557395458,
+        "passed": false
+      },
+      {
+        "halo": 64,
+        "size": 256,
+        "maximumAbsoluteError": 0.00488707423210144,
+        "meanAbsoluteError": 2.2177906430442818e-05,
+        "passed": false
+      },
+      {
+        "halo": 128,
+        "size": 384,
+        "maximumAbsoluteError": 0.0020276904106140137,
+        "meanAbsoluteError": 5.589871761912946e-06,
+        "passed": false
+      }
+    ]
+  },
+  "limitations": [
+    "No further hardware profiling or performance benchmarks were requested or performed during integration.",
+    "Remote verification uses genuine native models over authenticated loopback, not a two-Mac LAN.",
+    "Interactive UI tests are prohibited; preview state and existing noninteractive geometry tests passed.",
+    "Earlier performance/footprint results apply only to the recorded M3 tensor fixtures and exclude some ANE-service memory.",
+    "Output is bounded at 16,384px per side / 256 million pixels; cache capacity is 128 MiB and remote encoded messages remain bounded at 64 MiB."
+  ],
+  "integration": {
+    "context": {
+      "width": 321,
+      "height": 65,
+      "scale": 4,
+      "tileSize": 64,
+      "halo": 160,
+      "modelSize": 384,
+      "referenceWidth": 512,
+      "referenceHeight": 256,
+      "maximumAbsoluteError": 4.0531158447265625e-06,
+      "meanAbsoluteError": 3.5190967651033134e-07,
+      "passed": true
+    },
+    "native": {
+      "height": 260,
+      "kind": "correctness only; no profiling",
+      "maximumAbsoluteError": 0.006102025508880615,
+      "meanAbsoluteError": 0.0010301799737444928,
+      "passed": true,
+      "width": 1284
+    },
+    "remote": {
+      "passed": true,
+      "results": [
+        {
+          "height": 38,
+          "pixelsIdentical": true,
+          "transport": "authenticated encrypted loopback; real Core ML model on production server backend",
+          "variant": "x2plus",
+          "width": 66
+        },
+        {
+          "height": 76,
+          "pixelsIdentical": true,
+          "transport": "authenticated encrypted loopback; real Core ML model on production server backend",
+          "variant": "x4plus",
+          "width": 132
+        }
+      ]
+    },
+    "profilingPerformed": false,
+    "fullRegression": {
+      "passed": 509,
+      "failed": 0,
+      "skippedOptionalFixtures": 13
+    },
+    "releaseBuild": "passed; release configuration; separate .build/realesrgan-x4/WaifuFinder.app",
+    "publishedInstallerChecks": {
+      "passed": 8,
+      "failed": 0,
+      "skippedOptionalVideoFixture": 1,
+      "realInstalledModelsExecuted": true
+    },
+    "publishedDownloadVerified": true,
+    "x4ConfiguredLocally": true,
+    "finalCodeSignatureVerified": true
+  },
+  "publication": {
+    "repository": "alastorid/RealESRGAN-x4plus-Optimized-CoreML",
+    "revision": "6a598182cd47d83a307fa056db876d2fb23d1b0e",
+    "manifestSHA256": "a95379588b54346070eb98fe86d9ddadac294bc3c43b50fb02c8a6eb1f83a3e1",
+    "supportFilesSHA256": {
+      "LICENSE": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2",
+      "NOTICE": "1121a76a1798914d0938a73a3e79c764ec61c817dd9a3b3ce5b34754d156935a",
+      "README.md": "f3cf048f68fdc5b51aee7c7d7ca24dd845f76efc21e0029562567e3c9d998d65",
+      "validation.json": "57598640eafe49db809f112495d479e0b99622bb0782287e1d1a8b65b7b535c8",
+      "BasicSR-LICENSE": "5447872f21ddc29dc0dc060d5c885513c01c904e9da9931bba69898a6fb4d415",
+      "WaifuFinder-LICENSE": "2565967c852dfa92a04a6b97722c21f985973601b251ef55328c6fd957155540"
+    }
+  }
+}

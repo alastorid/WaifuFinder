@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import CoreMedia
+import CoreImage
 import Foundation
 import Network
 
@@ -853,6 +854,18 @@ private func registerRemoteEndToEndTests(suite: String) {
         try await queuedTaggingCase()
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "both remote tagging servers fill their request windows concurrently", knownBug: nil) {
+        try await dualServerTaggingWindowCase()
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "two serial inference servers increase aggregate tagging throughput", knownBug: nil) {
+        try await dualServerTaggingThroughputCase()
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "negotiated lossless tagging input crosses the encrypted connection", knownBug: nil) {
+        try await compressedTaggingCase()
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "cancelling queued tagging joins all server tasks and releases the cancelled model", knownBug: nil) {
         try await queuedTaggingCancellationCase()
     })
@@ -977,6 +990,150 @@ private func taggingCase(vocabulary: TagVocabulary) async throws {
     checkEqual(encoded.count, images.count, "the encoded codec also returns one row per image")
     check(encoded.allSatisfy { TagProbabilityCodec.decode($0.scores)?.count == TagVocabulary.headCount }, "and every row is complete")
     checkEqual(tagger.batches, 4, "the third batch reached the server too")
+}
+
+@MainActor
+private func dualServerTaggingWindowCase() async throws {
+    let vocabulary = try VocabularyFixture.make()
+    let firstProbe = RemoteTagWindowProbe(), secondProbe = RemoteTagWindowProbe()
+    let first = try LoopbackPair(catalog: StubCatalog.tagging(StubTagger(vocabulary: vocabulary, windowProbe: firstProbe), vocabulary: vocabulary), key: remoteTestKey())
+    let second = try LoopbackPair(catalog: StubCatalog.tagging(StubTagger(vocabulary: vocabulary, windowProbe: secondProbe), vocabulary: vocabulary), key: remoteTestKey())
+    defer { first.tearDown(); second.tearDown() }
+    guard await first.connect(), await second.connect() else { throw TaggerError.invalidBatch }
+    await first.client.loadVocabularyIfNeeded(); await second.client.loadVocabularyIfNeeded()
+    let backend = BalancedTaggerBackend(lanes: [first.client, second.client].map {
+        .init(backend: RemoteTaggerBackend(client: $0, threshold: 0.35, vocabularyFingerprint: vocabulary.cacheFingerprint),
+              capacity: RemoteLimits.taggingBatchWindow)
+    })
+    let jpeg = try ThumbnailCache.encodeJPEG(ImageFixture.rgbGradient())
+    try await withThrowingTaskGroup(of: Int.self) { group in
+        for _ in 0..<backend.maximumInFlight {
+            group.addTask { try await backend.tag(sources: [.thumbnail(jpeg)]).count }
+        }
+        for try await count in group { checkEqual(count, 1, "every submitted frame returns exactly once") }
+    }
+    checkEqual(await firstProbe.arrived, 8, "first server receives its whole tagging window")
+    checkEqual(await secondProbe.arrived, 8, "second server receives its whole tagging window")
+}
+
+private actor RemoteScalingOverlap {
+    private var active = Set<Int>()
+    private(set) var peak = 0
+    func begin(_ id: Int) { active.insert(id); peak = max(peak, active.count) }
+    func end(_ id: Int) { active.remove(id) }
+    func reset() { active = []; peak = 0 }
+}
+
+/// One serial model per server, with preparation, encryption and TCP supplied by
+/// production code. The fixed delay models GPU work rather than parallel sleeps.
+private actor RemoteScalingGPU: TaggerBackend {
+    let id: Int
+    let overlap: RemoteScalingOverlap
+    let result: TagResult
+    private var tail: Task<Void, Error>?
+    private(set) var batches = 0
+
+    init(id: Int, overlap: RemoteScalingOverlap, vocabulary: TagVocabulary) throws {
+        self.id = id; self.overlap = overlap
+        var scores = [Float](repeating: 0, count: TagVocabulary.headCount)
+        scores[0] = 0.9; scores[1] = 0.1; scores[7] = 0.7
+        var result = try vocabulary.result(probabilities: scores, threshold: 0.35)
+        result.encodedProbabilities = TagProbabilityCodec.encode(scores)
+        self.result = result
+    }
+
+    func reset() { tail = nil; batches = 0 }
+
+    func tag(batch: [CGImage]) async throws -> [TagResult] {
+        let previous = tail
+        let work = Task { [overlap, id] in
+            try await previous?.value
+            try Task.checkCancellation()
+            await overlap.begin(id)
+            do { try await Task.sleep(for: .milliseconds(150)) }
+            catch { await overlap.end(id); throw error }
+            await overlap.end(id)
+        }
+        tail = work
+        try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
+        batches += 1
+        return Array(repeating: result, count: batch.count)
+    }
+}
+
+private actor RemoteScalingQueue {
+    private var position = 0
+    private(set) var committed: [Int] = []
+    func next() -> [Int] {
+        guard position < 16 else { return [] }
+        defer { position += 1 }
+        return [position]
+    }
+    func commit(_ index: Int) { committed.append(index) }
+}
+
+@MainActor
+private func dualServerTaggingThroughputCase() async throws {
+    let vocabulary = try VocabularyFixture.make(), overlap = RemoteScalingOverlap()
+    let firstGPU = try RemoteScalingGPU(id: 0, overlap: overlap, vocabulary: vocabulary)
+    let secondGPU = try RemoteScalingGPU(id: 1, overlap: overlap, vocabulary: vocabulary)
+    var firstCatalog = StubCatalog.tagging(StubTagger(vocabulary: vocabulary), vocabulary: vocabulary)
+    firstCatalog.tagger = { firstGPU }
+    var secondCatalog = firstCatalog
+    secondCatalog.tagger = { secondGPU }
+    let first = try LoopbackPair(catalog: firstCatalog, key: remoteTestKey())
+    let second = try LoopbackPair(catalog: secondCatalog, key: remoteTestKey())
+    defer { first.tearDown(); second.tearDown() }
+    guard await first.connect(), await second.connect() else { throw TaggerError.invalidBatch }
+    await first.client.loadVocabularyIfNeeded(); await second.client.loadVocabularyIfNeeded()
+    let jpeg = try ThumbnailCache.encodeJPEG(ImageFixture.rgbGradient())
+    let sources = Array(repeating: TaggingImageSource.thumbnail(jpeg), count: 8)
+    let run: @Sendable ([RemoteClient]) async throws -> Double = { clients in
+        let backend = BalancedTaggerBackend(lanes: clients.map {
+            .init(backend: RemoteTaggerBackend(client: $0, threshold: 0.35, vocabularyFingerprint: vocabulary.cacheFingerprint),
+                  capacity: RemoteLimits.taggingBatchWindow)
+        })
+        let queue = RemoteScalingQueue(), started = Date()
+        try await TaggingBatchPipeline.runPipelined(maximumInFlight: backend.maximumInFlight, commitInOrder: false,
+            next: { await queue.next() }, whenEmpty: { false },
+            process: { indices in
+                let rows = try await backend.tag(sources: sources)
+                guard rows.count == sources.count else { throw TaggerError.invalidProbabilities }
+                return indices[0]
+            }, commit: { await queue.commit($0) })
+        checkEqual(await queue.committed.sorted(), Array(0..<16), "all 128 images finish exactly once")
+        return Date().timeIntervalSince(started)
+    }
+    let single = try await run([first.client])
+    await firstGPU.reset(); await overlap.reset()
+    let dual = try await run([first.client, second.client])
+    checkEqual(await overlap.peak, 2, "two serial model workers compute at the same time")
+    let firstBatches = await firstGPU.batches, secondBatches = await secondGPU.batches
+    check(firstBatches > 0 && secondBatches > 0, "both inference servers consume the tagging queue")
+    checkEqual(firstBatches + secondBatches, 16, "no batch is inferred twice")
+    check(dual < single * 0.8, "two servers materially increase aggregate throughput")
+    print(String(format: "      synthetic serial GPU + real encrypted sockets, 128 images: 1 server %.2fs; 2 servers %.2fs (%.2f×)", single, dual, single / dual))
+}
+
+@MainActor
+private func compressedTaggingCase() async throws {
+    let vocabulary = try VocabularyFixture.make()
+    let tagger = StubTagger(vocabulary: vocabulary)
+    var catalog = StubCatalog.tagging(tagger, vocabulary: vocabulary)
+    let capabilities = catalog.capabilities
+    catalog.capabilities = { version, name, session in
+        var value = await capabilities(version, name, session)
+        value.tagger?.inputCodecs = RemoteTagImageCodec.allCases.map(\.rawValue)
+        return value
+    }
+    let pair = try LoopbackPair(catalog: catalog, key: remoteTestKey())
+    defer { pair.tearDown() }
+    guard await pair.connect() else { throw TaggerError.invalidBatch }
+    let images = [try ImageFixture.rgbGradient()]
+    let rows = try await pair.client.tag(images: images, codec: .rgba8)
+    let reference = try RemoteTagScorePayload.encode(await tagger.tag(batch: images), fingerprint: vocabulary.cacheFingerprint)
+    let expected = try RemoteTagScorePayload.decode(reference, count: images.count, fingerprint: vocabulary.cacheFingerprint)
+    checkEqual(rows, expected, "negotiated lossless transport returns identical quantized rows")
 }
 
 @MainActor
@@ -1557,4 +1714,138 @@ func registerSafireLoopbackTests() {
             }
         }.value
     })
+}
+
+func registerRealESRGANRemoteTests() {
+    let suite="RealESRGAN remote"
+    @Sendable func capabilities() -> RemoteCapabilities {
+        RemoteCapabilities(protocolVersion:RemoteCapabilities.protocolVersion,appVersion:"test",serverName:"RealESRGAN",sessionID:nil,tagger:nil,
+            uncover:RealESRGANVariant.allCases.map { variant in
+                .init(algorithm:variant.algorithm.rawValue,available:true,message:variant.modelName,
+                    scales:[1,2,4],minimumFrames:1,requiresUnsafeMemoryOptIn:false,maximumPaddedArea:nil,
+                    maximumOutputPixels:16_000_000,outputScale:1,supportsStillPhotos:true,
+                    imageModelFingerprint:variant.weightsSHA256,imageRuntimeRevision:RealESRGANVariant.runtimeRevision)
+            },vision:.init(available:true))
+    }
+    Registry.shared.add(suite:suite,TestCase(name:"legacy and x2-only servers never imply x4 photo compatibility",knownBug:nil) {
+        var caps=capabilities()
+        caps.uncover.removeAll { $0.algorithm == UncoverAlgorithm.realESRGANFour.rawValue }
+        check(caps.offersRealESRGAN(.x2plus),"x2 capability recognized")
+        check(!caps.offersRealESRGAN(.x4plus),"x2 does not imply x4")
+        caps.uncover[0].imageRuntimeRevision=nil
+        check(!caps.offersRealESRGAN(.x2plus),"legacy reconstruction lacks native-photo protocol")
+        caps.uncover[0].imageRuntimeRevision=RealESRGANVariant.runtimeRevision
+        caps.uncover[0].imageModelFingerprint=RealESRGANVariant.x4plus.weightsSHA256
+        check(!caps.offersRealESRGAN(.x2plus),"wrong checkpoint excluded")
+    })
+    Registry.shared.add(suite:suite,TestCase(name:"actual x2 and x4 execute on authenticated server and match local pixels",knownBug:nil) {
+        let env=ProcessInfo.processInfo.environment
+        guard let x2=env["WAIFU_TEST_REALESRGAN_X2"],let x4=env["WAIFU_TEST_REALESRGAN_X4"] else { throw SkipTest(reason:"set native x2/x4 model paths for actual remote inference") }
+        let paths:[RealESRGANVariant:URL]=[.x2plus:URL(fileURLWithPath:x2),.x4plus:URL(fileURLWithPath:x4)]
+        let advertised=capabilities()
+        try await Task { @MainActor in
+            var catalog=StubCatalog.uncoverOnly()
+            catalog.backend={ algorithm in
+                let variant=algorithm.realESRGANVariant ?? .x2plus
+                return RealESRGANBackend(variant:variant,modelURL:paths[variant])
+            }
+            catalog.capabilities={ _,_,_ in advertised }
+            let pair=try LoopbackPair(catalog:catalog,key:remoteTestKey())
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("RealESRGAN loopback did not authenticate") }
+            var evidence:[[String:Any]]=[]
+            for variant in RealESRGANVariant.allCases {
+                let input=PreviewEvidenceInput(photoURL:URL(fileURLWithPath:"/remote-realesrgan.png"),image:try realESRGANFixture(),isOriginal:true)
+                let local=try await RealESRGANImageRuntime.shared.prepare(input,variant:variant)
+                let remote=try await RealESRGANImageRuntime.shared.prepare(input,variant:variant)
+                defer { try? FileManager.default.removeItem(at:local.directory);try? FileManager.default.removeItem(at:remote.directory) }
+                let expected=try await RealESRGANBackend(variant:variant,modelURL:paths[variant]).reconstruct(local,allowUnsafeMemory:false,progress:{ _ in })
+                let returned=try await RemoteUncoverBackend(algorithm:variant.algorithm,client:pair.client).reconstruct(remote,allowUnsafeMemory:false,progress:{ _ in })
+                let a=try await RealESRGANImageRuntime.shared.read(expected,variant:variant)
+                let b=try await RealESRGANImageRuntime.shared.read(returned,variant:variant)
+                checkEqual(b.width,input.image.width*variant.scale,"native remote width")
+                checkEqual(b.height,input.image.height*variant.scale,"native remote height")
+                let identical = try NativeSpatialUpscaler.straightRGBPixels(a) == NativeSpatialUpscaler.straightRGBPixels(b)
+                check(identical,"actual local/remote pixels identical")
+                evidence.append(["variant":variant.rawValue,"width":b.width,"height":b.height,"pixelsIdentical":identical,"transport":"authenticated encrypted loopback; real Core ML model on production server backend"])
+            }
+            if let path=env["WAIFU_TEST_REALESRGAN_REMOTE_REPORT"] {
+                try JSONSerialization.data(withJSONObject:["passed":evidence.allSatisfy { $0["pixelsIdentical"] as? Bool == true },"results":evidence],options:[.prettyPrinted,.sortedKeys]).write(to:URL(fileURLWithPath:path))
+            }
+        }.value
+    })
+    Registry.shared.add(suite:suite,TestCase(name:"photo cancellation preserves authentication for the next request",knownBug:nil) {
+        let advertised=capabilities()
+        try await Task { @MainActor in
+            let gate=RealPhotoCancellationGate()
+            var catalog=StubCatalog.uncoverOnly()
+            catalog.capabilities={ _,_,_ in advertised }
+            catalog.backend={ _ in CancellableRealPhotoBackend(gate:gate) }
+            let pair=try LoopbackPair(catalog:catalog,key:remoteTestKey());defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("Photo cancellation loopback failed") }
+            let input=PreviewEvidenceInput(photoURL:URL(fileURLWithPath:"/cancel-photo.png"),image:try realESRGANFixture(),isOriginal:true)
+            let first=try await RealESRGANImageRuntime.shared.prepare(input,variant:.x4plus)
+            let second=try await RealESRGANImageRuntime.shared.prepare(input,variant:.x4plus)
+            defer { try? FileManager.default.removeItem(at:first.directory);try? FileManager.default.removeItem(at:second.directory) }
+            let task=Task { try await RemoteUncoverBackend(algorithm:.realESRGANFour,client:pair.client).reconstruct(first,allowUnsafeMemory:false,progress:{ _ in }) }
+            for _ in 0..<500 {
+                if await gate.started { break }
+                try await Task.sleep(for:.milliseconds(10))
+            }
+            check(await gate.started,"server began first photo")
+            task.cancel()
+            do { _ = try await task.value;check(false,"cancelled photo must fail") } catch { }
+            check(pair.client.status.isConnected,"photo cancellation keeps authenticated connection")
+            let result=try await RemoteUncoverBackend(algorithm:.realESRGANFour,client:pair.client).reconstruct(second,allowUnsafeMemory:false,progress:{ _ in })
+            checkEqual(result.outputScale,4,"next request succeeds on same connection")
+        }.value
+    })
+    Registry.shared.add(suite:suite,TestCase(name:"wrong response identity and image geometry are rejected",knownBug:nil) {
+        let advertised=capabilities()
+        try await Task { @MainActor in
+            for wrongIdentity in [true,false] {
+                var catalog=StubCatalog.uncoverOnly()
+                catalog.backend={ _ in InvalidRealESRGANResponse(wrongIdentity:wrongIdentity) }
+                catalog.capabilities={ _,_,_ in advertised }
+                let pair=try LoopbackPair(catalog:catalog,key:remoteTestKey());defer { pair.tearDown() }
+                guard await pair.connect() else { throw ModelInstaller.fail("RealESRGAN rejection loopback failed") }
+                let input=PreviewEvidenceInput(photoURL:URL(fileURLWithPath:"/wrong.png"),image:try realESRGANFixture(),isOriginal:true)
+                let prepared=try await RealESRGANImageRuntime.shared.prepare(input,variant:.x4plus)
+                defer { try? FileManager.default.removeItem(at:prepared.directory) }
+                do {
+                    _ = try await RemoteUncoverBackend(algorithm:.realESRGANFour,client:pair.client).reconstruct(prepared,allowUnsafeMemory:false,progress:{ _ in })
+                    check(false,"invalid RealESRGAN response must fail")
+                } catch { check(error.localizedDescription.contains(wrongIdentity ? "identity" : "dimensions"),"expected response validation rejects the reply") }
+            }
+        }.value
+    })
+}
+
+private struct InvalidRealESRGANResponse: TemporalVideoUpscaler {
+    let wrongIdentity: Bool
+    func capabilities() async -> UpscalerCapabilities { .init(available:true,message:"test",scales:[.one],minimumFrames:1,requiresUnsafeMemoryOptIn:false) }
+    func reconstruct(_ prepared:UncoverPrepared,allowUnsafeMemory:Bool,progress:@escaping @Sendable(String)->Void) async throws -> UncoverResult {
+        try FileManager.default.copyItem(at:RegionImages.frameURL(prepared.directory,"degraded",0),to:RegionImages.frameURL(prepared.directory,"reconstructed",0))
+        return UncoverResult(prepared:prepared,model:wrongIdentity ? "incorrect checkpoint" : RealESRGANVariant.x4plus.modelName,seconds:0,outputScale:4)
+    }
+}
+
+private actor RealPhotoCancellationGate {
+    var started = false
+    private var count = 0
+    func enter() async throws {
+        count += 1; started = true
+        if count == 1 { try await Task.sleep(for:.seconds(30)) }
+    }
+}
+private struct CancellableRealPhotoBackend: TemporalVideoUpscaler {
+    let gate: RealPhotoCancellationGate
+    func capabilities() async -> UpscalerCapabilities { .init(available:true,message:"test",scales:[.one],minimumFrames:1,requiresUnsafeMemoryOptIn:false) }
+    func reconstruct(_ prepared:UncoverPrepared,allowUnsafeMemory:Bool,progress:@escaping @Sendable(String)->Void) async throws -> UncoverResult {
+        try await gate.enter()
+        let original=try RegionImages.read(RegionImages.frameURL(prepared.directory,"degraded",0))
+        let image=try RegionImages.resize(original,to:CGSize(width:original.width*4,height:original.height*4),context:CIContext())
+        try RegionImages.write(image,to:RegionImages.frameURL(prepared.directory,"reconstructed",0))
+        return UncoverResult(prepared:prepared,model:RealESRGANVariant.x4plus.modelName,seconds:0,outputScale:4)
+    }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import ImageIO
 
 /// Handles export directory selection and results for the toolbar Export action.
 ///
@@ -80,6 +81,170 @@ struct ExportPanel: View {
     }
 }
 
+/// Preview exports use the already-rendered model output rather than the source frame.
+struct PreviewExportPanel: View {
+    @ObservedObject var session: WaifuSession
+    @Binding var isPresented: Bool
+    let frame: AnalyzedFrame
+    let photoURL: URL?
+    let evidenceInput: PreviewEvidenceInput?
+    @ObservedObject var realESRGAN: RealESRGANPreviewModel
+    @ObservedObject var trufor: TruForPreviewModel
+    let truforEnabled: Bool
+    @ObservedObject var safire: SafirePreviewModel
+    let safireEnabled: Bool
+
+    @State private var exportResults: [ExportResult] = []
+    @State private var exportError: String?
+    @State private var showResults = false
+    @State private var selectedDirectory: URL?
+
+    var body: some View {
+        Color.clear
+            .onAppear { if isPresented { presentFolderPicker() } }
+            .onChange(of: isPresented) { _, presented in
+                if presented { presentFolderPicker() }
+            }
+            .sheet(isPresented: $showResults) {
+                ExportResultsSheet(results: exportResults, error: exportError, directory: selectedDirectory)
+            }
+    }
+
+    private var hasProcessedSelection: Bool {
+        photoURL != nil && (realESRGAN.selection != nil || truforEnabled || safireEnabled)
+    }
+
+    private func presentFolderPicker() {
+        selectedDirectory = nil
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Save"
+        panel.title = "Choose Export Folder"
+        panel.message = "Choose where to save the preview images."
+        panel.begin { response in
+            isPresented = false
+            guard response == .OK, let directory = panel.url else { return }
+            selectedDirectory = directory
+            startExport(to: directory)
+        }
+    }
+
+    private func startExport(to directory: URL) {
+        exportResults = []
+        exportError = nil
+        Task {
+            let scopedAccess = directory.startAccessingSecurityScopedResource()
+            defer { if scopedAccess { directory.stopAccessingSecurityScopedResource() } }
+            do {
+                let results = hasProcessedSelection
+                    ? try await exportProcessedImages(to: directory)
+                    : try await exportOriginalSelection(to: directory)
+                exportResults = results
+            } catch {
+                exportError = error.localizedDescription
+            }
+            showResults = true
+        }
+    }
+
+    private func exportOriginalSelection(to directory: URL) async throws -> [ExportResult] {
+        if session.selectedFrameIDs.isEmpty {
+            return try await session.exportFrames([frame.id], to: directory)
+        }
+        return try await session.exportSelection(to: directory)
+    }
+
+    private func exportProcessedImages(to directory: URL) async throws -> [ExportResult] {
+        guard let photoURL, let input = evidenceInput, input.photoURL == photoURL else {
+            throw PreviewImageExportFailure.photoUnavailable
+        }
+        let sourceStem = photoURL.deletingPathExtension().lastPathComponent
+        let frameID = frame.id
+        let quality = session.settings.exportJPEGQuality
+        let truforSnapshot = truforEnabled ? try trufor.exportSnapshot(inputID: input.id) : nil
+        var safireImages: [(image: CGImage, suffix: String)] = []
+        if safireEnabled {
+            guard safire.photoURL == photoURL, safire.inputID == input.id,
+                  let overlay = safire.overlayPixels, let mask = safire.maskPixels else {
+                throw PreviewImageExportFailure.modelStillProcessing("SAFIRE")
+            }
+            safireImages = [(overlay, "safire-overlay"), (mask, "safire-mask")]
+        }
+        var realESRGANImage: (image: CGImage, suffix: String, format: ExportFormat)?
+        if let variant = realESRGAN.selection {
+            guard realESRGAN.outputInputID == input.id,
+                  let rendered = realESRGAN.image(for: input),
+                  let image = Self.cgImage(from: rendered) else {
+                throw PreviewImageExportFailure.modelStillProcessing("RealESRGAN")
+            }
+            realESRGANImage = (image, "realesrgan-\(variant.label)", session.settings.exportFormat)
+        }
+        var results: [ExportResult] = []
+
+        if let snapshot = truforSnapshot {
+            for mode in TruForDisplay.allCases {
+                try Task.checkCancellation()
+                let image = try await TruForEvidenceRenderer.shared.render(
+                    original: snapshot.original, evidence: snapshot.evidence, mode: mode)
+                let result = try await Task.detached(priority: .utility) {
+                    try ProcessedPreviewImageExporter.write(image, sourceStem: sourceStem,
+                        frameID: frameID, suffix: mode.exportSuffix, directory: directory,
+                        format: .png, jpegQuality: quality)
+                }.value
+                results.append(result)
+            }
+        }
+
+        if !safireImages.isEmpty {
+            for (image, suffix) in safireImages {
+                try Task.checkCancellation()
+                let result = try await Task.detached(priority: .utility) {
+                    try ProcessedPreviewImageExporter.write(image, sourceStem: sourceStem,
+                        frameID: frameID, suffix: suffix, directory: directory,
+                        format: .png, jpegQuality: quality)
+                }.value
+                results.append(result)
+            }
+        }
+
+        if let realESRGANImage {
+            let result = try await Task.detached(priority: .utility) {
+                try ProcessedPreviewImageExporter.write(realESRGANImage.image, sourceStem: sourceStem,
+                    frameID: frameID, suffix: realESRGANImage.suffix, directory: directory,
+                    format: realESRGANImage.format, jpegQuality: quality)
+            }.value
+            results.append(result)
+        }
+
+        guard !results.isEmpty else { throw PreviewImageExportFailure.noProcessedOutput }
+        return results
+    }
+
+    private static func cgImage(from image: NSImage) -> CGImage? {
+        var bounds = CGRect(origin: .zero, size: image.size)
+        return image.cgImage(forProposedRect: &bounds, context: nil, hints: nil)
+    }
+}
+
+private enum PreviewImageExportFailure: LocalizedError {
+    case photoUnavailable
+    case modelStillProcessing(String)
+    case noProcessedOutput
+
+    var errorDescription: String? {
+        switch self {
+        case .photoUnavailable:
+            "The preview photo is not ready to export. Try again after it finishes loading."
+        case .modelStillProcessing(let model):
+            "\(model) is still processing this photo. Wait for it to finish, then export again."
+        case .noProcessedOutput:
+            "No processed preview images are ready to export."
+        }
+    }
+}
+
 /// A sheet showing the results of an export operation.
 private struct ExportResultsSheet: View {
     let results: [ExportResult]
@@ -122,7 +287,7 @@ private struct ExportResultsSheet: View {
             if !results.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(results, id: \.frameID) { result in
+                        ForEach(results, id: \.url) { result in
                             ExportResultRow(result: result)
                         }
                     }

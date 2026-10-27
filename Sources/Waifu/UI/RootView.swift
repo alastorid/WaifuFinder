@@ -358,12 +358,13 @@ struct RootView: View {
     }
 
     private var exportButton: some View {
-        Button { session.showExportSheet = true } label: {
-            Label("Export selected frames", systemImage: "square.and.arrow.up")
+        Button { session.requestExport() } label: {
+            Label(session.previewFrame == nil ? "Export selected frames" : "Export preview",
+                  systemImage: "square.and.arrow.up")
         }
         .labelStyle(.iconOnly)
         .frame(width: 30)
-        .disabled(session.selectedFrameIDs.isEmpty || session.uncover != nil)
+        .disabled((session.previewFrame == nil && session.selectedFrameIDs.isEmpty) || session.uncover != nil)
         .keyboardShortcut("e", modifiers: .command)
     }
 

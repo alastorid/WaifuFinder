@@ -1,9 +1,5 @@
 import SwiftUI
 
-private extension Notification.Name {
-    static let photosFavoriteDidUpdate = Notification.Name("WaifuPhotosFavoriteDidUpdate")
-}
-
 /// Favorite writes stay on the thumbnail and don't change grid selection.
 struct PhotosFavoriteButton: View {
     let url: URL

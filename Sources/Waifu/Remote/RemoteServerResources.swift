@@ -200,17 +200,24 @@ actor RemoteTagSession {
 
 /// The images a tagging batch can carry.
 ///
-/// Two codecs, and the choice is per frame rather than per batch: a video frame
-/// already has a JPEG in the thumbnail cache and that JPEG is what travels,
-/// while a Photos rendition is already at model size and is handed over as the
-/// pixels the model would have received anyway. Neither path re-encodes.
-enum RemoteTagImageCodec: UInt8 {
+/// Selected per batch: cached JPEG/PNG containers for video, or exact model-size
+/// RGBA pixels for Photos, optionally losslessly compressed when negotiated.
+enum RemoteTagImageCodec: UInt8, CaseIterable, Sendable {
     /// A JPEG or PNG container, decoded by the server at analysis resolution.
     case encoded
     /// Raw RGBA8 at exactly `WDTaggerBackend.imageSize` square.
     case rgba8
+    /// Exact model-input RGBA bytes, compressed with Apple's LZ4 implementation.
+    /// Used only when the serving peer advertises this codec.
+    case rgba8LZ4
 
-    var name: String { self == .encoded ? "encoded" : "rgba8" }
+    var name: String {
+        switch self {
+        case .encoded: "encoded"
+        case .rgba8: "rgba8"
+        case .rgba8LZ4: "rgba8LZ4"
+        }
+    }
 }
 
 /// Decodes one received image to a `CGImage` without an intermediate file.
@@ -219,6 +226,8 @@ enum RemoteTagImageDecoder {
         switch codec {
         case .encoded:
             return try WDTaggerBackend.thumbnailImage(data: Data(bytes))
+        case .rgba8LZ4:
+            return try decode(codec: .rgba8, bytes: RemoteTagInputCompression.decode(bytes))
         case .rgba8:
             let side = WDTaggerBackend.imageSize
             guard bytes.count == side * side * 4 else {

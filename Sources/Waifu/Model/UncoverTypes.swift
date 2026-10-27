@@ -95,6 +95,7 @@ struct UncoverManifest: Codable, Sendable {
     let regionHeight: Int
     let scale: UncoverScale
     let frames: [UncoverFrame]
+    var realESRGANImage: RealESRGANImageRequest? = nil
 }
 
 struct UncoverPrepared: Sendable {
@@ -154,15 +155,17 @@ extension TemporalVideoUpscaler {
 }
 
 enum UncoverAlgorithm: String, CaseIterable, Sendable {
-    case seedVR2, seedVR2SevenB, flashVSR11, pgtFormer, realESRGAN
-    var supportsStillPhotos: Bool { self == .realESRGAN }
+    case seedVR2, seedVR2SevenB, flashVSR11, pgtFormer, realESRGAN, realESRGANFour
+    var realESRGANVariant: RealESRGANVariant? { self == .realESRGAN ? .x2plus : (self == .realESRGANFour ? .x4plus : nil) }
+    var supportsStillPhotos: Bool { self == .realESRGAN || self == .realESRGANFour }
     var label: String {
         switch self {
         case .seedVR2: return "SeedVR2 3B"
         case .seedVR2SevenB: return "SeedVR2 7B"
         case .flashVSR11: return "FlashVSR 1.1"
         case .pgtFormer: return "PGTFormer"
-        case .realESRGAN: return "RealESRGAN"
+        case .realESRGAN: return "RealESRGAN x2"
+        case .realESRGANFour: return "RealESRGAN x4"
         }
     }
     /// The algorithms this build is licensed to offer.
@@ -182,6 +185,7 @@ enum UncoverAlgorithm: String, CaseIterable, Sendable {
         case .flashVSR11: return FlashVSRBackend()
         case .pgtFormer: return PGTFormerBackend()
         case .realESRGAN: return RealESRGANBackend()
+        case .realESRGANFour: return RealESRGANBackend(variant: .x4plus)
         }
     }
 }

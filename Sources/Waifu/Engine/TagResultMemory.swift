@@ -99,6 +99,24 @@ struct TagResultCacheKeys: Hashable, Sendable {
         return source.map { [$0] } ?? []
     }
 
+    /// Our own keyword writes change PhotoKit's modification date without
+    /// changing the pixels. Save the same scores under the confirmed post-write
+    /// revisions too, so they remain reachable after the app restarts. Never
+    /// extend this exception to an unknown asset or changed pixel geometry.
+    func afterPhotoMetadataWrite(_ assets: [PhotosMedia.AssetCacheKey]) -> TagResultCacheKeys {
+        let updated = Dictionary(assets.map { ("photos-asset-v1/\($0.identifier)", $0) },
+                                 uniquingKeysWith: { _, latest in latest })
+        var revised: [Int: TagResultCacheIdentity] = [:]
+        for (index, identity) in bySampleIndex {
+            guard let asset = updated[identity.sourcePath],
+                  identity.sourceSize == (UInt64(asset.pixelWidth) << 32) | UInt64(asset.pixelHeight) else { continue }
+            revised[index] = TagResultCacheIdentity(sourcePath: identity.sourcePath,
+                sourceSize: identity.sourceSize, sourceModifiedMilliseconds: asset.modifiedMilliseconds,
+                analysisWidth: identity.analysisWidth, vocabularyFingerprint: identity.vocabularyFingerprint)
+        }
+        return TagResultCacheKeys(source: nil, bySampleIndex: revised)
+    }
+
     /// Photos frames are keyed individually; every other source is a file.
     static func make(videoURL: URL?, frames: [AnalyzedFrame], vocabulary: TagVocabulary?,
                      analysisWidth: Int, analysisMode: AnalysisMode) -> TagResultCacheKeys {

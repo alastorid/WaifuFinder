@@ -33,6 +33,32 @@ enum FrameFaceFilter: String, CaseIterable, Identifiable, Hashable, Sendable, Co
     }
 }
 
+/// The Photos-library favorite state filter. Non-Photos sources do not expose
+/// favorite state and therefore keep this control hidden.
+enum FrameFavoriteFilter: String, CaseIterable, Identifiable, Hashable, Sendable, Codable {
+    case all
+    case favorite
+    case notFavorite
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: return "All"
+        case .favorite: return "Favorite"
+        case .notFavorite: return "Not Favorite"
+        }
+    }
+
+    func admits(_ isFavorite: Bool) -> Bool {
+        switch self {
+        case .all: return true
+        case .favorite: return isFavorite
+        case .notFavorite: return !isFavorite
+        }
+    }
+}
+
 /// Required tags compose with face and numeric filters; unwanted tags exclude matches.
 struct TagFilter: Equatable, Sendable, Codable {
     var requiredTags: Set<String> = []

@@ -59,7 +59,7 @@ struct UncoverVideoExporter {
         writer.add(input)
         guard writer.startWriting() else { throw UncoverError.invalid(writer.error?.localizedDescription ?? "Cannot start export.") }
         writer.startSession(atSourceTime: .zero)
-        let context = CIContext(options: [.cacheIntermediates: false])
+        let context = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
         let renderer = UncoverRenderer()
         let first = manifest.frames[0].timestamp.time
         do {

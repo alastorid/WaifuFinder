@@ -27,6 +27,14 @@ ROOT = Path(__file__).resolve().parent.parent
 
 BUNDLES = [
     {
+        "directory": "RealESRGAN-x4plus-Optimized-CoreML",
+        "release": "realesrgan-x4plus-release.json",
+        "support": ["LICENSE", "NOTICE", "README.md", "validation.json", "BasicSR-LICENSE", "WaifuFinder-LICENSE"],
+        "tags": ["coreml", "apple-silicon", "waifufinder", "real-esrgan", "image-super-resolution"],
+        "license": "bsd-3-clause", "license_name": None, "license_note": None,
+        "private": False, "acknowledgement": None,
+    },
+    {
         "directory": "SAFIRE-Swift-MLX", "release": "safire-release.json",
         "support": ["LICENSE", "APACHE-LICENSE", "KMEANS-LICENSE", "OPENCV-LICENSE", "NOTICE", "README.md", "validation.json", "profiles.json"],
         "tags": ["safetensors", "mlx", "metal", "apple-silicon", "waifufinder", "image-forensics", "image-segmentation"],
@@ -244,6 +252,22 @@ def publish(api, bundle, directory: Path, organization: str, stage: Path) -> tup
     # on every re-publish, so the bytes on the Hub — and the revision the descriptor
     # pins — would change each time for no reason.
     readme = card(bundle, staging, repository)
+    if bundle["release"] == "realesrgan-x4plus-release.json":
+        # Use the existing pipeline with an HTTP-only Hub upload for x4. No
+        # external version-control/LFS executable is needed for model publishing.
+        if api is None or not hasattr(api, "upload_folder"):
+            raise SystemExit("x4 publication requires HF_TOKEN and an audited huggingface_hub environment")
+        api.create_repo(repository, repo_type="model", private=False, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="waifu-hf-x4-") as work:
+            checkout = Path(work) / "bundle"
+            shutil.copytree(staging, checkout)
+            (checkout / "README.md").write_text(readme)
+            commit = api.upload_folder(repo_id=repository, repo_type="model", folder_path=checkout,
+                commit_message="Publish validated official RealESRGAN x4plus FP16 Core ML")
+        revision = commit.oid
+        if api.model_info(repository, revision=revision).sha != revision:
+            raise SystemExit("Published x4 revision could not be verified")
+        return revision, readme
     if remote_sha(repository) is None:
         create_repo(api, bundle, repository)
     print(f"publishing {repository}")
@@ -296,13 +320,31 @@ def main() -> None:
             print("...")
         return
 
-    # Uploading uses SSH, so a token is only needed to create a repository that does
-    # not exist yet. Everything else works with the registered key alone.
+    # x4 uses authenticated HTTP uploads. Legacy bundle publishing retains its
+    # existing transport; only explicitly selected bundles are uploaded.
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
     api = None
     if token:
-        from huggingface_hub import HfApi
-        api = HfApi(token=token)
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi(token=token)
+        except ImportError:
+            # Repository creation and account lookup need only two Hub API calls.
+            # Keep audited conversion environments free of extra dependencies.
+            import urllib.request
+            class RepositoryAPI:
+                def request(self, path, payload=None):
+                    data = None if payload is None else json.dumps(payload).encode()
+                    request = urllib.request.Request("https://huggingface.co/api/" + path, data=data,
+                        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        return json.load(response)
+                def whoami(self): return self.request("whoami-v2")
+                def create_repo(self, repository, repo_type, private, exist_ok):
+                    organization, name = repository.split("/", 1)
+                    return self.request("repos/create", {"type": repo_type, "organization": organization,
+                        "name": name, "private": private})
+            api = RepositoryAPI()
         print(f"publishing as {api.whoami()['name']} to {arguments.organization}")
     else:
         print(f"no HF_TOKEN: pushing over SSH as the registered key, to {arguments.organization}")

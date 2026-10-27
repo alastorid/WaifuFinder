@@ -89,22 +89,23 @@ echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $T
 
 echo "==> Running"
 TEST_EXECUTABLE="$BUILD/waifu-tests"
-if [ "${WAIFU_TEST_PGT_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TAGGER_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_SAFIRE_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TRUFOR_INSTALL:-0}" = "1" ]; then
+MODEL_APP="${WAIFU_TEST_MODEL_APP:-$ROOT/dist/WaifuFinder.app}"
+if [ "${WAIFU_TEST_PGT_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TAGGER_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_SAFIRE_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_TRUFOR_INSTALL:-0}" = "1" ] || [ "${WAIFU_TEST_REALESRGAN_INSTALL:-0}" = "1" ]; then
     # Opt-in release/setup QA uses the real installer and the built app catalog.
     TEST_APP="$BUILD/ModelSetupTests.app"
     mkdir -p "$TEST_APP/Contents/MacOS" "$TEST_APP/Contents/Resources/Runtime"
     mv "$TEST_EXECUTABLE" "$TEST_APP/Contents/MacOS/waifu-tests"
-    cp -R "$ROOT/dist/WaifuFinder.app/Contents/Resources/ModelReleases" "$TEST_APP/Contents/Resources/"
-    cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-pgtformer" "$TEST_APP/Contents/Resources/Runtime/"
-    cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-wdtagger" "$TEST_APP/Contents/Resources/Runtime/"
+    cp -R "$MODEL_APP/Contents/Resources/ModelReleases" "$TEST_APP/Contents/Resources/"
+    cp "$MODEL_APP/Contents/Resources/Runtime/waifu-pgtformer" "$TEST_APP/Contents/Resources/Runtime/"
+    cp "$MODEL_APP/Contents/Resources/Runtime/waifu-wdtagger" "$TEST_APP/Contents/Resources/Runtime/"
     if [ "${WAIFU_TEST_SAFIRE_INSTALL:-0}" = "1" ]; then
-        cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-safire" "$TEST_APP/Contents/Resources/Runtime/"
+        cp "$MODEL_APP/Contents/Resources/Runtime/waifu-safire" "$TEST_APP/Contents/Resources/Runtime/"
     fi
     if [ "${WAIFU_TEST_TRUFOR_INSTALL:-0}" = "1" ]; then
-        cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/waifu-trufor" "$TEST_APP/Contents/Resources/Runtime/"
+        cp "$MODEL_APP/Contents/Resources/Runtime/waifu-trufor" "$TEST_APP/Contents/Resources/Runtime/"
     fi
-    cp "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/mlx.metallib" "$TEST_APP/Contents/Resources/Runtime/"
-    ditto "$ROOT/dist/WaifuFinder.app/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle" "$TEST_APP/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle"
+    cp "$MODEL_APP/Contents/Resources/Runtime/mlx.metallib" "$TEST_APP/Contents/Resources/Runtime/"
+    ditto "$MODEL_APP/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle" "$TEST_APP/Contents/Resources/Runtime/WaifuRuntime_WDTaggerMLX.bundle"
     cat > "$TEST_APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

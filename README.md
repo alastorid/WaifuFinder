@@ -457,8 +457,9 @@ focused frame in motion.
   to reveal every group. Similarity and Top show their values on their handles.
   Frames in no group are never capped; the tail of each capped group's line has a
   "+N more" tile to reveal that group. **Group view** switches one group per line on or off.
-- **Show** (right) — a compact Faces control: All (default), With faces, or Without
-  faces; and one-group-per-line vs one continuous grid. The face filter uses the same
+- **Show** (right) — inline Faces and Favorite controls. Faces offers All (default), With
+  faces, or Without faces; Favorite offers All (default), Favorite, or Not Favorite in
+  Photos mode. Also choose one-group-per-line vs one continuous grid. The face filter uses the same
   significance threshold as ranking, so tiny detected faces count as without faces.
 
 **Keyboard**: ←/→ step the neighbouring frame (inside the group's line when the grid is one
@@ -838,3 +839,25 @@ Photos library filesystem.
 
 Static photos support RealESRGAN spatial restoration and export reconstructed
 results as PNG. Temporal restoration models are unavailable for still photos.
+
+
+### RealESRGAN photo preview
+
+The Photos preview's right panel includes **RealESRGAN Off / x2 / x4**, directly
+below Photo Info and above TruFor and SAFIRE. Both choices use the official
+23-block FP16 Core ML networks. Install each independently in Settings → Models.
+Off immediately returns to source pixels; changing models shows source pixels
+until the new reconstruction completes. Results remain non-destructive and use the
+existing zoom, pan and navigation controls.
+
+Compatible enabled inference servers show the raised **R** beside each supported
+variant. x2 support never implies x4 support. TruFor and SAFIRE continue analyzing
+original pixels; their evidence views take display priority over reconstructed
+pixels. AI reconstruction must not be interpreted as original forensic evidence.
+
+Original models by **Xintao Wang, Liangbin Xie, Chao Dong and Ying Shan**, authors
+of *Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic
+Data*, with reference architecture by BasicSR contributors. WaifuFinder supplies
+conversion, optimization investigation and native integration. See
+[the integration report](docs/RealESRGAN-x4-integration.md),
+[CPU + ANE optimization results](docs/RealESRGAN-ANE.md), and [credits](docs/Credits.md).

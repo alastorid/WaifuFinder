@@ -1,0 +1,187 @@
+{
+  "backend" : "Swift\/MLX",
+  "baselineSHA256" : "ad4f9edbd7b418d613fd4a39d5f9b4945fe53a0508a1d471d917fca5aefacb1a",
+  "date" : "2026-10-26",
+  "inputSHA256" : "458f2048d102a50b43244c7ca0eb5e19c8726422e3f1ca9bfcb9bb77ae51aa35",
+  "os" : "Version 26.5.1 (Build 25F80)",
+  "precision" : "fp32",
+  "results" : [
+    {
+      "externalTimeReport" : "        9.49 real         0.45 user         1.54 sys\n           330924032  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               38755  page reclaims\n                 351  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 433  voluntary context switches\n               31892  involuntary context switches\n         14379323303  instructions retired\n          7044444110  cycles elapsed\n           828687512  peak memory footprint",
+      "height" : 516,
+      "memory" : [
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 0,
+          "peakCompressedBytes" : 0,
+          "peakMLXBytes" : 327055668,
+          "peakPhysicalBytes" : 652772384,
+          "phase" : "model-memory",
+          "physicalBytes" : 652772384,
+          "residentBytes" : 309346304,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 0,
+          "peakCompressedBytes" : 0,
+          "peakMLXBytes" : 418846012,
+          "peakPhysicalBytes" : 821986432,
+          "phase" : "request-memory",
+          "physicalBytes" : 627672216,
+          "residentBytes" : 327630848,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 156729344,
+          "peakCompressedBytes" : 156762112,
+          "peakMLXBytes" : 423010524,
+          "peakPhysicalBytes" : 828572824,
+          "phase" : "request-memory",
+          "physicalBytes" : 624444568,
+          "residentBytes" : 168853504,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 162938880,
+          "peakCompressedBytes" : 162938880,
+          "peakMLXBytes" : 418846012,
+          "peakPhysicalBytes" : 828687512,
+          "phase" : "request-memory",
+          "physicalBytes" : 629720216,
+          "residentBytes" : 168296448,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        }
+      ],
+      "planes" : [
+        {
+          "maximumAbsoluteError" : 9.8347663879394531e-07,
+          "name" : "anomaly",
+          "relativeRMS" : 8.4450622464370856e-07
+        },
+        {
+          "maximumAbsoluteError" : 1.1324882507324219e-06,
+          "name" : "reliability",
+          "relativeRMS" : 9.1304638970717432e-08
+        },
+        {
+          "maximumAbsoluteError" : 0,
+          "name" : "noiseprint",
+          "relativeRMS" : 0
+        }
+      ],
+      "referenceScore" : 0.098546698689460754,
+      "score" : 0.098546698689460754,
+      "streamed" : false,
+      "width" : 644
+    },
+    {
+      "externalTimeReport" : "       10.61 real         0.87 user         2.06 sys\n           383942656  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              290681  page reclaims\n                  49  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 287  voluntary context switches\n               35523  involuntary context switches\n         18366475911  instructions retired\n          9963393441  cycles elapsed\n           861553864  peak memory footprint",
+      "height" : 516,
+      "memory" : [
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 0,
+          "peakCompressedBytes" : 0,
+          "peakMLXBytes" : 327055668,
+          "peakPhysicalBytes" : 651740168,
+          "phase" : "model-memory",
+          "physicalBytes" : 627524616,
+          "residentBytes" : 309460992,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 0,
+          "peakCompressedBytes" : 0,
+          "peakMLXBytes" : 488019516,
+          "peakPhysicalBytes" : 822412392,
+          "phase" : "request-memory",
+          "physicalBytes" : 658490568,
+          "residentBytes" : 362708992,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 0,
+          "peakCompressedBytes" : 0,
+          "peakMLXBytes" : 418125116,
+          "peakPhysicalBytes" : 861553864,
+          "phase" : "request-memory",
+          "physicalBytes" : 655017160,
+          "residentBytes" : 365182976,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        },
+        {
+          "activationStorage" : "owned FP32 RAM; no file backing",
+          "activeMLXBytes" : 275060020,
+          "budgetBytes" : 2000000000,
+          "cachedMLXBytes" : 0,
+          "compressedBytes" : 126074880,
+          "peakCompressedBytes" : 126074880,
+          "peakMLXBytes" : 418125112,
+          "peakPhysicalBytes" : 860914888,
+          "phase" : "request-memory",
+          "physicalBytes" : 662373576,
+          "residentBytes" : 247300096,
+          "stopBytes" : 1700000000,
+          "swapinsDuringRequest" : 0
+        }
+      ],
+      "planes" : [
+        {
+          "maximumAbsoluteError" : 1.9997358322143555e-05,
+          "name" : "anomaly",
+          "relativeRMS" : 3.3324571883675162e-05
+        },
+        {
+          "maximumAbsoluteError" : 3.7729740142822266e-05,
+          "name" : "reliability",
+          "relativeRMS" : 6.3575790692881895e-06
+        },
+        {
+          "maximumAbsoluteError" : 0,
+          "name" : "noiseprint",
+          "relativeRMS" : 0
+        }
+      ],
+      "referenceScore" : 0.098546698689460754,
+      "score" : 0.098559089004993439,
+      "streamed" : true,
+      "width" : 644
+    }
+  ],
+  "status" : "passed",
+  "transport" : "pipes; no temporary image or map files",
+  "weightsSHA256" : "3b2c7146303e984c43b51f26e38d093c8b2ebba9a13e41bb029a98aa5b29783c"
+}

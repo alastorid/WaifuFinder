@@ -14,7 +14,7 @@ private struct TemporalAssetTrack: @unchecked Sendable {
 
 /// Owns one sequential native-resolution reader. Only the current image is resident.
 actor TemporalFrameExtractor {
-    private let context = CIContext(options: [.cacheIntermediates: false])
+    private let context = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
 
     /// Keep AVFoundation's non-Sendable async load results in a nonisolated
     /// helper, then transfer the loaded immutable references as one Sendable unit.

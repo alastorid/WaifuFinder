@@ -18,6 +18,11 @@ It contains the license texts and attribution notices for the app and native wor
 - `INFERKIT-LICENSE`, `FlashVSR-LICENSE`, and `RealESRGAN-LICENSE` are the applicable
   component license texts. `THIRD_PARTY_LICENSES.md` records the InferKit code attribution.
 
+Real-ESRGAN x2plus and x4plus pretrained models are the work of Xintao Wang
+and collaborators, with BasicSR contributors supplying the reference architecture.
+See `RealESRGAN-NOTICE.md` for the paper, provenance and our conversion changes;
+BSD-3-Clause and Apache-2.0 notices accompany the model packages.
+
 Full model packages are downloaded separately and include their own licenses and notices.
 See `WaifuFinder-Licensing.md` for the current inventory and the unresolved PGTFormer
 weights license question.

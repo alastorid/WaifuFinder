@@ -17,11 +17,9 @@ public final class TruForModel {
     public static let revision="trufor-native-v1"
     public static let preprocessing="trufor-native-rgb-div256-v1"
     public static let sourceSHA="ac1d90e329a72e0d66e8665e123a19e94bfae3209c3ef8a4f9ca3b91578c7844"
-    public enum Precision:String { case fp32,fp16 }
-    /// Production defaults to the FP32 path validated against the official
-    /// detection score and spatial outputs. FP16 remains an explicit benchmark
-    /// experiment: its Noiseprint residual and localization exceed strict gates.
-    public let precision:Precision
+    public enum Precision:String { case fp32 }
+    /// All production operators, including Noiseprint, compute in FP32.
+    public let precision:Precision = .fp32
     private var weights:[String:MLXArray]
     private var fuseParts:[String:[MLXArray]]=[:]
     public let device:String
@@ -38,7 +36,9 @@ public final class TruForModel {
         queryRows=Int(ProcessInfo.processInfo.environment["WAIFU_TRUFOR_QUERY_ROWS"] ?? "512") ?? 512
         noiseTile=Int(ProcessInfo.processInfo.environment["WAIFU_TRUFOR_NOISE_TILE"] ?? "512") ?? 512
         guard [128,256,512].contains(queryRows),[128,256,512].contains(noiseTile) else { throw TruForError.invalid("Unsupported profile override") }
-        precision=Precision(rawValue:ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PRECISION"] ?? "") ?? .fp32
+        if let requested=ProcessInfo.processInfo.environment["WAIFU_TRUFOR_PRECISION"],requested != "fp32" {
+            throw TruForError.invalid("TruFor requires native Swift/MLX FP32; reduced precision is unsupported")
+        }
         let file=directory.appendingPathComponent("model.safetensors")
         let meta=try JSONSerialization.jsonObject(with:Data(contentsOf:directory.appendingPathComponent("architecture.json"))) as? [String:Any]
         guard meta?["sourceSHA256"] as? String == Self.sourceSHA,meta?["preprocessingVersion"] as? String == Self.preprocessing else { throw TruForError.invalid("Expected the verified official TruFor checkpoint") }
@@ -49,6 +49,7 @@ public final class TruForModel {
         guard hash.finalize().map({String(format:"%02x",$0)}).joined()==expected else { throw TruForError.invalid("Damaged TruFor checkpoint") }
         weights=try loadArrays(url:file)
         guard weights.count==927,weights["detection.0.weight"]?.shape == [128,8],weights["backbone.patch_embed1.proj.weight"]?.shape == [64,3,7,7] else { throw TruForError.invalid("Unsupported TruFor architecture") }
+        guard weights.values.allSatisfy({$0.dtype == .float32}) else { throw TruForError.invalid("TruFor requires an entirely FP32 checkpoint") }
         // Materialize parameters into Metal-owned buffers once. Keeping the
         // default CPU load arrays alongside their GPU views inflates footprint.
         for key in Array(weights.keys) {
@@ -59,9 +60,6 @@ public final class TruForModel {
             }
         }
         for key in Array(weights.keys) where key.hasSuffix(".weight") && weights[key]!.ndim==4 { weights[key]=weights[key]!.transposed(axes:[0,2,3,1]).contiguous() }
-        if precision == .fp16 {
-            for key in Array(weights.keys) where !Self.isFP32Island(key) { weights[key]=weights[key]!.asType(.float16,stream:.cpu) }
-        }
         // The fused decoder kernel is sliced per source part on every call; slice
         // once at load so each part convolves with a contiguous weight.
         for head in ["decode_head","decode_head_conf"] {
@@ -72,17 +70,6 @@ public final class TruForModel {
             weights.removeValue(forKey:head+".linear_fuse.0.weight")
         }
         eval(Array(weights.values));eval(fuseParts.values.flatMap{$0})
-    }
-    /// FP32 islands: LayerNorm affines (every `norm` call), BN statistics and
-    /// affines, the DnCNN BN rows, and the trained detection head.
-    private static func isFP32Island(_ key:String)->Bool {
-        if key.contains(".norm") || key.contains(".running_") || key.hasPrefix("detection.") { return true }
-        if key.hasPrefix("dncnn."),key.hasSuffix(".weight") || key.hasSuffix(".bias") {
-            guard let index=Int(key.split(separator:".")[1]),index>=3,index<=45,index%3==0 else { return false }
-            return true
-        }
-        if key.hasPrefix("decode_head.linear_fuse.1.") || key.hasPrefix("decode_head_conf.linear_fuse.1.") { return true }
-        return false
     }
     private func w(_ key:String)->MLXArray { weights[key]! }
     private func linear(_ x:MLXArray,_ p:String)->MLXArray {
@@ -125,7 +112,7 @@ public final class TruForModel {
     }
     /// Isolated backend-comparison hook; the app's normal inference entry point
     /// continues to own preprocessing, full-model execution, and safety policy.
-    public func probeNoiseprintTile(_ rgb:MLXArray)->MLXArray { noiseBody(rgb) }
+    public func probeNoiseprintTile(_ rgb:MLXArray)->MLXArray { noiseBody(rgb.asType(.float32)) }
     /// Exactly the 17-layer receptive field, with halo, preserving native input.
     private func noise(_ x:MLXArray)->MLXArray {
         let h=x.dim(1),width=x.dim(2)
@@ -147,7 +134,7 @@ public final class TruForModel {
         return concatenated(rows,axis:1)
     }
     private func noise(_ input:TruForInput)throws->MLXArray {
-        if let array=input.array { return noise(precision == .fp16 ? array.asType(.float16):array) }
+        if let array=input.array { return noise(array) }
         let h=input.height,width=input.width
         var rows:[MLXArray]=[]
         for y in stride(from:0,to:h,by:noiseTile) {
@@ -156,7 +143,7 @@ public final class TruForModel {
                 let y0=max(0,y-17),x0=max(0,x-17),y1=min(h,y+noiseTile+17),x1=min(width,x+noiseTile+17)
                 let cropped=try autoreleasepool {
                     let tile=try input.read(y0..<y1,columns:x0..<x1)
-                    let out=noiseBody(precision == .fp16 ? tile.asType(.float16):tile)
+                    let out=noiseBody(tile)
                     let result=out[0...,(y-y0)..<min(y-y0+noiseTile,h-y0),(x-x0)..<min(x-x0+noiseTile,width-x0),0...].contiguous()
                     eval(result);return result
                 }
@@ -336,7 +323,7 @@ public final class TruForModel {
             let conf=Self.resize(smallConf,height:input.height,width:input.width);eval(conf)
             return (out,conf)
         }
-        let rgb=precision == .fp16 ? input.array!.asType(.float16):input.array!
+        let rgb=input.array!
         let features=try Self.timed("encoder"){ try encoder(rgb,np,trace:trace) }
         let out=Self.timed("decode_head"){ Self.resize(decoder(features,"decode_head"),height:input.height,width:input.width) };eval(out)
         let conf=Self.timed("decode_head_conf"){ Self.resize(decoder(features,"decode_head_conf"),height:input.height,width:input.width) };eval(conf)
@@ -643,7 +630,7 @@ extension TruForModel {
             out=try Self.timed("decode_head"){try rowDecoder(features,"decode_head")}
             conf=try Self.timed("decode_head_conf"){try rowDecoder(features,"decode_head_conf")}
         } else {
-            let rgb=precision == .fp16 ? input.array!.asType(.float16):input.array!
+            let rgb=input.array!
             let features=try Self.timed("encoder"){try encoder(rgb,np,trace:nil)}
             out=Self.timed("decode_head"){decoder(features,"decode_head")}
             conf=Self.timed("decode_head_conf"){decoder(features,"decode_head_conf")}

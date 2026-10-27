@@ -26,13 +26,23 @@ struct VideoPreviewPanel: View {
         session.video.map { PhotosMedia.isPhotos($0.url) } == true
     }
 
+    /// Still photos have no playback transport. Resolve through the album at the
+    /// same timestamp used by `syncPlayer`, so mixed photo/video albums keep the
+    /// controls only while a video item is focused.
+    private var isPhotosStill: Bool {
+        guard let source = session.video?.url, PhotosMedia.isPhotos(source) else { return false }
+        return PhotosMedia.shared.photoItemURL(for: source, seconds: focusedFrame?.timeSeconds ?? 0) != nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             surface
-            Divider()
-            controls
+            if !isPhotosStill {
+                Divider()
+                controls
+            }
         }
         .background(Color(nsColor: .controlBackgroundColor))
         .task(id: focusedFrame?.id) {

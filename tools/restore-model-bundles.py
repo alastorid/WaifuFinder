@@ -24,6 +24,7 @@ BUNDLES = {
     "flashvsr": "FlashVSR-v1.1-Tiny-Swift-MLX-BF16",
     "pgtformer": "PGTFormer-Swift-CoreML",
     "realesrgan": "RealESRGAN-x2plus-Optimized-CoreML",
+    "realesrgan-x4plus": "RealESRGAN-x4plus-Optimized-CoreML",
 }
 
 
