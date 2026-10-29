@@ -324,7 +324,7 @@ struct FrameGridView: View {
             isPhotosSource: snapshot.key.photosSource,
             squareThumbnail: snapshot.key.square,
             topTags: session.topTagsByFrame[frame.id] ?? [],
-            topTagFilterActive: session.settings.tagAdvancedMode && session.settings.tagTopCount < 99
+            topTagFilterActive: session.settings.tagTopCount < 99
         )
         .gesture(
             TapGesture().modifiers([.command, .shift]).onEnded { click(frame, .additiveRange) }

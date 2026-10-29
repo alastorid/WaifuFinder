@@ -186,6 +186,35 @@ private func orbWait(_ predicate: () -> Bool) async throws {
 
 func registerCrystalOrbLifecycleTests() {
     let suite = "Crystal Orb lifecycle"
+    Registry.shared.add(suite: suite, TestCase(name: "Safari archive and alternate image formats reach Orb from thumbnail mode", knownBug: nil) {
+        let directory = try Temporary.directory("orb-safari-archive")
+        let payload = orbPNG(try orbImage(2, width: 200, height: 150))
+        let archive = try PropertyListSerialization.data(fromPropertyList: [
+            "WebMainResource": ["WebResourceData": Data("<img src='photo.png'>".utf8), "WebResourceMIMEType": "text/html"],
+            "WebSubresources": [["WebResourceData": payload, "WebResourceMIMEType": "image/png"]]
+        ], format: .binary, options: 0)
+        try await Task { @MainActor in
+            checkEqual(CrystalOrbImport.archivedImage(archive), payload, "embedded image is extracted from Safari archive")
+            check(CrystalOrbImport.archivedImage(Data("invalid".utf8)) == nil, "invalid archive is rejected")
+            check(CrystalOrbImport.dropTypes.contains { $0.identifier == CrystalOrbImport.webArchiveType }, "window accepts the archive representation")
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+            let provider = NSItemProvider(item: archive as NSData, typeIdentifier: CrystalOrbImport.webArchiveType)
+            check(CrystalOrbImport.accept([provider], model: model, session: session), "archive-only Safari drag is accepted")
+            try await orbWait { model.query != nil && !model.importing }
+            checkEqual(model.query?.nativeSize, CGSize(width: 200, height: 150), "archive supplies the dragged pixels")
+            model.close()
+            let alternatives = NSItemProvider()
+            alternatives.registerDataRepresentation(forTypeIdentifier: UTType.tiff.identifier, visibility: .all) { completion in
+                completion(Data("unavailable TIFF".utf8), nil); return nil
+            }
+            alternatives.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
+                completion(payload, nil); return nil
+            }
+            checkEqual(await CrystalOrbImport.imageData(from: alternatives), payload, "usable second image representation is tried")
+            session.cancel()
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "browser image drops ignore unrelated page URLs and start Orb immediately", knownBug: nil) {
         let directory = try Temporary.directory("orb-browser-drop")
         let payload = orbPNG(try orbImage(2, width: 200, height: 150))

@@ -1,15 +1,48 @@
 # Tag summary computation
 
 The tag browser ranks general traits by conditional average confidence over the
-photos currently shown. For each tag, it sums probabilities **strictly greater
+candidate photos admitted by required/unwanted tags and the other active filters.
+OR clauses are ignored for this summary; the thumbnail grid still applies them. For each tag, it sums probabilities **strictly greater
 than the active threshold** and divides by the number of those probabilities.
 Values at or below the threshold do not enter either the sum or the denominator.
-Common tags must occur on every shown photo, including photos without tag data.
+Common tags must occur on every candidate photo, including photos without tag data.
 
 Only general traits participate. Ratings and character heads remain separate.
 Older or damaged results can use their saved top tags for availability and common
 membership, but contribute no invented confidence to the average. Unscored tags
 sort after numerically scored tags; equal means use alphabetical ordering.
+
+## Tag controls and rarity
+
+Top and Threshold are always available and active; the legacy Basic/Advanced
+preference no longer changes filtering. Tags appear in a flat list by default.
+Right-click the Tags panel heading and enable **Group by rarity** to show four
+exclusive bands based on matching-photo count divided by candidate-photo count:
+orange below 1%, yellow from 1% to below 5%, blue from 5% to below 10%, and white
+for the rest. Rest starts collapsed. Exact boundary values enter the next band.
+
+Select multiple tags with Command-click or a selection rectangle, then press F
+to create a new OR group containing that selection. Each press creates a fresh
+group, including when an empty group exists. Drag tags between OR groups, or drag
+an OR group's label onto another to merge their contents. Text entry keeps F as
+ordinary text.
+
+## Per-photo rarity
+
+Tag rarity appears before Face in Sort and Filter after tagging finishes, saved
+tag restoration completes, and no matching photos remain untagged. Its row uses
+a 0.33-second slide/fade transition and a fixed 0.00–1.00 filter range.
+
+Each photo's raw score averages `1 - matchingPhotos / taggedPhotos` over its
+qualifying general tags. Scores use the full tagged source and the current tag
+threshold, independently of display filters and OR groups. The vector is then
+normalized by its observed minimum and maximum: 0 is most common and 1 is most
+rare. Empty tag sets and tied populations score 0. Untagged photos have no score.
+
+A cancellable background task counts sparse qualifying tags in two passes and
+uses Apple's Accelerate vDSP for vector normalization. The result is cached by
+source revision, vocabulary and threshold, so moving a filter does not repeat
+the reduction. No dense image-by-tag matrix or additional dependency is needed.
 
 ## Background work and reuse
 
@@ -42,7 +75,7 @@ average on the CPU. Cancellation exits instead of falling back or publishing an
 obsolete result. Both paths run off the main actor and require only Apple's
 system frameworks, with no additional packages or media dependencies.
 
-The session caches completed labels by shown-photo membership, result revision
+The session caches completed labels by candidate-photo membership, result revision
 and threshold. Pure ordering changes reuse those labels. Pending jobs carry a
 generation token, including when undoing a filter/threshold returns to a cached
 result. Publishing a summary never rebuilds or re-ranks the photo grid.

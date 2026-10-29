@@ -133,6 +133,7 @@ struct AnalyzedFrame: Identifiable, Sendable, Equatable, Codable {
 
     /// Sparse UInt8 model heads compressed with LZ4; absent in older sessions.
     /// Values below the fixed storage threshold reconstruct as zero.
+    var tagRarity: Float? = nil
     var tagProbabilities: Data?
     /// Vocabulary index layout that produced `tagProbabilities`.
     var tagVocabularyFingerprint: UInt64?

@@ -2,13 +2,12 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Faceted tags arranged by the published Danbooru taxonomy.
+/// Selectable tags with optional rarity bands.
 struct TagFilterView: View {
     @ObservedObject var session: WaifuSession
     @State private var quickFilterText = ""
-    @State private var collapsedGroups: Set<String> = []
-    @AppStorage("tagFilterGroupingEnabled") private var groupingEnabled = true
-    @State private var amountOrder = 0
+    @State private var collapsedGroups: Set<String> = [TagRarity.normal.title]
+    @AppStorage("tagFilterGroupByRarity") private var groupingEnabled = false
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
 
@@ -72,34 +71,18 @@ struct TagFilterView: View {
         return tags.filter { $0.localizedCaseInsensitiveContains(quickFilterText) }
     }
 
-    private struct TagSubgroup: Identifiable {
-        let id: String
-        let tags: [String]
-    }
+    private var ungroupedTags: [String] { commonTags + standaloneTags }
 
-    private func ordered(_ tags: [String]) -> [String] {
-        guard amountOrder != 0 else { return tags }
-        return tags.sorted {
-            let lhs = session.tagMatchCounts[$0, default: 0]
-            let rhs = session.tagMatchCounts[$1, default: 0]
-            if lhs != rhs { return amountOrder == 1 ? lhs > rhs : lhs < rhs }
-            return $0.localizedStandardCompare($1) == .orderedAscending
-        }
-    }
+    private func ordered(_ tags: [String]) -> [String] { tags }
 
-    private var visibleGroups: [TagSubgroup] {
-        let grouped = Dictionary(grouping: standaloneTags) {
-            let path = DanbooruTagGroups.membership[$0.replacingOccurrences(of: " ", with: "_")] ?? "Other tags"
-            return path.components(separatedBy: " / ")[0]
-        }
-        return grouped.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.compactMap { title in
-            let visible = matching(ordered(grouped[title]!))
-            return visible.isEmpty ? nil : TagSubgroup(id: title, tags: visible)
+    private func rarityTags(_ rarity: TagRarity) -> [String] {
+        ungroupedTags.filter {
+            TagRarity.classify(matches: session.tagMatchCounts[$0, default: 0], total: session.tagCandidateCount) == rarity
         }
     }
 
     private var hasVisibleTags: Bool {
-        !matching(commonTags).isEmpty || !visibleGroups.isEmpty
+        !matching(ungroupedTags).isEmpty
             || session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
     }
 
@@ -111,10 +94,7 @@ struct TagFilterView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                if session.settings.tagAdvancedMode {
-                    advancedControls
-                }
-                tagControls
+                advancedControls
                 if showsTaggingStatus {
                     TaggingPanelStatus(session: session, panel: .tags)
                 }
@@ -166,22 +146,19 @@ struct TagFilterView: View {
                         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
                         VStack(alignment: .leading, spacing: 8) {
-                            if !matching(commonTags).isEmpty {
-                                subgroup(title: "Common", tags: matching(ordered(commonTags)), allTags: commonTags)
-                            }
                             ForEach(session.tagFilter.orGroups) { group in
                                 orGroup(group)
                             }
                             if groupingEnabled {
-                                ForEach(visibleGroups) { group in
-                                    subgroup(title: group.id, tags: group.tags,
-                                             allTags: standaloneTags.filter { tag in
-                                        let path = DanbooruTagGroups.membership[tag.replacingOccurrences(of: " ", with: "_")] ?? "Other tags"
-                                        return path.components(separatedBy: " / ")[0] == group.id
-                                    })
+                                ForEach(TagRarity.allCases) { rarity in
+                                    let allTags = rarityTags(rarity)
+                                    let visible = matching(allTags)
+                                    if !visible.isEmpty {
+                                        rarityGroup(rarity, tags: visible, allTags: allTags)
+                                    }
                                 }
                             } else {
-                                chipFlow(matching(ordered(standaloneTags)))
+                                chipFlow(matching(ungroupedTags))
                             }
                         }
                         .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
@@ -230,38 +207,21 @@ struct TagFilterView: View {
         }
     }
 
-    private var tagControls: some View {
-        HStack(spacing: 6) {
-            Button { groupingEnabled.toggle() } label: {
-                Text("Group").tagChipBody(isSelected: groupingEnabled, isExcluded: false)
-            }
-            .help("Group tags by category")
-            Button { amountOrder = (amountOrder + 1) % 3 } label: {
-                HStack(spacing: 3) {
-                    Text("Amount")
-                    if amountOrder != 0 { Image(systemName: amountOrder == 1 ? "arrow.down" : "arrow.up") }
-                }.tagChipBody(isSelected: amountOrder != 0, isExcluded: false)
-            }
-            .help(amountOrder == 0 ? "Default order; click for most matches first" : amountOrder == 1 ? "Most matches first; click for fewest first" : "Fewest matches first; click for default order")
-            Button {
-                var filter = session.tagFilter
-                filter.orGroups.append(TagOrGroup())
-                session.tagFilter = filter
-            } label: { Text("OR").tagChipBody(isSelected: false, isExcluded: false) }
-                .help("Add an OR group. Press F to group selected tags.")
-        }
-        .buttonStyle(.plain)
-        .font(.caption)
-    }
-
     private func chipFlow(_ tags: [String]) -> some View {
         TagChipFlow(spacing: 5, groupTagCount: 0) {
             ForEach(tags, id: \.self) { tag in tagChip(for: tag) }
         }
     }
 
-    private func subgroup(title: String, tags: [String], allTags: [String]) -> some View {
-        DisclosureGroup(isExpanded: Binding(
+    private func rarityGroup(_ rarity: TagRarity, tags: [String], allTags: [String]) -> some View {
+        let title = rarity.title
+        let color: Color = switch rarity {
+        case .legendary: .orange
+        case .exquisite: .yellow
+        case .magic: .blue
+        case .normal: .white
+        }
+        return DisclosureGroup(isExpanded: Binding(
             get: { !collapsedGroups.contains(title) },
             set: { expanded in
                 if expanded { collapsedGroups.remove(title) } else { collapsedGroups.insert(title) }
@@ -270,15 +230,8 @@ struct TagFilterView: View {
             chipFlow(tags).padding(.top, 4)
         } label: {
             Text("\(title) (\(tags.count))")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption)
                 .contextMenu {
-                    Button("Include \(title) tags") {
-                        var filter = session.tagFilter
-                        let group = TagOrGroup()
-                        filter.orGroups.append(group)
-                        filter.addToOrGroup(Set(allTags), id: group.id)
-                        session.tagFilter = filter
-                    }
                     Button("Exclude \(title) tags") {
                         var filter = session.tagFilter
                         for tag in allTags { filter.setExcluded(true, tag: tag) }
@@ -286,6 +239,9 @@ struct TagFilterView: View {
                     }
                 }
         }
+        .padding(7)
+        .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.6)))
     }
 
     private func orGroup(_ group: TagOrGroup) -> some View {

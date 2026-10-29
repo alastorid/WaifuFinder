@@ -141,7 +141,7 @@ func registerTagSummaryTests() {
                    "a frame can explain multiple independent winning tags")
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "Advanced mode applies Top without poisoning cached candidates", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "Top always applies regardless of legacy Basic mode", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let directory = try Temporary.directory("tag-advanced-session")
         let frames = [summaryFrame(0, [4: 0.9, 5: 0.5]),
@@ -151,32 +151,15 @@ func registerTagSummaryTests() {
             let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
             session.frameOrder = .chronological
             session.updateAnalyzedFrames(frames)
-            session.tagFilter = TagFilter(requiredTags: ["tag_0", "tag_1"])
             session.settings.tagTopCount = 1
-            session.settings.tagAdvancedMode = true
-            session.tagFilter = TagFilter()
-            checkEqual(Set(session.displayedFrames.map(\.id)), Set([frames[0].id, frames[2].id]),
-                       "Advanced ranks every tag without a selection")
-            checkEqual(session.topTagsByFrame[frames[0].id], ["tag 0"], "first thumbnail explains its winning tag")
-            checkEqual(session.topTagsByFrame[frames[2].id], ["tag 1"], "last thumbnail explains a different winning tag")
             session.settings.tagAdvancedMode = false
+            checkEqual(Set(session.displayedFrames.map(\.id)), Set([frames[0].id, frames[2].id]), "legacy Basic mode still applies Top")
             session.tagFilter = TagFilter(requiredTags: ["tag_0", "tag_1"])
+            check(session.displayedFrames.isEmpty, "Top intersects required tags")
             session.settings.tagTopCount = 2
-            checkEqual(session.displayedFrames.count, 3, "Basic leaves Top off")
-            check(session.topTagsByFrame.isEmpty, "Basic removes thumbnail Top badges")
-            session.settings.tagAdvancedMode = true
-            checkEqual(session.displayedFrames.map(\.id), [frames[1].id], "Advanced applies per-tag Top")
+            checkEqual(session.displayedFrames.map(\.id), [frames[1].id], "Top uses cached full candidates")
             session.settings.tagTopCount = 99
-            checkEqual(session.displayedFrames.count, 3, "all restores cached candidates")
-            check(session.topTagsByFrame.isEmpty, "all removes thumbnail Top badges")
-            session.settings.tagTopCount = 1
-            checkEqual(session.displayedFrames.count, 0, "separate top-one winners do not satisfy AND")
-            session.settings.tagAdvancedMode = false
-            checkEqual(session.displayedFrames.count, 3, "returning to Basic restores the candidate set")
-            session.settings.taggerThreshold = 0.85
-            checkEqual(session.displayedFrames.count, 0, "dynamic threshold applies to each required tag")
-            session.settings.taggerThreshold = 0.35
-            checkEqual(session.displayedFrames.count, 3, "lowering threshold restores UInt8-backed matches")
+            checkEqual(session.displayedFrames.count, 3, "all restores every candidate")
         }
     })
 
@@ -259,7 +242,7 @@ func registerTagSummaryTests() {
         check(TagDragPayload.decode(TagDragPayload.encode([])) == nil, "empty drags are rejected")
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "multi-selected tags use an empty OR group or create one", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "multi-selected tags always create a new OR group", knownBug: nil) {
         var filter = TagFilter(requiredTags: ["a"], excludedTags: ["b"])
         checkNil(filter.groupSelectedTags(["a"]), "a single tag does not create a group")
         let created = filter.groupSelectedTags(["a", "b"])
@@ -268,11 +251,68 @@ func registerTagSummaryTests() {
         check(filter.requiredTags.isEmpty && filter.excludedTags.isEmpty, "old tag states are cleared")
         let empty = TagOrGroup()
         filter.orGroups.append(empty)
-        checkEqual(filter.groupSelectedTags(["c", "d"]), empty.id, "the existing empty group is reused")
-        checkEqual(filter.orGroups.count, 2, "reusing an empty group does not add a group")
-        checkEqual(filter.orGroups[1].tags, ["c", "d"], "selection enters the empty group")
-        let next = filter.groupSelectedTags(["e", "f"])
-        check(next != nil && filter.orGroups.count == 3, "a fresh group is created when no group is empty")
+        let second = filter.groupSelectedTags(["c", "d"])
+        check(second != nil && second != empty.id, "the existing empty group is never reused")
+        checkEqual(filter.orGroups.count, 3, "every shortcut creates a group")
+        check(filter.orGroups[1].tags.isEmpty, "existing empty group remains unchanged")
+        checkEqual(filter.orGroups[2].tags, ["c", "d"], "selection enters its new group")
+
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "per-photo rarity normalizes frequencies and supports sorting and filtering", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        var frames = [summaryFrame(0, [4: 0.9]), summaryFrame(1, [4: 0.9]),
+                      summaryFrame(2, [4: 0.9, 5: 0.8])]
+        let scores = try PhotoTagRarity.scores(frames, vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(scores[frames[0].id], 0, "common-only photo is zero")
+        checkEqual(scores[frames[2].id], 1, "rarest photo is one")
+        for index in frames.indices { frames[index].tagRarity = scores[frames[index].id] }
+        var order = FrameOrder.only([.tagRarity])
+        let ranked = FrameArrangement.arrange(frames, order: order, perGroupTopCount: 99, grouping: .default)
+        checkEqual(ranked.visible.first?.id, frames[2].id, "rarity sorts highest first")
+        order.setAscending(true, for: .tagRarity)
+        checkEqual(FrameArrangement.arrange(frames, order: order, perGroupTopCount: 99, grouping: .default).visible.last?.id,
+                   frames[2].id, "rarity direction reverses")
+        var limits = FrameLimits.none
+        limits.setLimit(FrameLimit(low: 0.5, high: 1), for: .tagRarity)
+        checkEqual(frames.filter { limits.admits($0, grouping: .default) }.map(\.id), [frames[2].id], "rarity range filters")
+        checkEqual(FrameLimitBounds.bounds(of: frames, grouping: .default).range(for: .tagRarity), 0...1, "full slider bounds")
+        checkEqual(try JSONDecoder().decode(FrameOrder.self, from: JSONEncoder().encode(order)), order, "order persists")
+        checkEqual(try JSONDecoder().decode(FrameLimits.self, from: JSONEncoder().encode(limits)), limits, "range persists")
+        let common = try PhotoTagRarity.scores(Array(frames.prefix(2)), vocabulary: vocabulary, threshold: 0.35)
+        check(common.values.allSatisfy { $0 == 0 }, "identical tag sets stay zero")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "session publishes stable photo rarity without filter feedback", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let directory = try Temporary.directory("photo-rarity")
+        let frames = [summaryFrame(0, [4: 0.9]), summaryFrame(1, [4: 0.9]), summaryFrame(2, [4: 0.9, 5: 0.8])]
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
+            session.frameOrder = .only([.tagRarity])
+            session.updateAnalyzedFrames(frames)
+            for _ in 0..<500 {
+                if session.photoRarityReady { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            check(session.photoRarityReady, "background rarity completes")
+            checkEqual(session.displayedFrames.first?.id, frames[2].id, "session sorts by calculated rarity")
+            session.frameLimits.setLimit(FrameLimit(low: 0.5, high: 1), for: .tagRarity)
+            checkEqual(session.displayedFrames.map(\.id), [frames[2].id], "session applies rarity range")
+            checkEqual(session.displayedFrames.first?.tagRarity, 1, "filter keeps source-based rarity stable")
+            session.frameLimits = .none
+            checkEqual(session.displayedFrames.count, 3, "clearing range restores cached candidates")
+        }.value
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "rarity bands use exclusive percentage boundaries", knownBug: nil) {
+        checkEqual(TagRarity.classify(matches: 0, total: 100), .legendary, "less than one percent")
+        checkEqual(TagRarity.classify(matches: 1, total: 100), .exquisite, "exactly one percent enters next band")
+        checkEqual(TagRarity.classify(matches: 4, total: 100), .exquisite, "below five percent")
+        checkEqual(TagRarity.classify(matches: 5, total: 100), .magic, "exactly five percent enters next band")
+        checkEqual(TagRarity.classify(matches: 9, total: 100), .magic, "below ten percent")
+        checkEqual(TagRarity.classify(matches: 10, total: 100), .normal, "ten percent enters Rest")
+        checkEqual(TagRarity.classify(matches: 0, total: 0), .normal, "empty summaries do not imply rarity")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "OR group drag payload and merge preserve destination and union", knownBug: nil) {

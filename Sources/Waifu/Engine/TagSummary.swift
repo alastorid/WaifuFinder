@@ -1,5 +1,6 @@
 import Foundation
 import Metal
+import Accelerate
 
 struct TagSummary: Sendable {
     struct Tag: Sendable {
@@ -13,6 +14,7 @@ struct TagSummary: Sendable {
         let common: [String]
         let ranked: [String]
         let counts: [String: Int]
+        let frameCount: Int
     }
 
     let frameCount: Int
@@ -27,7 +29,29 @@ struct TagSummary: Sendable {
             if lhs != rhs { return lhs > rhs }
             return vocabulary.labels[left.index].name.localizedStandardCompare(vocabulary.labels[right.index].name) == .orderedAscending
         }.map { vocabulary.labels[$0.index].name }
-        return Labels(common: common, ranked: ranked, counts: Dictionary(uniqueKeysWithValues: tags.map { (vocabulary.labels[$0.index].name, $0.matchingFrames) }))
+        return Labels(common: common, ranked: ranked, counts: Dictionary(uniqueKeysWithValues: tags.map { (vocabulary.labels[$0.index].name, $0.matchingFrames) }), frameCount: frameCount)
+    }
+}
+
+/// Exclusive rarity bands use the AND-only summary's candidate count.
+enum TagRarity: Int, CaseIterable, Identifiable {
+    case legendary, exquisite, magic, normal
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .legendary: return "<1%"
+        case .exquisite: return "<5%"
+        case .magic: return "<10%"
+        case .normal: return "Rest"
+        }
+    }
+    static func classify(matches: Int, total: Int) -> Self {
+        guard total > 0 else { return .normal }
+        let fraction = Double(matches) / Double(total)
+        if fraction < 0.01 { return .legendary }
+        if fraction < 0.05 { return .exquisite }
+        if fraction < 0.10 { return .magic }
+        return .normal
     }
 }
 
@@ -423,4 +447,42 @@ final class MetalTagSummary: @unchecked Sendable {
         totals[tag] = {sum, scored, present, cutoffEqual, cutoffAbove};
     }
     """#
+}
+
+/// Sparse two-pass frequency reduction; Accelerate normalizes the final score vector.
+enum PhotoTagRarity {
+    static func scores(_ frames: [AnalyzedFrame], vocabulary: TagVocabulary?, threshold: Float) throws -> [FrameID: Float] {
+        let tagged = frames.filter(\.hasTaggingResult)
+        guard !tagged.isEmpty else { return [:] }
+        let general = Set(vocabulary?.generalIndices ?? [])
+        var rows: [[String]] = []
+        var counts: [String: Int] = [:]
+        for frame in tagged {
+            try Task.checkCancellation()
+            let tags: [String]
+            if let vocabulary, let data = frame.tagProbabilities,
+               let values = TagProbabilityCodec.sparseValues(in: data) {
+                tags = values.filter { general.contains($0.index) && $0.value > threshold }
+                    .map { vocabulary.labels[$0.index].name }
+            } else {
+                tags = Array(Set((frame.topTags ?? []).map(TagVocabulary.normalized)))
+            }
+            rows.append(tags)
+            for tag in tags { counts[tag, default: 0] += 1 }
+        }
+        let total = Float(tagged.count)
+        let raw: [Float] = rows.map { tags in
+            guard !tags.isEmpty else { return 0 }
+            return tags.reduce(Float(0)) { $0 + (1 - Float(counts[$1, default: 0]) / total) } / Float(tags.count)
+        }
+        let low = raw.min() ?? 0, high = raw.max() ?? 0
+        var normalized = [Float](repeating: 0, count: raw.count)
+        if high > low {
+            var offset = -low, scale = 1 / (high - low)
+            vDSP_vsadd(raw, 1, &offset, &normalized, 1, vDSP_Length(raw.count))
+            let shifted = normalized
+            vDSP_vsmul(shifted, 1, &scale, &normalized, 1, vDSP_Length(raw.count))
+        }
+        return Dictionary(uniqueKeysWithValues: zip(tagged, normalized).map { ($0.0.id, min(1, max(0, $0.1))) })
+    }
 }

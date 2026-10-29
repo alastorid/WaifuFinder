@@ -220,6 +220,45 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             if !taggingProgress.isRunning || !isTagUpdate { recomputeDisplayedFrames() }
         }
     }
+    @Published private(set) var photoRarityReady = false
+    private var photoRarityScores: [FrameID: Float] = [:]
+    private var photoRarityInput: String?
+    private var photoRarityTask: Task<Void, Never>?
+
+    private func schedulePhotoRarity() {
+        guard !taggingProgress.isRunning else { return }
+        let key = "\(tagSummaryRevision)-\(settings.taggerThreshold)-\(tagVocabulary?.cacheFingerprint ?? 0)"
+        guard key != photoRarityInput else { return }
+        photoRarityInput = key
+        photoRarityReady = false
+        photoRarityTask?.cancel()
+        let source = frames, vocabulary = tagVocabulary, threshold = settings.taggerThreshold
+        photoRarityTask = Task { [weak self] in
+            let worker = Task.detached(priority: .utility) {
+                try PhotoTagRarity.scores(source, vocabulary: vocabulary, threshold: threshold)
+            }
+            let scores = await withTaskCancellationHandler {
+                try? await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self, let scores, self.photoRarityInput == key else { return }
+            self.photoRarityScores = scores
+            self.photoRarityReady = !scores.isEmpty
+            self.displayFilterResults.removeAll()
+            if self.frameOrder.tagRarity.enabled || !self.frameLimits.tagRarity.isUnlimited {
+                self.recomputeDisplayedFrames()
+            } else {
+                // Publishing a new derived score must not move an unchanged grid.
+                self.displayedFrames = self.displayedFrames.map(self.withPhotoRarity)
+            }
+        }
+    }
+
+    private func withPhotoRarity(_ frame: AnalyzedFrame) -> AnalyzedFrame {
+        var frame = frame
+        frame.tagRarity = photoRarityScores[frame.id]
+        return frame
+    }
+
     private var frameByID: [FrameID: AnalyzedFrame] = [:]
     private var displayFilterResults = FrameIndexResultCache<DisplayFilterCacheKey>()
     private var taggingCandidateResults = FrameIndexResultCache<TaggingCandidateCacheKey>()
@@ -768,6 +807,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var available: [String] = []
         var common: [String] = []
         var counts: [String: Int] = [:]
+        var frameCount = 0
     }
     // Publish both lists together; SwiftUI still reconciles chips by tag identity.
     @Published private var tagSummaryPresentation = TagSummaryPresentation()
@@ -775,6 +815,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Tags present on every frame currently shown in the grid.
     var tagCommonTags: [String] { tagSummaryPresentation.common }
     var tagMatchCounts: [String: Int] { tagSummaryPresentation.counts }
+    var tagCandidateCount: Int { tagSummaryPresentation.frameCount }
     private var tagSummaryFrames: [AnalyzedFrame] = []
     @Published private(set) var isSummarizingTags = false
     var isComputingTagSummary: Bool { pendingTagSummaryInput != nil }
@@ -1717,7 +1758,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let incumbentIsNarrower = frameLimitsAreSuperset(candidate.limits, of: incumbent.limits)
             return candidateIsNarrower && !incumbentIsNarrower
         }
-        let source = reusable.map { frames(forCachedIndices: $0.entry.indices) } ?? frames
+        let source = reusable.map { frames(forCachedIndices: $0.entry.indices) } ?? frames.map(withPhotoRarity)
         let filter = TagFilter(requiredTags: key.requiredTags, excludedTags: key.excludedTags,
                                threshold: Float(bitPattern: key.thresholdBits),
                                orGroups: key.orGroups.map { TagOrGroup(tags: $0) })
@@ -1731,7 +1772,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     private func frames(forCachedIndices indices: [Int]) -> [AnalyzedFrame] {
-        indices.compactMap { frameByID[FrameID(sampleIndex: $0)] }
+        indices.compactMap { frameByID[FrameID(sampleIndex: $0)].map(withPhotoRarity) }
     }
 
     private func appendTaggingCandidates(_ additions: [AnalyzedFrame]) {
@@ -2569,6 +2610,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// `beyondCapByGroup` from the current arrangement.
     private func recomputeDisplayedFrames() {
         guard !applyingPanelPreset else { return }
+        schedulePhotoRarity()
         let grouping = settings.grouping.validated()
         let taggingSelection = taggingCandidates(grouping)
         let taggingCandidates = taggingSelection.frames
@@ -2637,7 +2679,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             vocabulary: tagVocabulary,
             filteredCandidates: displayCandidates,
             applyingVisualOrder: false,
-            tagTopCount: settings.tagAdvancedMode ? settings.tagTopCount : 99
+            tagTopCount: settings.tagTopCount
         )
         if tagFilter.orGroups.contains(where: { !$0.tags.isEmpty }) {
             var summaryFilter = tagFilter
@@ -2649,7 +2691,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 revealedGroups: revealedGroups, grouping: grouping, groupingEnabled: groupingEnabled,
                 tagFilter: summaryFilter, vocabulary: tagVocabulary,
                 filteredCandidates: candidates(summaryFilter), applyingVisualOrder: false,
-                tagTopCount: settings.tagAdvancedMode ? settings.tagTopCount : 99).visible
+                tagTopCount: settings.tagTopCount).visible
         } else {
             tagSummaryFrames = arrangement.visible
         }
@@ -2953,6 +2995,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         reconcileTagList(&next.common, with: labels.common)
         reconcileTagList(&next.available, with: available)
         next.counts = labels.counts
+        next.frameCount = labels.frameCount
         if next != tagSummaryPresentation { tagSummaryPresentation = next }
     }
 

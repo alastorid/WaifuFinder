@@ -60,6 +60,7 @@ struct FrameOrderPanel: View {
     @State private var orderExpanded = true
     @State private var groupingExpanded = true
     @State private var tagsExpanded = true
+    @AppStorage("tagFilterGroupByRarity") private var groupTagsByRarity = false
 
     var body: some View {
         ScrollView {
@@ -115,11 +116,22 @@ struct FrameOrderPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             signalRow(.minimalVisualDistance)
             if session.photosAlbumURL == nil { signalRow(.time) }
+            if showsPhotoRarity {
+                signalRow(.tagRarity)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             signalRow(.face)
             signalRow(.definition)
             signalRow(.art)
             ratingSection
         }
+        .animation(.easeInOut(duration: 0.33), value: showsPhotoRarity)
+    }
+
+    private var showsPhotoRarity: Bool {
+        session.photoRarityReady && !session.taggingProgress.isRunning
+            && !session.restoringTagMemory && !session.isLoadingPhotosAlbum
+            && session.taggedFrameCount > 0 && session.untaggedFrameCountForTagging == 0
     }
 
     private var ratingSection: some View {
@@ -326,14 +338,6 @@ struct FrameOrderPanel: View {
         }
     }
 
-    private var tagsAdvancedBinding: Binding<Bool> {
-        Binding(get: { session.settings.tagAdvancedMode }, set: { advanced in
-            var settings = session.settings
-            settings.tagAdvancedMode = advanced
-            session.settings = settings
-        })
-    }
-
     /// Bordered panel with an independently controlled disclosure header.
     private func collapsiblePanel<Accessory: View, Content: View>(
         title: String,
@@ -365,11 +369,7 @@ struct FrameOrderPanel: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     if title == "Tags" {
-                        Picker("Tags mode", selection: tagsAdvancedBinding) {
-                            Text("Basic").tag(false)
-                            Text("Advanced").tag(true)
-                        }
-                        .pickerStyle(.inline)
+                        Toggle("Group by rarity", isOn: $groupTagsByRarity)
                     }
                 }
                 .accessibilityLabel("\(title) panel")

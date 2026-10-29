@@ -4,6 +4,58 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum CrystalOrbImport {
+    static let webArchiveType = "com.apple.webarchive"
+    static var dropTypes: [UTType] {
+        [.fileURL, .url, .image, UTType(importedAs: webArchiveType)]
+    }
+
+    static func imageTypes(of provider: NSItemProvider) -> [String] {
+        let types = provider.registeredTypeIdentifiers.filter { UTType($0)?.conforms(to: .image) == true }
+        return types.isEmpty ? [UTType.image.identifier] : types
+    }
+
+    /// Safari archives carry the dragged image as the main resource or a subresource.
+    /// Read embedded bytes directly, without loading or executing the archived page.
+    static func archivedImage(_ data: Data) -> Data? {
+        guard let archive = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+        let resources = ([archive["WebMainResource"] as? [String: Any]].compactMap { $0 })
+            + (archive["WebSubresources"] as? [[String: Any]] ?? [])
+        return resources.compactMap { $0["WebResourceData"] as? Data }.first(where: isDecodable)
+    }
+
+    static func archiveData(from provider: NSItemProvider) async -> Data? {
+        guard provider.hasItemConformingToTypeIdentifier(webArchiveType) else { return nil }
+        return await DropRetry.value {
+            let data: Data? = await withCheckedContinuation { continuation in
+                provider.loadDataRepresentation(forTypeIdentifier: webArchiveType) { data, _ in
+                    continuation.resume(returning: data)
+                }
+            }
+            return data.flatMap(archivedImage)
+        }
+    }
+
+    static func remoteImage(_ url: URL) async -> Data? {
+        guard ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        do {
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
+                  response.mimeType?.hasPrefix("image/") == true else { return nil }
+            let limit = 64 * 1_024 * 1_024
+            guard response.expectedContentLength <= limit else { return nil }
+            var data = Data()
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                guard data.count < limit else { return nil }
+                data.append(byte)
+            }
+            return isDecodable(data) ? data : nil
+        } catch { return nil }
+    }
+
     /// The concrete image type the provider registered, or `public.image` when it
     /// declares none. Drag sources register what they can actually deliver
     /// (`public.heic` from Photos, `public.png` from browsers); asking for the
@@ -17,15 +69,16 @@ enum CrystalOrbImport {
     /// error and bytes ImageIO rejects are both treated as transient — see
     /// `DropRetry` — so the provider is re-asked before data is given up on.
     static func imageData(from provider: NSItemProvider) async -> Data? {
-        let type = imageType(of: provider)
         return await DropRetry.value {
-            let data = try? await withCheckedThrowingContinuation { continuation in
-                provider.loadDataRepresentation(forTypeIdentifier: type) { data, error in
-                    if let data { continuation.resume(returning: data) }
-                    else { continuation.resume(throwing: error ?? CrystalOrbImageSource.failure) }
+            for type in imageTypes(of: provider) {
+                let data: Data? = await withCheckedContinuation { continuation in
+                    provider.loadDataRepresentation(forTypeIdentifier: type) { data, _ in
+                        continuation.resume(returning: data)
+                    }
                 }
+                if let data, isDecodable(data) { return data }
             }
-            return data.flatMap { isDecodable($0) ? $0 : nil }
+            return nil
         }
     }
 
@@ -68,11 +121,12 @@ enum CrystalOrbImport {
         guard !providers.isEmpty else { return false }
         let urls = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) || $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }
         let imageProvider = providers.first { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
-        guard !urls.isEmpty || imageProvider != nil else { return false }
+        let archiveProvider = providers.first { $0.hasItemConformingToTypeIdentifier(webArchiveType) }
+        guard !urls.isEmpty || imageProvider != nil || archiveProvider != nil else { return false }
         let ticket = model.beginDrop()
         // Bitmap providers already identify an image: enter Orb before waiting
         // for a cross-application representation to arrive.
-        if imageProvider != nil { model.beginImageDrop(session: session) }
+        if imageProvider != nil || archiveProvider != nil { model.beginImageDrop(session: session) }
         Task {
             // Browser and Photos drags often advertise a URL as well as pixels.
             // Resolve the image first: a page URL is not the dragged image, and
@@ -84,8 +138,29 @@ enum CrystalOrbImport {
                 model.importImage(data: payload, session: session)
                 return
             }
+            if let archiveProvider, let payload = await archiveData(from: archiveProvider) {
+                guard model.dropTicket == ticket else { return }
+                model.importImage(data: payload, session: session)
+                return
+            }
             let values = await VideoDrop.urls(from: urls)
             guard model.dropTicket == ticket else { return }
+            for url in values where !url.isFileURL {
+                let imageURL = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
+                if imageURL || imageProvider != nil || archiveProvider != nil {
+                    model.beginImageDrop(session: session)
+                    if let payload = await remoteImage(url) {
+                        guard model.dropTicket == ticket else { return }
+                        model.importImage(data: payload, session: session)
+                        return
+                    }
+                    guard model.dropTicket == ticket else { return }
+                    if imageURL && imageProvider == nil && archiveProvider == nil {
+                        model.failImageDrop(ticket: ticket, message: "The dropped image could not be downloaded.")
+                        return
+                    }
+                }
+            }
             if let image = values.first(where: { $0.isFileURL && isDecodableFile($0) }) {
                 model.importImage(url: image, session: session)
             } else if let imageProvider {
@@ -108,6 +183,8 @@ enum CrystalOrbImport {
                 } else {
                     model.failImageDrop(ticket: ticket, message: "The dropped image could not be read.")
                 }
+            } else if archiveProvider != nil {
+                model.failImageDrop(ticket: ticket, message: "The dropped image could not be read.")
             } else if values.contains(where: { $0.isFileURL }) {
                 if model.isOpen { model.close() }
                 session.loadVideos(at: values)

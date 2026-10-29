@@ -107,7 +107,7 @@ struct RootView: View {
         // The one drop registration for the whole window. A second nested
         // registration over the same pixels races two loads on the same drag
         // providers; one drop must be handled exactly once.
-        .onDrop(of: [.fileURL, .url, .image], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: CrystalOrbImport.dropTypes, isTargeted: $isDropTargeted) { providers in
             CrystalOrbImport.accept(providers, model: orb, session: session)
         }
         .onDisappear { if orb.isOpen { orb.close() } }
