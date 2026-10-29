@@ -1,18 +1,23 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Faceted tags arranged by the published Danbooru taxonomy.
 struct TagFilterView: View {
     @ObservedObject var session: WaifuSession
     @State private var quickFilterText = ""
     @State private var collapsedGroups: Set<String> = []
+    @AppStorage("tagFilterGroupingEnabled") private var groupingEnabled = true
+    @State private var amountOrder = 0
+    @State private var selectedTags: Set<String> = []
+    @State private var selectionRect: CGRect?
 
     private var enabled: Bool {
         session.previewFrame == nil && session.uncover == nil && !session.progress.isRunning
     }
 
     private var hasActiveTags: Bool {
-        !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty
+        session.tagFilter.hasActiveTags
     }
 
     private var showsTaggingStatus: Bool {
@@ -29,7 +34,8 @@ struct TagFilterView: View {
     private var commonTags: [String] {
         alphabetical(Set(session.tagCommonTags)
             .subtracting(session.tagFilter.requiredTags)
-            .subtracting(session.tagFilter.excludedTags))
+            .subtracting(session.tagFilter.excludedTags)
+            .subtracting(session.tagFilter.orTags))
     }
 
     private var wantedTags: [String] {
@@ -42,15 +48,18 @@ struct TagFilterView: View {
 
     /// Tags offered by the frames shown that are neither common nor classified.
     private var unselectedTags: [String] {
-        session.tagFacetTags.filter {
+        let common = Set(session.tagCommonTags)
+        let grouped = session.tagFilter.orTags
+        return session.tagFacetTags.filter {
             !session.tagFilter.requiredTags.contains($0)
                 && !session.tagFilter.excludedTags.contains($0)
-                && !session.tagCommonTags.contains($0)
+                && !common.contains($0)
+                && !grouped.contains($0)
         }
     }
 
     private var tags: [String] {
-        commonTags + standaloneTags
+        commonTags + standaloneTags + Array(session.tagFilter.orTags)
     }
 
     /// Everything the Common group does not hold, in the same lead order.
@@ -68,23 +77,31 @@ struct TagFilterView: View {
         let tags: [String]
     }
 
+    private func ordered(_ tags: [String]) -> [String] {
+        guard amountOrder != 0 else { return tags }
+        return tags.sorted {
+            let lhs = session.tagMatchCounts[$0, default: 0]
+            let rhs = session.tagMatchCounts[$1, default: 0]
+            if lhs != rhs { return amountOrder == 1 ? lhs > rhs : lhs < rhs }
+            return $0.localizedStandardCompare($1) == .orderedAscending
+        }
+    }
+
     private var visibleGroups: [TagSubgroup] {
-        // Sort groups alphabetically before quick search. Tags retain their
-        // existing order within each group.
-        let grouped = Dictionary(grouping: tags) {
-            let path = DanbooruTagGroups.membership[$0.replacingOccurrences(of: " ", with: "_")]
-                ?? "Other tags"
+        let grouped = Dictionary(grouping: standaloneTags) {
+            let path = DanbooruTagGroups.membership[$0.replacingOccurrences(of: " ", with: "_")] ?? "Other tags"
             return path.components(separatedBy: " / ")[0]
         }
-        return grouped.keys.sorted {
-            return $0.localizedStandardCompare($1) == .orderedAscending
-        }.compactMap { title in
-            let visible = matching(grouped[title]!)
+        return grouped.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.compactMap { title in
+            let visible = matching(ordered(grouped[title]!))
             return visible.isEmpty ? nil : TagSubgroup(id: title, tags: visible)
         }
     }
 
-    private var hasVisibleTags: Bool { !visibleGroups.isEmpty }
+    private var hasVisibleTags: Bool {
+        !matching(commonTags).isEmpty || !visibleGroups.isEmpty
+            || session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -97,10 +114,11 @@ struct TagFilterView: View {
                 if session.settings.tagAdvancedMode {
                     advancedControls
                 }
+                tagControls
                 if showsTaggingStatus {
                     TaggingPanelStatus(session: session, panel: .tags)
                 }
-                if hasActiveTags || !showsTaggingStatus {
+                if hasActiveTags || !session.tagFilter.orGroups.isEmpty || !showsTaggingStatus {
                     if session.isSummarizingTags, !tags.isEmpty {
                         HStack(spacing: 5) {
                             ProgressView()
@@ -110,12 +128,12 @@ struct TagFilterView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if session.tagVocabulary == nil && !hasActiveTags {
+                    if session.tagVocabulary == nil && !hasActiveTags && session.tagFilter.orGroups.isEmpty {
                         Text("Install WD Tagger in Settings to filter by tags.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
-                    } else if tags.isEmpty {
+                    } else if tags.isEmpty && session.tagFilter.orGroups.isEmpty {
                         Text(session.isSummarizingTags ? "Updating tags…" : session.frames.isEmpty
                              ? "Tags will appear after a video is analyzed."
                              : "No tags among the frames currently shown.")
@@ -148,48 +166,53 @@ struct TagFilterView: View {
                         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(visibleGroups) { group in
-                                DisclosureGroup(isExpanded: Binding(
-                                    get: { !collapsedGroups.contains(group.id) },
-                                    set: { expanded in
-                                        if expanded { collapsedGroups.remove(group.id) }
-                                        else { collapsedGroups.insert(group.id) }
-                                    }
-                                )) {
-                                    TagChipFlow(spacing: 5, groupTagCount: 0) {
-                                        ForEach(group.tags, id: \.self) { tag in
-                                            tagChip(for: tag)
-                                        }
-                                    }
-                                    .padding(.top, 4)
-                                } label: {
-                                    Text("\(group.id) (\(group.tags.count))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                            if !matching(commonTags).isEmpty {
+                                subgroup(title: "Common", tags: matching(ordered(commonTags)), allTags: commonTags)
+                            }
+                            ForEach(session.tagFilter.orGroups) { group in
+                                orGroup(group)
+                            }
+                            if groupingEnabled {
+                                ForEach(visibleGroups) { group in
+                                    subgroup(title: group.id, tags: group.tags,
+                                             allTags: standaloneTags.filter { tag in
+                                        let path = DanbooruTagGroups.membership[tag.replacingOccurrences(of: " ", with: "_")] ?? "Other tags"
+                                        return path.components(separatedBy: " / ")[0] == group.id
+                                    })
                                 }
+                            } else {
+                                chipFlow(matching(ordered(standaloneTags)))
                             }
                         }
                         .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
                             GeometryReader { geometry in
-                                let selectedFrames: [String: CGRect] = Dictionary(uniqueKeysWithValues: anchors.compactMap { tag, anchor -> (String, CGRect)? in
+                                let frames: [String: CGRect] = Dictionary(uniqueKeysWithValues: anchors.compactMap { tag, anchor -> (String, CGRect)? in
                                     guard enabled else { return nil }
                                     return (tag, geometry[anchor])
                                 })
-                                TagRightClickMonitor(tagFrames: selectedFrames) { tag in
-                                    rightClickTag(tag)
-                                }
+                                TagRightClickMonitor(tagFrames: frames, selectionRect: $selectionRect,
+                                                     onRightClick: rightClickTag, onSelect: { tags, extending in
+                                    if extending { selectedTags.formUnion(tags) } else { selectedTags = tags }
+                                }, onGroupShortcut: groupSelectedTags)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .allowsHitTesting(false)
+                                if let rect = selectionRect {
+                                    Rectangle().fill(Color.accentColor.opacity(0.12))
+                                        .overlay(Rectangle().stroke(Color.accentColor.opacity(0.7)))
+                                        .frame(width: rect.width, height: rect.height)
+                                        .position(x: rect.midX, y: rect.midY)
+                                        .allowsHitTesting(false)
+                                }
                             }
                         }
 
-                        if !hasVisibleTags {
+                        if !hasVisibleTags && !quickFilterText.isEmpty {
                             Text("No tags match this quick filter.")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
 
-                        Text("Required tags must match; unwanted tags remove matching frames. Available tags update with the frames shown and rank by average confidence above the threshold.")
+                        Text("Required tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -205,6 +228,137 @@ struct TagFilterView: View {
         .onChange(of: quickFilterText) { _, text in
             if !text.isEmpty { collapsedGroups.removeAll() }
         }
+    }
+
+    private var tagControls: some View {
+        HStack(spacing: 6) {
+            Button { groupingEnabled.toggle() } label: {
+                Text("Group").tagChipBody(isSelected: groupingEnabled, isExcluded: false)
+            }
+            .help("Group tags by category")
+            Button { amountOrder = (amountOrder + 1) % 3 } label: {
+                HStack(spacing: 3) {
+                    Text("Amount")
+                    if amountOrder != 0 { Image(systemName: amountOrder == 1 ? "arrow.down" : "arrow.up") }
+                }.tagChipBody(isSelected: amountOrder != 0, isExcluded: false)
+            }
+            .help(amountOrder == 0 ? "Default order; click for most matches first" : amountOrder == 1 ? "Most matches first; click for fewest first" : "Fewest matches first; click for default order")
+            Button {
+                var filter = session.tagFilter
+                filter.orGroups.append(TagOrGroup())
+                session.tagFilter = filter
+            } label: { Text("OR").tagChipBody(isSelected: false, isExcluded: false) }
+                .help("Add an OR group. Press F to group selected tags.")
+        }
+        .buttonStyle(.plain)
+        .font(.caption)
+    }
+
+    private func chipFlow(_ tags: [String]) -> some View {
+        TagChipFlow(spacing: 5, groupTagCount: 0) {
+            ForEach(tags, id: \.self) { tag in tagChip(for: tag) }
+        }
+    }
+
+    private func subgroup(title: String, tags: [String], allTags: [String]) -> some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { !collapsedGroups.contains(title) },
+            set: { expanded in
+                if expanded { collapsedGroups.remove(title) } else { collapsedGroups.insert(title) }
+            }
+        )) {
+            chipFlow(tags).padding(.top, 4)
+        } label: {
+            Text("\(title) (\(tags.count))")
+                .font(.caption).foregroundStyle(.secondary)
+                .contextMenu {
+                    Button("Include \(title) tags") {
+                        var filter = session.tagFilter
+                        let group = TagOrGroup()
+                        filter.orGroups.append(group)
+                        filter.addToOrGroup(Set(allTags), id: group.id)
+                        session.tagFilter = filter
+                    }
+                    Button("Exclude \(title) tags") {
+                        var filter = session.tagFilter
+                        for tag in allTags { filter.setExcluded(true, tag: tag) }
+                        session.tagFilter = filter
+                    }
+                }
+        }
+    }
+
+    private func orGroup(_ group: TagOrGroup) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("OR (\(group.tags.count))")
+                .font(.caption.weight(.semibold))
+                .help("Drag this label onto another OR group to merge them")
+                .onDrag { TagGroupDragPayload.provider(for: group.id) } preview: {
+                    Text("OR (\(group.tags.count))")
+                        .tagChipBody(isSelected: true, isExcluded: false)
+                }
+                .contextMenu {
+                    Button("Remove") {
+                        var filter = session.tagFilter
+                        filter.orGroups.removeAll { $0.id == group.id }
+                        session.tagFilter = filter
+                    }
+                }
+            if group.tags.isEmpty {
+                Text("Drop tags here").font(.caption).foregroundStyle(.tertiary)
+            } else {
+                chipFlow(matching(ordered(alphabetical(group.tags))))
+            }
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.accentColor.opacity(0.35)))
+        .contentShape(Rectangle())
+        .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
+            guard let provider = providers.first(where: {
+                $0.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier)
+            }) else { return false }
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
+                guard let data else { return }
+                if let sourceID = TagGroupDragPayload.decode(data) {
+                    Task { @MainActor in
+                        var filter = session.tagFilter
+                        guard filter.mergeOrGroup(sourceID, into: group.id) else { return }
+                        session.tagFilter = filter
+                    }
+                } else if let tags = TagDragPayload.decode(data) {
+                    Task { @MainActor in
+                        guard session.tagFilter.orGroups.contains(where: { $0.id == group.id }) else { return }
+                        let validTags = tags.intersection(availableTags)
+                        guard !validTags.isEmpty else { return }
+                        var filter = session.tagFilter
+                        filter.addToOrGroup(validTags, id: group.id)
+                        session.tagFilter = filter
+                        selectedTags.subtract(validTags)
+                    }
+                }
+            }
+            return true
+        }
+    }
+
+    private var availableTags: Set<String> {
+        Set(session.tagFacetTags).union(session.tagCommonTags)
+            .union(session.tagFilter.requiredTags).union(session.tagFilter.excludedTags)
+            .union(session.tagFilter.orTags)
+    }
+
+    private func groupSelectedTags() -> Bool {
+        guard enabled, !session.crystalOrbIsOpen, !session.showExportSheet,
+              !session.showPreviewExportSheet, session.errorMessage == nil else { return false }
+        let validTags = selectedTags.intersection(availableTags)
+        guard validTags.count > 1 else { return false }
+        var filter = session.tagFilter
+        guard filter.groupSelectedTags(validTags) != nil else { return false }
+        session.tagFilter = filter
+        selectedTags.subtract(validTags)
+        return true
     }
 
     private var advancedControls: some View {
@@ -253,44 +407,74 @@ struct TagFilterView: View {
         let isSelected = session.tagFilter.requiredTags.contains(tag)
         let isExcluded = session.tagFilter.excludedTags.contains(tag)
         let sortsByTag = session.tagFilter.scoreSortTag == tag
-        return Button {
-            var filter = session.tagFilter
-            if isExcluded {
-                filter.setSelected(true, tag: tag)
-                filter.scoreSortTag = tag
-                filter.scoreSortDescending = true
-            } else if isSelected {
-                if sortsByTag {
-                    filter.scoreSortDescending.toggle()
-                } else {
-                    filter.scoreSortTag = tag
-                    filter.scoreSortDescending = true
-                }
-            } else {
-                filter.setSelected(true, tag: tag)
-                filter.scoreSortTag = tag
-                filter.scoreSortDescending = true
+        return HStack(spacing: 4) {
+            if sortsByTag {
+                Image(systemName: session.tagFilter.scoreSortDescending ? "arrow.down" : "arrow.up")
+                    .font(.system(size: 9, weight: .semibold))
             }
-            session.tagFilter = filter
-        } label: {
-            HStack(spacing: 4) {
-                if sortsByTag {
-                    Image(systemName: session.tagFilter.scoreSortDescending ? "arrow.down" : "arrow.up")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                highlightedTagText(tag)
-                    .font(.system(size: 14))
-                    .lineLimit(1)
-                    .strikethrough(isExcluded)
-            }
-            .tagChipBody(isSelected: isSelected, isExcluded: isExcluded)
+            highlightedTagText(tag)
+                .font(.system(size: 14))
+                .lineLimit(1)
+                .strikethrough(isExcluded)
         }
-        .buttonStyle(.plain)
+        .tagChipBody(isSelected: isSelected, isExcluded: isExcluded)
+        .overlay(Capsule().strokeBorder(Color.accentColor, lineWidth: selectedTags.contains(tag) ? 2 : 0))
+        .onTapGesture { activateTag(tag) }
+        .focusable()
+        .onKeyPress(keys: [.space, .return]) { _ in
+            activateTag(tag)
+            return .handled
+        }
+        .accessibilityAction { activateTag(tag) }
+        .onDrag {
+            let tags = selectedTags.contains(tag) ? selectedTags : [tag]
+            return TagDragPayload.provider(for: tags)
+        } preview: {
+            Text(tag)
+                .tagChipBody(isSelected: true, isExcluded: false)
+                .overlay(alignment: .topTrailing) {
+                    if selectedTags.contains(tag) && selectedTags.count > 1 {
+                        Text("\(selectedTags.count)").font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white).padding(4)
+                            .background(Color.red, in: Circle()).offset(x: 8, y: -8)
+                    }
+                }
+        }
+        .accessibilityAddTraits(.isButton)
         .anchorPreference(key: TagChipBoundsPreferenceKey.self, value: .bounds) {
             [tag: $0]
         }
         .accessibilityLabel(tag)
         .accessibilityValue(accessibilityValue(isSelected: isSelected, isExcluded: isExcluded, sortsByTag: sortsByTag))
+    }
+
+    private func activateTag(_ tag: String) {
+        if NSEvent.modifierFlags.contains(.command) {
+            if selectedTags.contains(tag) { selectedTags.remove(tag) } else { selectedTags.insert(tag) }
+            return
+        }
+        selectedTags.removeAll()
+        var filter = session.tagFilter
+        let isExcluded = filter.excludedTags.contains(tag)
+        let isSelected = filter.requiredTags.contains(tag)
+        let sortsByTag = filter.scoreSortTag == tag
+        if isExcluded {
+            filter.setSelected(true, tag: tag)
+            filter.scoreSortTag = tag
+            filter.scoreSortDescending = true
+        } else if isSelected {
+            if sortsByTag {
+                filter.scoreSortDescending.toggle()
+            } else {
+                filter.scoreSortTag = tag
+                filter.scoreSortDescending = true
+            }
+        } else {
+            filter.setSelected(true, tag: tag)
+            filter.scoreSortTag = tag
+            filter.scoreSortDescending = true
+        }
+        session.tagFilter = filter
     }
 
     private func highlightedTagText(_ tag: String) -> Text {
@@ -317,12 +501,66 @@ struct TagFilterView: View {
     private func rightClickTag(_ tag: String) {
         guard enabled else { return }
         var filter = session.tagFilter
-        if filter.requiredTags.contains(tag) || filter.excludedTags.contains(tag) {
+        if filter.orTags.contains(tag) {
+            filter.removeFromOrGroups(tag)
+        } else if filter.requiredTags.contains(tag) || filter.excludedTags.contains(tag) {
             filter.setSelected(false, tag: tag)
         } else {
             filter.setExcluded(true, tag: tag)
         }
         session.tagFilter = filter
+    }
+}
+
+/// A drag carries its complete selection, independent of the source view's lifetime.
+enum TagDragPayload {
+    private static let prefix = "waifu-tag-drag-v1:"
+
+    static func provider(for tags: Set<String>) -> NSItemProvider {
+        let provider = NSItemProvider()
+        let data = encode(tags)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier,
+                                            visibility: .ownProcess) { completion in
+            completion(data, nil)
+            return nil
+        }
+        return provider
+    }
+
+    static func encode(_ tags: Set<String>) -> Data {
+        let data = (try? JSONEncoder().encode(tags.sorted())) ?? Data("[]".utf8)
+        return Data(prefix.utf8) + data
+    }
+
+    static func decode(_ data: Data) -> Set<String>? {
+        let prefixData = Data(prefix.utf8)
+        guard data.starts(with: prefixData),
+              let values = try? JSONDecoder().decode([String].self, from: data.dropFirst(prefixData.count)),
+              !values.isEmpty, values.allSatisfy({ !$0.isEmpty }) else { return nil }
+        return Set(values)
+    }
+}
+
+/// A group drag names its source so the drop can remove that clause after merging.
+enum TagGroupDragPayload {
+    private static let prefix = "waifu-or-group-v1:"
+
+    static func provider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        let data = encode(id)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier,
+                                            visibility: .ownProcess) { completion in
+            completion(data, nil)
+            return nil
+        }
+        return provider
+    }
+
+    static func encode(_ id: UUID) -> Data { Data((prefix + id.uuidString).utf8) }
+
+    static func decode(_ data: Data) -> UUID? {
+        guard let text = String(data: data, encoding: .utf8), text.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(text.dropFirst(prefix.count)))
     }
 }
 
@@ -370,18 +608,27 @@ private struct TagChipBoundsPreferenceKey: PreferenceKey {
 /// selected chip so it removes the tag immediately, without opening a context menu.
 private struct TagRightClickMonitor: NSViewRepresentable {
     let tagFrames: [String: CGRect]
+    @Binding var selectionRect: CGRect?
     let onRightClick: (String) -> Void
+    let onSelect: (Set<String>, Bool) -> Void
+    let onGroupShortcut: () -> Bool
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
         view.tagFrames = tagFrames
         view.onRightClick = onRightClick
+        view.onSelectionRect = { selectionRect = $0 }
+        view.onSelect = onSelect
+        view.onGroupShortcut = onGroupShortcut
         return view
     }
 
     func updateNSView(_ view: MonitorView, context: Context) {
         view.tagFrames = tagFrames
         view.onRightClick = onRightClick
+        view.onSelectionRect = { selectionRect = $0 }
+        view.onSelect = onSelect
+        view.onGroupShortcut = onGroupShortcut
     }
 
     static func dismantleNSView(_ view: MonitorView, coordinator: ()) {
@@ -391,6 +638,11 @@ private struct TagRightClickMonitor: NSViewRepresentable {
     final class MonitorView: NSView {
         var tagFrames: [String: CGRect] = [:]
         var onRightClick: ((String) -> Void)?
+        var onSelectionRect: ((CGRect?) -> Void)?
+        var onSelect: ((Set<String>, Bool) -> Void)?
+        var onGroupShortcut: (() -> Bool)?
+        private var selectionStart: CGPoint?
+        private var extending = false
         private var monitor: Any?
 
         override var isFlipped: Bool { true }
@@ -408,18 +660,48 @@ private struct TagRightClickMonitor: NSViewRepresentable {
 
         private func installMonitor() {
             guard monitor == nil, window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown]) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
                 let eventWindowNumber = event.window?.windowNumber
                 let locationInWindow = event.locationInWindow
                 let handled = MainActor.assumeIsolated {
                     guard let self, let window = self.window,
                           eventWindowNumber == window.windowNumber else { return false }
-                    let point = self.convert(locationInWindow, from: nil)
-                    guard let (tag, _) = self.tagFrames.first(where: { $0.value.contains(point) }) else {
-                        return false
+                    if event.type == .keyDown {
+                        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                        guard window.isKeyWindow, window.attachedSheet == nil, !event.isARepeat,
+                              !(window.firstResponder is NSTextView),
+                              (window.firstResponder as? NSTextField)?.isEditable != true,
+                              modifiers.intersection([.command, .control, .option]).isEmpty,
+                              event.charactersIgnoringModifiers?.lowercased() == "f" else { return false }
+                        return self.onGroupShortcut?() ?? false
                     }
-                    self.onRightClick?(tag)
-                    return true
+                    let point = self.convert(locationInWindow, from: nil)
+                    if event.type == .rightMouseDown {
+                        guard let (tag, _) = self.tagFrames.first(where: { $0.value.contains(point) }) else { return false }
+                        self.onRightClick?(tag)
+                        return true
+                    }
+                    if event.type == .leftMouseDown {
+                        guard self.bounds.contains(point), !self.tagFrames.values.contains(where: { $0.contains(point) }) else {
+                            self.selectionStart = nil
+                            return false
+                        }
+                        self.selectionStart = point
+                        self.extending = event.modifierFlags.contains(.command)
+                    } else if event.type == .leftMouseDragged, let start = self.selectionStart {
+                        let rect = CGRect(x: min(start.x, point.x), y: min(start.y, point.y),
+                                          width: abs(point.x - start.x), height: abs(point.y - start.y))
+                        if rect.width > 3 || rect.height > 3 { self.onSelectionRect?(rect) }
+                    } else if event.type == .leftMouseUp, let start = self.selectionStart {
+                        self.selectionStart = nil
+                        let rect = CGRect(x: min(start.x, point.x), y: min(start.y, point.y),
+                                          width: abs(point.x - start.x), height: abs(point.y - start.y))
+                        if rect.width > 3 || rect.height > 3 {
+                            self.onSelect?(Set(self.tagFrames.filter { $0.value.intersects(rect) }.map(\.key)), self.extending)
+                        }
+                        self.onSelectionRect?(nil)
+                    }
+                    return false
                 }
                 return handled ? nil : event
             }

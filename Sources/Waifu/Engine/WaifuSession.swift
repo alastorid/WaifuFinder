@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 private struct DisplayFilterCacheKey: Hashable {
     let requiredTags: Set<String>
     let excludedTags: Set<String>
+    let orGroups: [Set<String>]
     let thresholdBits: UInt32
     let faceFilter: FrameFaceFilter
     let limits: FrameLimits
@@ -766,12 +767,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private struct TagSummaryPresentation: Equatable {
         var available: [String] = []
         var common: [String] = []
+        var counts: [String: Int] = [:]
     }
     // Publish both lists together; SwiftUI still reconciles chips by tag identity.
     @Published private var tagSummaryPresentation = TagSummaryPresentation()
     var tagFacetTags: [String] { tagSummaryPresentation.available }
     /// Tags present on every frame currently shown in the grid.
     var tagCommonTags: [String] { tagSummaryPresentation.common }
+    var tagMatchCounts: [String: Int] { tagSummaryPresentation.counts }
+    private var tagSummaryFrames: [AnalyzedFrame] = []
     @Published private(set) var isSummarizingTags = false
     var isComputingTagSummary: Bool { pendingTagSummaryInput != nil }
 
@@ -1679,10 +1683,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         return TaggingCandidateSelection(key: key, frames: candidates, untaggedCount: untaggedCount)
     }
 
-    private func filteredDisplayCandidates(grouping: GroupingSettings) -> [AnalyzedFrame] {
+    private func filteredDisplayCandidates(grouping: GroupingSettings, filter requestedFilter: TagFilter) -> [AnalyzedFrame] {
         let key = DisplayFilterCacheKey(
-            requiredTags: Set(tagFilter.requiredTags.map(TagVocabulary.normalized)),
-            excludedTags: Set(tagFilter.excludedTags.map(TagVocabulary.normalized)),
+            requiredTags: Set(requestedFilter.requiredTags.map(TagVocabulary.normalized)),
+            excludedTags: Set(requestedFilter.excludedTags.map(TagVocabulary.normalized)),
+            orGroups: requestedFilter.orGroups.map { Set($0.tags.map(TagVocabulary.normalized)) }.filter { !$0.isEmpty },
             thresholdBits: settings.taggerThreshold.bitPattern,
             faceFilter: faceFilter,
             limits: frameLimits,
@@ -1694,7 +1699,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
 
         let reusable = displayFilterResults.compatible { cached in
-            cached.thresholdBits == key.thresholdBits
+            cached.orGroups == key.orGroups
+                && cached.thresholdBits == key.thresholdBits
                 && cached.minimumFaceAreaBits == key.minimumFaceAreaBits
                 && cached.vocabularyFingerprint == key.vocabularyFingerprint
                 && cached.requiredTags.isSubset(of: key.requiredTags)
@@ -1713,7 +1719,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
         let source = reusable.map { frames(forCachedIndices: $0.entry.indices) } ?? frames
         let filter = TagFilter(requiredTags: key.requiredTags, excludedTags: key.excludedTags,
-                               threshold: Float(bitPattern: key.thresholdBits))
+                               threshold: Float(bitPattern: key.thresholdBits),
+                               orGroups: key.orGroups.map { TagOrGroup(tags: $0) })
         let candidates = source.filter { frame in
             key.faceFilter.admits(frame, grouping: grouping)
                 && key.limits.admits(frame, grouping: grouping)
@@ -2456,6 +2463,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         previewFrame = nil
         presentedGridNavigation = nil
         displayedFrames = []
+        tagSummaryFrames = []
         displayOrderFrames = []
         clearPublishedTagSummary()
         displayedRows = []
@@ -2597,14 +2605,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         // Cache-based filters can outlive a live refresh. Resolve any repeated
         // IDs before ranking and group caps so one frame contributes once.
-        let displayCandidates = uniqueFramesByID(filteredDisplayCandidates(grouping: grouping).filter { frame in
+        func candidates(_ filter: TagFilter) -> [AnalyzedFrame] {
+            uniqueFramesByID(filteredDisplayCandidates(grouping: grouping, filter: filter).filter { frame in
             guard favoriteFilter != .all else { return true }
             guard let sourceURL = photosAlbumURL else { return true }
             guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: frame.timeSeconds) else {
                 return false
             }
             return favoriteFilter.admits(favoriteAssetIdentifiers.contains(identifier))
-        })
+            })
+        }
+        let displayCandidates = candidates(tagFilter)
 
         let arrangement = FrameArrangement.arrange(
             frames,
@@ -2621,12 +2632,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                  selectionOrder: tagFilter.selectionOrder,
                                  exclusionOrder: tagFilter.exclusionOrder,
                                  scoreSortTag: tagFilter.scoreSortTag,
-                                 scoreSortDescending: tagFilter.scoreSortDescending),
+                                 scoreSortDescending: tagFilter.scoreSortDescending,
+                                 orGroups: tagFilter.orGroups),
             vocabulary: tagVocabulary,
             filteredCandidates: displayCandidates,
             applyingVisualOrder: false,
             tagTopCount: settings.tagAdvancedMode ? settings.tagTopCount : 99
         )
+        if tagFilter.orGroups.contains(where: { !$0.tags.isEmpty }) {
+            var summaryFilter = tagFilter
+            summaryFilter.orGroups = []
+            summaryFilter.threshold = settings.taggerThreshold
+            tagSummaryFrames = FrameArrangement.arrange(
+                frames, order: frameOrder, faceFilter: faceFilter, limits: frameLimits,
+                perGroupTopCount: settings.revealAllGroups ? Int.max : settings.perGroupFrameCount,
+                revealedGroups: revealedGroups, grouping: grouping, groupingEnabled: groupingEnabled,
+                tagFilter: summaryFilter, vocabulary: tagVocabulary,
+                filteredCandidates: candidates(summaryFilter), applyingVisualOrder: false,
+                tagTopCount: settings.tagAdvancedMode ? settings.tagTopCount : 99).visible
+        } else {
+            tagSummaryFrames = arrangement.visible
+        }
         topTagsByFrame = arrangement.topTagsByFrame
         let baseFrames = uniqueFramesByID(arrangement.visible)
         visualOrderBaseFrames = baseFrames
@@ -2856,12 +2882,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             clearPublishedTagSummary()
             return
         }
-        guard let vocabulary = tagVocabulary, !displayedFrames.isEmpty else {
+        guard let vocabulary = tagVocabulary, !tagSummaryFrames.isEmpty else {
             cancelTagSummaryWork()
             clearPublishedTagSummary()
             return
         }
-        let input = TagSummaryInput(ids: Set(displayedFrames.map(\.id)), revision: tagSummaryRevision,
+        let input = TagSummaryInput(ids: Set(tagSummaryFrames.map(\.id)), revision: tagSummaryRevision,
                                     threshold: settings.taggerThreshold)
         if input == completedTagSummaryInput, let labels = completedTagSummaryLabels {
             if pendingTagSummaryInput != nil {
@@ -2880,7 +2906,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let generation = UUID()
         tagSummaryGeneration = generation
         pendingTagSummaryInput = input
-        let shown = displayedFrames
+        let shown = tagSummaryFrames
         let sourceIDs = Set(frames.map(\.id))
         let computer = tagSummaryComputer
         let task = Task.detached(priority: .utility) { () -> TagSummary.Labels? in
@@ -2926,6 +2952,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var next = tagSummaryPresentation
         reconcileTagList(&next.common, with: labels.common)
         reconcileTagList(&next.available, with: available)
+        next.counts = labels.counts
         if next != tagSummaryPresentation { tagSummaryPresentation = next }
     }
 

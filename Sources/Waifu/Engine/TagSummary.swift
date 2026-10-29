@@ -12,6 +12,7 @@ struct TagSummary: Sendable {
     struct Labels: Sendable {
         let common: [String]
         let ranked: [String]
+        let counts: [String: Int]
     }
 
     let frameCount: Int
@@ -26,7 +27,7 @@ struct TagSummary: Sendable {
             if lhs != rhs { return lhs > rhs }
             return vocabulary.labels[left.index].name.localizedStandardCompare(vocabulary.labels[right.index].name) == .orderedAscending
         }.map { vocabulary.labels[$0.index].name }
-        return Labels(common: common, ranked: ranked)
+        return Labels(common: common, ranked: ranked, counts: Dictionary(uniqueKeysWithValues: tags.map { (vocabulary.labels[$0.index].name, $0.matchingFrames) }))
     }
 }
 

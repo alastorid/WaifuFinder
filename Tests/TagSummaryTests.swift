@@ -1,6 +1,7 @@
 import Foundation
 import CoreServices
 import Metal
+import UniformTypeIdentifiers
 
 private func summaryVocabulary(firstTag: String = "tag_0") throws -> TagVocabulary {
     let directory = try Temporary.directory("tag-summary-labels")
@@ -242,6 +243,109 @@ func registerTagSummaryTests() {
         check(!excluded.admits(corrupt, vocabulary: vocabulary), "saved excluded tags still reject")
         check(!TagFilter(requiredTags: ["unknown"]).admits(frames[0], vocabulary: vocabulary),
               "unknown required heads do not match")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "tag drag provider carries the complete selection", knownBug: nil) {
+        let selected: Set<String> = ["blue hair", "smile", "猫"]
+        let provider = TagDragPayload.provider(for: selected)
+        check(provider.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier), "drop target recognizes the drag type")
+        let data: Data? = await withCheckedContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+        checkEqual(data.flatMap(TagDragPayload.decode), selected, "provider delivers all selected tags")
+        check(TagDragPayload.decode(Data("ordinary text".utf8)) == nil, "unrelated text is not a tag drag")
+        check(TagDragPayload.decode(TagDragPayload.encode([])) == nil, "empty drags are rejected")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "multi-selected tags use an empty OR group or create one", knownBug: nil) {
+        var filter = TagFilter(requiredTags: ["a"], excludedTags: ["b"])
+        checkNil(filter.groupSelectedTags(["a"]), "a single tag does not create a group")
+        let created = filter.groupSelectedTags(["a", "b"])
+        check(created != nil && filter.orGroups.count == 1, "multiple tags create a group")
+        checkEqual(filter.orGroups[0].tags, ["a", "b"], "created group contains the selection")
+        check(filter.requiredTags.isEmpty && filter.excludedTags.isEmpty, "old tag states are cleared")
+        let empty = TagOrGroup()
+        filter.orGroups.append(empty)
+        checkEqual(filter.groupSelectedTags(["c", "d"]), empty.id, "the existing empty group is reused")
+        checkEqual(filter.orGroups.count, 2, "reusing an empty group does not add a group")
+        checkEqual(filter.orGroups[1].tags, ["c", "d"], "selection enters the empty group")
+        let next = filter.groupSelectedTags(["e", "f"])
+        check(next != nil && filter.orGroups.count == 3, "a fresh group is created when no group is empty")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "OR group drag payload and merge preserve destination and union", knownBug: nil) {
+        let source = TagOrGroup(tags: ["a", "b"])
+        let target = TagOrGroup(tags: ["b", "c"])
+        let other = TagOrGroup(tags: ["d"])
+        let provider = TagGroupDragPayload.provider(for: source.id)
+        let data: Data? = await withCheckedContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+        checkEqual(data.flatMap(TagGroupDragPayload.decode), source.id, "drag identifies the source group")
+        check(data.flatMap(TagDragPayload.decode) == nil, "group payload is not treated as a tag selection")
+        var filter = TagFilter(orGroups: [source, target, other])
+        check(!filter.mergeOrGroup(source.id, into: source.id), "dropping on itself changes nothing")
+        check(!filter.mergeOrGroup(UUID(), into: target.id), "missing source changes nothing")
+        check(filter.mergeOrGroup(source.id, into: target.id), "source merges into the target")
+        checkEqual(filter.orGroups.map(\.id), [target.id, other.id], "only the source group is removed")
+        checkEqual(filter.orGroups[0].tags, ["a", "b", "c"], "target holds the union without duplicates")
+        checkEqual(filter.orGroups[1], other, "unrelated group remains unchanged")
+        check(!filter.mergeOrGroup(target.id, into: UUID()), "missing destination does not remove source")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "OR groups compose with required and excluded tags and survive presets", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = [summaryFrame(0, [4: 0.9, 5: 0.9]),
+                      summaryFrame(1, [4: 0.9, 6: 0.9]),
+                      summaryFrame(2, [4: 0.9, 7: 0.9]),
+                      summaryFrame(3, [5: 0.9, 6: 0.9]),
+                      summaryFrame(4, [4: 0.9, 5: 0.9, 7: 0.9])]
+        let group = TagOrGroup(tags: ["tag_1", "tag_2"])
+        var filter = TagFilter(requiredTags: ["tag_0"], excludedTags: ["tag_3"], orGroups: [group])
+        checkEqual(frames.filter { filter.admits($0, vocabulary: vocabulary) }.map(\.id),
+                   [frames[0].id, frames[1].id], "OR alternatives compose with AND and exclusion")
+        filter.orGroups.append(TagOrGroup(tags: ["tag_2"]))
+        checkEqual(frames.filter { filter.admits($0, vocabulary: vocabulary) }.map(\.id),
+                   [frames[1].id], "separate OR groups are ANDed")
+        let decoded = try JSONDecoder().decode(TagFilter.self, from: JSONEncoder().encode(filter))
+        checkEqual(decoded, filter, "groups round trip with the filter")
+        let legacy = Data("{\"requiredTags\":[\"tag_0\"],\"excludedTags\":[],\"threshold\":0.35,\"selectionOrder\":[\"tag_0\"],\"exclusionOrder\":[],\"scoreSortDescending\":true}".utf8)
+        check(try JSONDecoder().decode(TagFilter.self, from: legacy).orGroups.isEmpty, "old saved filters load without groups")
+        filter.addToOrGroup(["tag_0", "tag_3"], id: group.id)
+        check(filter.requiredTags.isEmpty && filter.excludedTags.isEmpty, "moving tags clears their old state")
+        check(filter.orGroups[0].tags.isSuperset(of: ["tag_0", "tag_3"]), "moved tags belong to destination")
+        filter.setExcluded(true, tag: "tag_0")
+        check(!filter.orTags.contains("tag_0") && filter.excludedTags.contains("tag_0"), "excluding a group tag removes it from the group")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "OR filtering does not narrow candidate tag summary or poison the display cache", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let directory = try Temporary.directory("tag-or-summary")
+        let frames = [summaryFrame(0, [4: 0.9, 5: 0.9]),
+                      summaryFrame(1, [4: 0.9, 6: 0.9]),
+                      summaryFrame(2, [6: 0.9, 7: 0.9])]
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
+            session.frameOrder = .chronological
+            session.updateAnalyzedFrames(frames)
+            session.tagFilter = TagFilter(requiredTags: ["tag_0"], orGroups: [TagOrGroup(tags: ["tag_1"])])
+            checkEqual(session.displayedFrames.map(\.id), [frames[0].id], "OR narrows thumbnails")
+            for _ in 0..<500 {
+                if !session.isComputingTagSummary { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            check(session.tagFacetTags.contains("tag 2"), "candidate summary includes tags from AND matches outside the OR")
+            checkEqual(session.tagMatchCounts["tag 2"], 1, "amount uses AND-only candidates")
+            session.tagFilter.orGroups = [TagOrGroup(tags: ["tag_2"])]
+            checkEqual(session.displayedFrames.map(\.id), [frames[1].id], "changing alternatives invalidates cached display candidates")
+            session.tagFilter.orGroups = [TagOrGroup(tags: ["tag_3"])]
+            check(session.displayedFrames.isEmpty, "no OR matches produces an empty grid")
+            check(session.tagFacetTags.contains("tag 2"), "candidate summary remains available with an empty grid")
+        }.value
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "means include only values strictly above threshold and preserve legacy membership", knownBug: nil) {

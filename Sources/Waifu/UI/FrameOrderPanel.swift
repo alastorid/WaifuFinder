@@ -314,7 +314,7 @@ struct FrameOrderPanel: View {
 
     private var tagsPanel: some View {
         collapsiblePanel(title: "Tags", isExpanded: $tagsExpanded) {
-            if !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty {
+            if session.tagFilter.hasActiveTags {
                 Button("Clear") {
                     session.tagFilter = TagFilter()
                 }

@@ -30,7 +30,7 @@ struct FrameGridStatusView: View {
             displayedCount: session.displayOrderFrames.count,
             analyzedCount: session.frames.count,
             filtersActive: !session.frameLimits.isEmpty || session.faceFilter != .all
-                || !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty)
+                || session.tagFilter.hasActiveTags)
     }
 
     var body: some View {
@@ -81,7 +81,7 @@ struct FrameGridStatusView: View {
     }
 
     private var filterHint: String {
-        if !session.tagFilter.requiredTags.isEmpty || !session.tagFilter.excludedTags.isEmpty {
+        if session.tagFilter.hasActiveTags {
             return "Review wanted and unwanted tags in the Tags panel."
         }
         if session.faceFilter != .all { return "Review the face filter in the controls panel." }
