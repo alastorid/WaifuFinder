@@ -72,11 +72,21 @@ enum CrystalOrbImport {
         let ticket = model.beginDrop()
         // Bitmap providers already identify an image: enter Orb before waiting
         // for a cross-application representation to arrive.
-        if imageProvider != nil && urls.isEmpty { model.beginImageDrop(session: session) }
+        if imageProvider != nil { model.beginImageDrop(session: session) }
         Task {
+            // Browser and Photos drags often advertise a URL as well as pixels.
+            // Resolve the image first: a page URL is not the dragged image, and
+            // an unavailable promised URL must not stall an otherwise valid drop.
+            if let imageProvider,
+               !imageProvider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
+               let payload = await imageData(from: imageProvider) {
+                guard model.dropTicket == ticket else { return }
+                model.importImage(data: payload, session: session)
+                return
+            }
             let values = await VideoDrop.urls(from: urls)
             guard model.dropTicket == ticket else { return }
-            if let image = values.first(where: CrystalOrbImageSource.isImage) {
+            if let image = values.first(where: { $0.isFileURL && isDecodableFile($0) }) {
                 model.importImage(url: image, session: session)
             } else if let imageProvider {
                 // An image-declaring drag goes to the orb even when no URL
@@ -90,7 +100,7 @@ enum CrystalOrbImport {
                     // Prefer the drag's own file when exactly one is present:
                     // metadata and security scope survive; otherwise use bytes.
                     let files = values.filter { $0.isFileURL && FileManager.default.fileExists(atPath: $0.path) }
-                    if files.count == 1 { model.importImage(url: files[0], session: session) }
+                    if files.count == 1, isDecodableFile(files[0]) { model.importImage(url: files[0], session: session) }
                     else { model.importImage(data: payload, session: session) }
                 } else if let staged = await stageImageFile(from: imageProvider) {
                     guard model.dropTicket == ticket else { return }

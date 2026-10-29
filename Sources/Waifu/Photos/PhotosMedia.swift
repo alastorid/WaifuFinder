@@ -264,6 +264,11 @@ final class PhotosMedia: @unchecked Sendable {
     /// Deletes the exact selected assets, but only if they still belong to the
     /// album the user selected them from. PhotoKit moves deleted items to
     /// Recently Deleted, where Photos manages recovery and final removal.
+    static func isDeletionCancellation(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == PHPhotosErrorDomain && error.code == PHPhotosError.Code.userCancelled.rawValue
+    }
+
     func deleteAssets(identifiers: [String], collectionIdentifier: String) async throws {
         var uniqueIdentifiers: [String] = []
         var seen = Set<String>()

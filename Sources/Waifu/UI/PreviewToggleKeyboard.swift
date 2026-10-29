@@ -80,8 +80,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                             isRepeat: event.isARepeat,
                             previewIsUp: session.previewFrame != nil,
                             canOpen: session.focusedFrameID.flatMap { session.frame(id: $0) } != nil,
-                            blocked: session.uncover != nil || session.progress.isRunning || session.taggingProgress.isRunning ||
-                                session.showExportSheet || session.showPreviewExportSheet || session.errorMessage != nil || window.attachedSheet != nil,
+                            blocked: session.isPreviewInteractionBlocked || window.attachedSheet != nil,
                             hasTextFocus: hasTextFocus,
                             modifiers: event.modifierFlags)
                         switch outcome {

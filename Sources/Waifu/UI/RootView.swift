@@ -58,7 +58,7 @@ struct RootView: View {
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
                 .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
                 .accessibilityHidden(session.previewFrame != nil || session.uncover != nil || orb.isOpen)
-            } else if session.progress.isRunning {
+            } else if session.progress.isRunning && session.photosAlbumURL == nil {
                 AnalysisProgressView(progress: session.progress, video: session.video, cancel: session.cancel)
             } else if session.video != nil {
                 // Keep the grid and AVPlayer view mounted while frame preview is
@@ -102,6 +102,8 @@ struct RootView: View {
 
     private var routedWorkspace: some View {
         workspaceLayers
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
         // The one drop registration for the whole window. A second nested
         // registration over the same pixels races two loads on the same drag
         // providers; one drop must be handled exactly once.

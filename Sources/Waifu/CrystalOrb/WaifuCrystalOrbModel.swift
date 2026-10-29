@@ -664,15 +664,11 @@ final class WaifuCrystalOrbModel: ObservableObject {
     func handleKey(_ event: NSEvent) -> Bool {
         guard isOpen else { return false }
         if inspectionControlFocused, event.keyCode != 53 { return false }
-        if event.keyCode == 49, mode == .toggle,
-           event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
-            holdingToggle = event.type == .keyDown
-            return true
-        }
         guard event.type == .keyDown else { return false }
         if event.keyCode == 53 { close(); return true }
         guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
         switch event.keyCode {
+        case 49: if !event.isARepeat { close() }
         case 123: if opacityControlFocused { opacity = max(0, opacity - 0.01) } else { step(-1) }
         case 124: if opacityControlFocused { opacity = min(1, opacity + 0.01) } else { step(1) }
         default:

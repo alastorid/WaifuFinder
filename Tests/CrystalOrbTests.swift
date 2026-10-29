@@ -186,6 +186,32 @@ private func orbWait(_ predicate: () -> Bool) async throws {
 
 func registerCrystalOrbLifecycleTests() {
     let suite = "Crystal Orb lifecycle"
+    Registry.shared.add(suite: suite, TestCase(name: "browser image drops ignore unrelated page URLs and start Orb immediately", knownBug: nil) {
+        let directory = try Temporary.directory("orb-browser-drop")
+        let payload = orbPNG(try orbImage(2, width: 200, height: 150))
+        let urlLoads = OSAllocatedUnfairLock(initialState: 0)
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let model = WaifuCrystalOrbModel()
+            let provider = NSItemProvider()
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.url.identifier, visibility: .all) { completion in
+                urlLoads.withLock { $0 += 1 }
+                completion(Data("https://example.test/page".utf8), nil)
+                return nil
+            }
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
+                completion(payload, nil)
+                return nil
+            }
+            check(CrystalOrbImport.accept([provider], model: model, session: session), "mixed drop accepted")
+            check(model.isOpen && model.importing, "Orb opens before provider resolution")
+            try await orbWait { model.query != nil && !model.importing }
+            checkEqual(urlLoads.withLock { $0 }, 0, "unrelated page URL is not loaded")
+            checkEqual(model.status, "Load a video or open a Photos album to search.", "import invokes search even when no search source is loaded")
+            check(session.video == nil && !session.progress.isRunning, "image is not routed to video analysis")
+            model.close(); session.cancel()
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "image drops load the provider's registered image type and stage a file when data is unusable", knownBug: nil) {
         let directory = try Temporary.directory("orb-drop")
         let payload = orbPNG(try orbImage(2, width: 200, height: 150))

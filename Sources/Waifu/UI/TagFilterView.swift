@@ -1,16 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// A faceted tag filter. A Common chip leads the wrapping chips and discloses the
-/// tags every frame shown carries; opening it expands the chip in place, those tags
-/// filling a group directly beneath it while the rest of the line waits below. What
-/// remains is wanted, unwanted, and the rest by mean score, each in the order the
-/// section documents. A tag the filter has taken a position on is always shown
-/// outside the Common group, so the chip's styling matches the section holding it.
+/// Faceted tags arranged by the published Danbooru taxonomy.
 struct TagFilterView: View {
     @ObservedObject var session: WaifuSession
     @State private var quickFilterText = ""
-    @State private var commonExpanded = false
+    @State private var collapsedGroups: Set<String> = []
 
     private var enabled: Bool {
         session.previewFrame == nil && session.uncover == nil && !session.progress.isRunning
@@ -68,24 +63,28 @@ struct TagFilterView: View {
         return tags.filter { $0.localizedCaseInsensitiveContains(quickFilterText) }
     }
 
-    /// Active filters must remain visible and removable, even when the quick
-    /// search or the current results no longer contain their tags.
-    private var visibleStandaloneTags: [String] {
-        wantedTags + unwantedTags + matching(unselectedTags)
+    private struct TagSubgroup: Identifiable {
+        let id: String
+        let tags: [String]
     }
 
-    private var visibleCommonTags: [String] { matching(commonTags) }
-
-    /// What the group discloses, and so how many subviews the flow should hold
-    /// inside it. The chip and the group box are both drawn from this, so a group
-    /// with nothing to show contributes neither.
-    private var commonGroupTagCount: Int {
-        commonExpanded ? visibleCommonTags.count : 0
+    private var visibleGroups: [TagSubgroup] {
+        // Sort groups alphabetically before quick search. Tags retain their
+        // existing order within each group.
+        let grouped = Dictionary(grouping: tags) {
+            let path = DanbooruTagGroups.membership[$0.replacingOccurrences(of: " ", with: "_")]
+                ?? "Other tags"
+            return path.components(separatedBy: " / ")[0]
+        }
+        return grouped.keys.sorted {
+            return $0.localizedStandardCompare($1) == .orderedAscending
+        }.compactMap { title in
+            let visible = matching(grouped[title]!)
+            return visible.isEmpty ? nil : TagSubgroup(id: title, tags: visible)
+        }
     }
 
-    private var hasVisibleTags: Bool {
-        !visibleStandaloneTags.isEmpty || !visibleCommonTags.isEmpty
-    }
+    private var hasVisibleTags: Bool { !visibleGroups.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -148,21 +147,26 @@ struct TagFilterView: View {
                         .padding(.vertical, 5)
                         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
-                        TagChipFlow(spacing: 5, groupTagCount: commonGroupTagCount) {
-                            if commonGroupTagCount > 0 {
-                                commonTagGroupBackground
-                            }
-                            if !commonTags.isEmpty {
-                                commonGroupChip
-                            }
-                            // The group's tags are inside the group while it is open and
-                            // absent while it is not, which is what the flow's group size
-                            // counts, so the two cannot drift apart.
-                            ForEach(visibleCommonTags.prefix(commonGroupTagCount), id: \.self) { tag in
-                                tagChip(for: tag)
-                            }
-                            ForEach(visibleStandaloneTags, id: \.self) { tag in
-                                tagChip(for: tag)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(visibleGroups) { group in
+                                DisclosureGroup(isExpanded: Binding(
+                                    get: { !collapsedGroups.contains(group.id) },
+                                    set: { expanded in
+                                        if expanded { collapsedGroups.remove(group.id) }
+                                        else { collapsedGroups.insert(group.id) }
+                                    }
+                                )) {
+                                    TagChipFlow(spacing: 5, groupTagCount: 0) {
+                                        ForEach(group.tags, id: \.self) { tag in
+                                            tagChip(for: tag)
+                                        }
+                                    }
+                                    .padding(.top, 4)
+                                } label: {
+                                    Text("\(group.id) (\(group.tags.count))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                         .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
@@ -199,18 +203,7 @@ struct TagFilterView: View {
         }
         .disabled(!enabled)
         .onChange(of: quickFilterText) { _, text in
-            // A quick filter that only matches common tags would otherwise land
-            // inside a collapsed group, leaving the panel looking empty-handed.
-            if !text.isEmpty, !matching(commonTags).isEmpty, !commonExpanded {
-                withAnimation(.easeInOut(duration: 0.16)) { commonExpanded = true }
-            }
-        }
-        .onChange(of: visibleCommonTags.isEmpty) { _, isEmpty in
-            // A filter that matches none of the common tags empties the group, and
-            // a group with nothing in it has nothing to expand to.
-            if isEmpty, commonExpanded {
-                commonExpanded = false
-            }
+            if !text.isEmpty { collapsedGroups.removeAll() }
         }
     }
 
@@ -254,47 +247,6 @@ struct TagFilterView: View {
         var settings = session.settings
         settings.taggerThreshold = Float(min(max((value * 100).rounded() / 100, 0.35), 1))
         session.settings = settings
-    }
-
-    /// The chip that stands in for the common tags themselves. It borrows the
-    /// normal tag capsule so the group reads as one of the tags, and only the
-    /// chevron and the count mark it as a control. Opening it hands the flow the
-    /// tags it stands for, which the flow lays out inside the group it draws
-    /// directly beneath the chip.
-    private var commonGroupChip: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.16)) { commonExpanded.toggle() }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(commonExpanded ? 90 : 0))
-                    .font(.system(size: 9, weight: .semibold))
-                Text("Common")
-                    .font(.system(size: 14))
-                    .lineLimit(1)
-                Text("\(visibleCommonTags.count)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            .tagChipBody(isSelected: false, isExcluded: false)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Common tags")
-        .accessibilityValue(commonExpanded ? "Expanded" : "Collapsed")
-    }
-
-    /// The inset box the expanded group is drawn into. The flow measures it
-    /// against the group it contains, so the border wraps the chip and the tags
-    /// it discloses without either of them having to know the group's size.
-    private var commonTagGroupBackground: some View {
-        RoundedRectangle(cornerRadius: 7)
-            .fill(Color.secondary.opacity(0.06))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7).strokeBorder(Color.secondary.opacity(0.14), lineWidth: 1)
-            }
-            .layoutValue(key: TagChipGroupBackgroundKey.self, value: true)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 
     private func tagChip(for tag: String) -> some View {

@@ -216,7 +216,7 @@ func registerCrystalOrbInspectionTests() {
         checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).count, WaifuCrystalOrbModel.candidateLimit, "a wide band still stops at the cap")
         checkEqual(WaifuCrystalOrbModel.alikeMatches(dense).last?.id.sampleIndex, 32, "the cap keeps the closest matches")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "comparison modes preserve text focus and hold-toggle ownership", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "comparison modes preserve text focus and Space closes orb", knownBug: nil) {
         try await Task { @MainActor in
             let model = WaifuCrystalOrbModel()
             checkEqual(model.mode,.sideBySide,"Side by Side is the default")
@@ -228,12 +228,14 @@ func registerCrystalOrbInspectionTests() {
             }
             check(model.handleKey(key("t",17)),"toggle shortcut")
             model.zoom = 3; model.navigationCenter = CGPoint(x: 42,y: 17)
-            check(model.handleKey(key(" ",49)),"hold Space is owned in toggle")
-            check(model.holdingToggle,"hold shows alternate source")
-            check(model.handleKey(key(" ",49,.keyUp)),"release is owned")
-            check(!model.holdingToggle,"release restores source")
-            checkEqual(model.zoom,3,"toggle never changes zoom")
-            checkEqual(model.navigationCenter,CGPoint(x: 42,y: 17),"toggle never changes focal coordinate")
+            check(model.handleKey(key(" ",49)),"Space is owned in toggle")
+            check(!model.isOpen,"Space closes orb in toggle mode")
+            check(!model.holdingToggle,"Space does not hold the alternate source")
+            model.open(session: session)
+            model.mode = .sideBySide
+            check(model.handleKey(key(" ",49)),"Space is owned in side-by-side")
+            check(!model.isOpen,"Space closes orb in side-by-side mode")
+            model.open(session: session)
             check(model.handleKey(key("s",1)),"Side by Side shortcut")
             checkEqual(model.mode,.sideBySide,"Side by Side shortcut selects the default mode")
             model.maximizedPane = "A"

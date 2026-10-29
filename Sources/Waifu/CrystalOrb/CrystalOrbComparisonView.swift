@@ -53,6 +53,7 @@ private struct CrystalOrbInspectionPane: View {
         self.model = model; self.pair = pair; self.kind = kind; self.scale = scale; self.session = session
         self.navigation = model.navigation; self.forensic = forensic
     }
+    @Environment(\.displayScale) private var backing
     @State private var blinkCandidate = true
     @State private var dragCenter: CGPoint?
     @State private var dragRegistration: CrystalOrbRegistration?
@@ -81,6 +82,21 @@ private struct CrystalOrbInspectionPane: View {
                 annotation(viewport).allowsHitTesting(false)
                 CrystalOrbPointerSurface(onMove: { model.hover(at: viewport.comparison($0)) },
                     onExit: { model.hover(at: nil) },
+                    onDoubleClick: { location in
+                        let isFit = !model.actualPixels && !model.fillViewport && abs(model.zoom - 1) <= 0.01
+                        if isFit {
+                            let anchor = viewport.comparison(location)
+                            let ratio = (1 / max(backing, 1)) / scale
+                            model.actualPixels = true
+                            model.fillViewport = false
+                            model.zoom = 1
+                            model.center(on: CGPoint(
+                                x: anchor.x - (anchor.x - center.x) / ratio,
+                                y: anchor.y - (anchor.y - center.y) / ratio))
+                        } else {
+                            model.resetZoom()
+                        }
+                    },
                     onDrag: { start, current, ended in
                         model.hover(at: viewport.comparison(current))
                         drag(start, current, ended, viewport: viewport)
@@ -246,6 +262,7 @@ private struct CrystalOrbInspectionPane: View {
 struct CrystalOrbPointerSurface: NSViewRepresentable {
     var onMove: (CGPoint) -> Void
     var onExit: () -> Void = {}
+    var onDoubleClick: (CGPoint) -> Void
     var onDrag: (CGPoint, CGPoint, Bool) -> Void
     var onPan: (CGSize) -> Void
     var onZoom: (CGFloat, CGPoint) -> Void
@@ -264,7 +281,16 @@ struct CrystalOrbPointerSurface: NSViewRepresentable {
         override func mouseMoved(with event: NSEvent) { actions?.onMove(point(event)) }
         override func mouseEntered(with event: NSEvent) { actions?.onMove(point(event)) }
         override func mouseExited(with event: NSEvent) { actions?.onExit() }
-        override func mouseDown(with event: NSEvent) { start = point(event); actions?.onMove(point(event)) }
+        override func mouseDown(with event: NSEvent) {
+            let location = point(event)
+            actions?.onMove(location)
+            if event.clickCount == 2 {
+                start = nil
+                actions?.onDoubleClick(location)
+            } else {
+                start = location
+            }
+        }
         override func mouseDragged(with event: NSEvent) { if let start { actions?.onDrag(start, point(event), false) } }
         override func mouseUp(with event: NSEvent) { if let start { actions?.onDrag(start, point(event), true) }; start = nil }
         override func magnify(with event: NSEvent) { actions?.onZoom(max(0.1, 1+event.magnification), point(event)) }

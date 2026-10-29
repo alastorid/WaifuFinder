@@ -5,6 +5,12 @@ import QuartzCore
 
 func registerPhotosWorkflowTests() {
     let suite = "Photos workflow"
+    Registry.shared.add(suite: suite, TestCase(name: "photo deletion recognizes only PhotoKit user cancellation", knownBug: nil) {
+        let code = PHPhotosError.Code.userCancelled.rawValue
+        check(PhotosMedia.isDeletionCancellation(NSError(domain: PHPhotosErrorDomain, code: code)), "user cancellation is silent")
+        check(!PhotosMedia.isDeletionCancellation(NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.accessUserDenied.rawValue)), "permission failures remain errors")
+        check(!PhotosMedia.isDeletionCancellation(NSError(domain: "OtherDomain", code: code)), "unrelated errors remain errors")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "sync retries transient PhotoKit interruptions before surfacing errors", knownBug: nil) {
         let probe = PhotosOrderSyncProbe(failures: 2,
             error: NSError(domain: PHPhotosErrorDomain, code: PHPhotosError.Code.operationInterrupted.rawValue))

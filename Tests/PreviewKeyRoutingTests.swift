@@ -9,6 +9,33 @@ import Foundation
 /// the view: reproducing the bug needed a window, a focus engine and real key
 /// delivery, none of which the headless harness has.
 func registerPreviewKeyRoutingTests() {
+    Registry.shared.add(suite: "Preview keys", TestCase(name: "background analysis leaves preview gestures available and keeps running", knownBug: nil) {
+        let directory = try Temporary.directory("preview-during-loading")
+        let url = try VideoFixture.makeMP4(in: directory, durationSeconds: 2, width: 160, height: 120, frameRate: 6)
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.loadVideo(at: url)
+            defer { session.cancel() }
+            check(session.progress.isRunning, "background import has started")
+            let frame = FrameFixture.make(id: "f30")
+            session.updateAnalyzedFrames([frame], isProgressive: true)
+            session.focus(on: frame)
+            var router = PreviewToggleKeyRouter()
+            checkEqual(router.route(code: 49, previewIsUp: false,
+                                    blocked: session.isPreviewInteractionBlocked), .toggle,
+                       "Space reaches preview while background work runs")
+            session.togglePreview()
+            checkEqual(session.previewFrame?.id, frame.id, "available frame opens")
+            check(session.progress.isRunning, "preview does not cancel import")
+            session.togglePreview()
+            checkNil(session.previewFrame, "preview closes while import continues")
+            session.showExportSheet = true
+            check(session.isPreviewInteractionBlocked, "export still owns keyboard input")
+            session.showExportSheet = false
+            session.errorMessage = "Test error"
+            check(session.isPreviewInteractionBlocked, "error dialog still owns keyboard input")
+        }.value
+    })
     Registry.shared.add(suite: "Preview keys", TestCase(name: "preview UI effects run after the stored state changes", knownBug: nil) {
         let directory = try Temporary.directory("preview-publication")
         try await Task { @MainActor in

@@ -635,7 +635,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 }
                 onSuccess(deleted)
             } catch {
-                if photosAlbumURL == albumURL {
+                if photosAlbumURL == albumURL && !PhotosMedia.isDeletionCancellation(error) {
                     errorMessage = "Couldn’t delete selected items from Photos: \(error.localizedDescription)"
                 }
             }
@@ -3106,6 +3106,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     /// Space: show the focused frame, or close the preview if it is already up.
+    /// Loading and tagging publish incrementally and do not own keyboard input.
+    var isPreviewInteractionBlocked: Bool {
+        uncover != nil || showExportSheet || showPreviewExportSheet || errorMessage != nil
+    }
+
     func togglePreview() {
         guard uncover == nil else { return }
         guard previewFrame == nil else {
