@@ -37,6 +37,25 @@ final class GridThumbnailLoader: @unchecked Sendable {
             ?? cache.object(forKey: identity as NSString)?.image
     }
 
+    static let imageUpgraded = Notification.Name("Waifu.gridThumbnailUpgraded")
+
+    /// Replace degraded pixels, including leases held by cells hidden under preview.
+    /// Full inspection images are resized before they enter this bounded cache.
+    func upgrade(_ image: CGImage, identity: String) {
+        guard let pixels = try? PhotosMedia.boundedRendition(image, maxPixelSize: PhotosMedia.analysisPixelSize) else { return }
+        let changed = visibleLock.withLock { () -> Bool in
+            let previous = visibleImages[identity]?.entry.image ?? cache.object(forKey: identity as NSString)?.image
+            guard PreviewPhotoSource.isSharper(pixels, than: previous) else { return false }
+            let entry = Entry(pixels)
+            cache.setObject(entry, forKey: identity as NSString, cost: pixels.bytesPerRow * pixels.height)
+            if let visible = visibleImages[identity] {
+                visibleImages[identity] = VisibleImage(entry: entry, owners: visible.owners)
+            }
+            return true
+        }
+        if changed { NotificationCenter.default.post(name: Self.imageUpgraded, object: identity) }
+    }
+
     /// Visible cells lease their decoded pixels so cache eviction cannot make a
     /// moving/recreated cell flash empty. Leases end shortly after disappearance.
     func retainVisibleImage(_ image: CGImage, identity: String, owner: UUID) {
@@ -111,10 +130,15 @@ final class GridThumbnailLoader: @unchecked Sendable {
                 }
                 guard !request.isCancelled else { continuation.resume(returning: nil); return }
                 if let image {
-                    cache.setObject(Entry(image), forKey: identity as NSString,
-                                    cost: image.bytesPerRow * image.height)
+                    visibleLock.withLock {
+                        let previous = visibleImages[identity]?.entry.image ?? cache.object(forKey: identity as NSString)?.image
+                        if PreviewPhotoSource.isSharper(image, than: previous) {
+                            cache.setObject(Entry(image), forKey: identity as NSString,
+                                            cost: image.bytesPerRow * image.height)
+                        }
+                    }
                 }
-                continuation.resume(returning: image)
+                continuation.resume(returning: cachedImage(identity: identity) ?? image)
             }
           }
         } onCancel: {
@@ -143,10 +167,15 @@ final class GridThumbnailLoader: @unchecked Sendable {
                 }
                 guard !request.isCancelled else { continuation.resume(returning: nil); return }
                 if let image {
-                    cache.setObject(Entry(image), forKey: identity as NSString,
-                                    cost: image.bytesPerRow * image.height)
+                    visibleLock.withLock {
+                        let previous = visibleImages[identity]?.entry.image ?? cache.object(forKey: identity as NSString)?.image
+                        if PreviewPhotoSource.isSharper(image, than: previous) {
+                            cache.setObject(Entry(image), forKey: identity as NSString,
+                                            cost: image.bytesPerRow * image.height)
+                        }
+                    }
                 }
-                continuation.resume(returning: image)
+                continuation.resume(returning: cachedImage(identity: identity) ?? image)
             }
           }
         } onCancel: {

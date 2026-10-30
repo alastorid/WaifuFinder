@@ -385,19 +385,19 @@ struct FrameGridView: View {
         switch press.key {
         case .leftArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: false) }
-            else { session.focusNeighbour(-1) }
+            else { session.focusNeighbour(-1, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .rightArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: true) }
-            else { session.focusNeighbour(1) }
+            else { session.focusNeighbour(1, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .upArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: false) }
-            else { session.focusGroupEdge(forward: false) }
+            else { session.focusGroupEdge(forward: false, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .downArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: true) }
-            else { session.focusGroupEdge(forward: true) }
+            else { session.focusGroupEdge(forward: true, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .home:
             session.focusDisplayedBoundary(forward: false)

@@ -74,13 +74,36 @@ struct FramePreviewView: View {
     @AppStorage("rightPanelExpanded") private var inspectorExpanded = true
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
 
+    private static func previewKey(_ frame: AnalyzedFrame, session: WaifuSession) -> String {
+        "preview|\(session.video?.url.absoluteString ?? "")|\(session.thumbnailGeneration)|\(frame.thumbnailKey)"
+    }
+
+    private static func availablePreview(_ frame: AnalyzedFrame, session: WaifuSession) -> PreviewImageCache.Entry? {
+        var best = PreviewImageCache.shared.cached(previewKey(frame, session: session))
+        if let source = session.video?.url,
+           let url = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds),
+           let photo = PhotosMedia.shared.cachedPreview(url),
+           best == nil || PreviewPhotoSource.isSharper(photo.image, than: best?.image)
+            || (photo.isOriginal && photo.image.width == best?.image.width && photo.image.height == best?.image.height) {
+            best = photo
+        }
+        let identity = session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey
+        if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity),
+           PreviewPhotoSource.isSharper(pixels, than: best?.image) {
+            best = PreviewImageCache.Entry(pixels, isOriginal: false)
+        }
+        return best
+    }
+
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
         let identity = session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey
-        let cached = GridThumbnailLoader.shared.cachedImage(identity: identity)
+        let preview = Self.availablePreview(frame, session: session)
+        let cached = preview?.image ?? GridThumbnailLoader.shared.cachedImage(identity: identity)
         let initial = cached.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
             ?? session.cachedThumbnailData(forKey: frame.thumbnailKey).flatMap(NSImage.init(data:))
         _image = State(initialValue: initial)
+        _displayedIsOriginal = State(initialValue: preview?.isOriginal ?? false)
         _displayedFrameID = State(initialValue: initial == nil ? nil : frame.id)
         _displayedSourceURL = State(initialValue: initial == nil ? nil : session.video?.url)
     }
@@ -513,7 +536,10 @@ struct FramePreviewView: View {
     @ViewBuilder
     private var content: some View {
         ZStack(alignment: .topLeading) {
-            if let animation {
+            if displayedFrameID != frame.id, let cached = Self.availablePreview(frame, session: session) {
+                ZoomableFrameImage(image: NSImage(cgImage: cached.image, size: NSSize(width: cached.image.width, height: cached.image.height)),
+                    frameID: frame.id, zoomRatio: $zoom, center: $zoomCenter, displayedScale: $displayedImageScale)
+            } else if let animation {
                 AnimatedPhotoPlayer(animation: animation, isActive: !reading, maximumPixelSize: 4096) { frameImage, index in
                     ZoomableFrameImage(image: frameImage, frameID: FrameID(sampleIndex: index),
                                        zoomRatio: $zoom, center: $zoomCenter, displayedScale: $displayedImageScale)
@@ -581,7 +607,15 @@ struct FramePreviewView: View {
         // target must still get its own thumbnail, regardless of resolution.
         let identity = session.thumbnailGeneration.uuidString + ":" + target.thumbnailKey
         let current = keepingCurrent ? image.flatMap(PhotosMedia.renditionPixels) : nil
-        if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity) {
+        if let cached = Self.availablePreview(target, session: session) {
+            if PreviewPhotoSource.isSharper(cached.image, than: current) || current == nil {
+                image = NSImage(cgImage: cached.image, size: NSSize(width: cached.image.width, height: cached.image.height))
+                displayedFrameID = target.id
+                displayedSourceURL = source
+                displayedIsOriginal = cached.isOriginal
+            }
+            GridThumbnailLoader.shared.upgrade(cached.image, identity: identity)
+        } else if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity) {
             if PreviewPhotoSource.isSharper(pixels, than: current) {
                 image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
                 displayedFrameID = target.id
@@ -613,6 +647,8 @@ struct FramePreviewView: View {
                     let native = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
                     native.cacheMode = .never
                     image = native
+                    PreviewImageCache.shared.store(pixels, isOriginal: preview.isOriginal, key: Self.previewKey(target, session: session))
+                    GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
                     displayedIsOriginal = preview.isOriginal
                     animation = nil
                     evidenceInput = PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: preview.isOriginal)
@@ -625,12 +661,19 @@ struct FramePreviewView: View {
                 if let step = arrows.loaded() { session.focusNeighbour(step) }
                 return
             }
-            let original = try await PhotosMedia.shared.image(source, seconds: target.timeSeconds)
+            let original: CGImage
+            if let cached = Self.availablePreview(target, session: session), cached.isOriginal {
+                original = cached.image
+            } else {
+                original = try await PhotosMedia.shared.image(source, seconds: target.timeSeconds)
+            }
             guard !Task.isCancelled, loadID == request,
                   session.previewFrame?.id == target.id, session.video?.url == source else { return }
             let native = NSImage(cgImage: original, size: NSSize(width: original.width, height: original.height))
             native.cacheMode = .never
             image = native
+            PreviewImageCache.shared.store(original, isOriginal: true, key: Self.previewKey(target, session: session))
+            GridThumbnailLoader.shared.upgrade(original, identity: identity)
             displayedIsOriginal = true
             displayedFrameID = target.id
             displayedSourceURL = source

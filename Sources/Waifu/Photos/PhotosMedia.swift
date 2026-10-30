@@ -64,7 +64,7 @@ final class PhotosMedia: @unchecked Sendable {
         let orientation: CGImagePropertyOrientation
         init(data: Data, orientation: CGImagePropertyOrientation) { self.data = data; self.orientation = orientation }
     }
-    // Store encoded originals, not seven full decoded megapixel images.
+    // Encoded originals support re-decoding after the bounded pixel cache evicts an image.
     private let previewOriginals: NSCache<NSString, OriginalBox> = {
         let cache = NSCache<NSString, OriginalBox>()
         cache.countLimit = 9
@@ -764,6 +764,20 @@ final class PhotosMedia: @unchecked Sendable {
         return CGSize(width: max(1, (w * scale).rounded()), height: max(1, (h * scale).rounded()))
     }
 
+    private func previewPixelKey(_ url: URL) -> String? {
+        guard let identity = item(url)?.assetCacheKey else { return nil }
+        return "photos-preview|\(identity.identifier)|\(identity.modifiedMilliseconds)|\(identity.pixelWidth)x\(identity.pixelHeight)"
+    }
+
+    func cachedPreview(_ url: URL) -> PreviewImageCache.Entry? {
+        previewPixelKey(url).flatMap { PreviewImageCache.shared.cached($0) }
+    }
+
+    private func cachePreview(_ image: CGImage, url: URL, isOriginal: Bool) {
+        guard let key = previewPixelKey(url) else { return }
+        PreviewImageCache.shared.store(image, isOriginal: isOriginal, key: key)
+    }
+
     func inspectionPreview(_ url: URL, onPreview: @escaping @Sendable (CGImage) -> Void) async throws -> CGImage {
         try Task.checkCancellation()
         guard let item = item(url), item.isStill else { throw Self.failure("This Photos item is unavailable.") }
@@ -782,7 +796,10 @@ final class PhotosMedia: @unchecked Sendable {
                 if (info?[PHImageCancelledKey] as? Bool) == true { completion(.failure(CancellationError())); return }
                 let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) == true
                 let pixels = image.flatMap(Self.renditionPixels)
-                if let pixels { onPreview(pixels) }
+                if let pixels {
+                    self.cachePreview(pixels, url: url, isOriginal: false)
+                    onPreview(pixels)
+                }
                 if let value = delivery.receive(pixels, isDegraded: degraded) { completion(value) }
             }
         }
@@ -837,11 +854,12 @@ final class PhotosMedia: @unchecked Sendable {
 
     func preloadPreview(_ url: URL) async throws {
         guard Self.downloadFromICloud else { return }
-        _ = try await originalPreviewData(url, priority: .preload)
+        _ = try await previewContent(url, priority: .preload)
     }
 
-    func previewContent(_ url: URL) async throws -> PhotosPreviewContent {
-        let result = try await originalPreviewData(url, priority: .viewing)
+    func previewContent(_ url: URL, priority: PhotosCloudQueue.Priority = .viewing) async throws -> PhotosPreviewContent {
+        if let cached = cachedPreview(url), cached.isOriginal { return .still(cached.image) }
+        let result = try await originalPreviewData(url, priority: priority)
         guard let item = item(url) else { throw Self.failure("This photo is no longer available in Photos.") }
         let (imageData, orientation) = result
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil) else {
@@ -857,6 +875,8 @@ final class PhotosMedia: @unchecked Sendable {
               let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
+        try Task.checkCancellation()
+        cachePreview(image, url: url, isOriginal: true)
         return .still(image)
     }
 

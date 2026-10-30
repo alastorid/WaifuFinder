@@ -75,3 +75,32 @@ struct PreviewEvidenceInput: Sendable {
                      url: photo.url, offset: photo.offset, photosDate: photo.photosDate)
     }
 }
+
+/// Recently decoded inspection pixels, bounded independently of encoded originals.
+/// Keys include the source revision; stale edits and other albums cannot alias.
+final class PreviewImageCache: @unchecked Sendable {
+    static let shared = PreviewImageCache()
+    final class Entry: NSObject {
+        let image: CGImage
+        let isOriginal: Bool
+        init(_ image: CGImage, isOriginal: Bool) {
+            self.image = image; self.isOriginal = isOriginal
+        }
+    }
+    private let cache = NSCache<NSString, Entry>()
+    private let lock = NSLock()
+    init() {
+        cache.countLimit = 9
+        cache.totalCostLimit = 128 * 1024 * 1024
+    }
+    func cached(_ key: String) -> Entry? { cache.object(forKey: key as NSString) }
+    func store(_ image: CGImage, isOriginal: Bool, key: String) {
+        lock.withLock {
+            if let previous = cached(key),
+               PreviewPhotoSource.isSharper(previous.image, than: image)
+                || (previous.isOriginal && !isOriginal && !PreviewPhotoSource.isSharper(image, than: previous.image)) { return }
+            cache.setObject(Entry(image, isOriginal: isOriginal), forKey: key as NSString,
+                            cost: image.bytesPerRow * image.height)
+        }
+    }
+}

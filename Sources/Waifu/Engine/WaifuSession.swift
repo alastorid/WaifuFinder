@@ -3109,18 +3109,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
-    func focusNeighbour(_ delta: Int) {
+    func focusNeighbour(_ delta: Int, extendingSelection: Bool = false) {
         guard uncover == nil else { return }
         let order = navigationOrder
         let frames = order.frames
         guard !frames.isEmpty else { return }
         guard let current = focusedFrameID,
               order.indexByID[current] != nil else {
-            focus(on: frames[0])
+            focus(on: frames[0], extendingSelection: extendingSelection)
             return
         }
-        guard let target = order.neighbour(of: current, by: delta) else { return }
-        focus(on: target)
+        let target: AnalyzedFrame?
+        if extendingSelection, let index = order.indexByID[current], frames.indices.contains(index + delta) {
+            target = frames[index + delta]
+        } else { target = order.neighbour(of: current, by: delta) }
+        guard let target else { return }
+        focus(on: target, extendingSelection: extendingSelection)
     }
 
     /// Moves focus one line up or down in one-group-per-line mode, and to the
@@ -3132,19 +3136,29 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// by group boundaries instead strands ↑/↓ inside that run — every ungrouped
     /// frame shares `groupID == nil`, so "next group" skips all of its lines.
     /// Line steps land on the cell nearest the column the focus left.
-    func focusGroupEdge(forward: Bool) {
-        guard uncover == nil, groupingEnabled else { return }
+    func focusGroupEdge(forward: Bool, extendingSelection: Bool = false) {
+        guard uncover == nil else { return }
         let order = navigationOrder
+        if extendingSelection {
+            if let current = focusedFrameID,
+               let target = order.verticalNeighbour(of: current, forward: forward) {
+                focus(on: target, extendingSelection: true)
+            } else if focusedFrameID == nil, let first = order.frames.first {
+                focus(on: first, extendingSelection: true)
+            }
+            return
+        }
+        guard groupingEnabled else { return }
         let frames = order.frames
         guard !frames.isEmpty else { return }
-        if let current = focusedFrameID,
+        if groupRows, let current = focusedFrameID,
            let target = order.verticalNeighbour(of: current, forward: forward) {
-            focus(on: target)
+            focus(on: target, extendingSelection: extendingSelection)
             return
         }
         guard let current = focusedFrameID,
               let index = order.indexByID[current] else {
-            focus(on: frames[0])
+            focus(on: frames[0], extendingSelection: extendingSelection)
             return
         }
         let group = frames[index].groupID
@@ -3163,16 +3177,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
         }
         guard let target else { return }
-        focus(on: frames[target])
+        focus(on: frames[target], extendingSelection: extendingSelection)
     }
 
     /// Home and End move to the first or last thumbnail in the current displayed
     /// result, regardless of whether the grid is flat or arranged in group rows.
-    func focusDisplayedBoundary(forward: Bool) {
+    func focusDisplayedBoundary(forward: Bool, extendingSelection: Bool = false) {
         guard uncover == nil else { return }
         let frames = navigationOrder.frames
         guard let frame = forward ? frames.last : frames.first else { return }
-        focus(on: frame)
+        focus(on: frame, extendingSelection: extendingSelection)
     }
 
     /// Space: show the focused frame, or close the preview if it is already up.
@@ -3204,6 +3218,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         gridNavigationFrameID = nil
         focus(on: frame, scrollIntoView: false)
         previewFrame = frame
+    }
+
+    private func focus(on frame: AnalyzedFrame, extendingSelection: Bool) {
+        guard extendingSelection, previewFrame == nil else { focus(on: frame); return }
+        if selectionAnchor == nil { selectionAnchor = focusedFrameID ?? frame.id }
+        selectFrame(frame.id, shift: true)
     }
 
     /// Programmatic navigation selects a frame and asks the grid to reveal it.

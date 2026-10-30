@@ -2,6 +2,32 @@ import AVFoundation
 import Foundation
 
 func registerPreviewFrameTests() {
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "decoded preview cache retains the sharpest revision and original provenance", knownBug: nil) {
+        let cache = PreviewImageCache()
+        let small = try ImageFixture.cgImage(width: 32, height: 24)
+        let sharp = try ImageFixture.cgImage(width: 640, height: 480)
+        cache.store(small, isOriginal: false, key: "photo-revision-1")
+        cache.store(sharp, isOriginal: true, key: "photo-revision-1")
+        cache.store(small, isOriginal: false, key: "photo-revision-1")
+        cache.store(sharp, isOriginal: false, key: "photo-revision-1")
+        check(cache.cached("photo-revision-1")?.image === sharp, "reentry synchronously gets decoded sharp pixels")
+        check(cache.cached("photo-revision-1")?.isOriginal == true, "late renditions cannot erase original provenance")
+        checkNil(cache.cached("photo-revision-2"), "an edited revision never reuses old pixels")
+    })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "sharper preview upgrades leased thumbnails without retaining native pixels", knownBug: nil) {
+        let identity = UUID().uuidString
+        let small = try ImageFixture.cgImage(width: 32, height: 24)
+        let sharp = try ImageFixture.cgImage(width: 1024, height: 768)
+        let loader = GridThumbnailLoader.shared
+        let owner = UUID()
+        loader.retainVisibleImage(small, identity: identity, owner: owner)
+        defer { loader.releaseVisibleImage(identity: identity, owner: owner) }
+        loader.upgrade(sharp, identity: identity)
+        checkEqual(loader.cachedImage(identity: identity)?.width, 512, "visible leases upgrade to bounded sharp pixels")
+        loader.upgrade(small, identity: identity)
+        checkEqual(loader.cachedImage(identity: identity)?.width, 512, "late low quality results cannot downgrade the thumbnail")
+    })
+
     Registry.shared.add(suite: "Frame preview", TestCase(name: "a delayed local fallback never downgrades sharper cached photo pixels", knownBug: nil) {
         let sharp = try ImageFixture.cgImage(width: 2048, height: 1536)
         let small = try ImageFixture.cgImage(width: 512, height: 384)

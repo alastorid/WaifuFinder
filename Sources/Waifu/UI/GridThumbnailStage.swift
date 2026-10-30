@@ -149,17 +149,15 @@ struct GridStageSnapshot: Sendable {
         // and the chunked lines of an ungrouped run. `result`'s items follow
         // `input.frames`/`input.rows` order, so the ranges index that sequence.
         var lineRanges: [Range<Int>] = []
-        if key.grouped {
-            var start = 0
-            for row in result {
-                guard !row.items.isEmpty else { continue }
-                lineRanges.append(start..<start + row.items.count)
-                start += row.items.count
-            }
+        var start = 0
+        for row in result {
+            guard !row.items.isEmpty else { continue }
+            lineRanges.append(start..<start + row.items.count)
+            start += row.items.count
         }
         return Self(key: key, navigation: FrameNavigationOrder(frames: input.frames, rows: input.rows,
                                                                groupRows: key.grouped,
-                                                               lineRanges: key.grouped ? lineRanges : nil),
+                                                               lineRanges: lineRanges),
                     sourceURL: input.sourceURL, rows: result,
                     contentHeight: result.isEmpty ? 2 : top - (result.last?.spacing ?? 1) + 1, rowIndexByToken: indices,
                     rowIndexByFrameID: frameIndices)

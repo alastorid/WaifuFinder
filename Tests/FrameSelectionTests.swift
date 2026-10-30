@@ -2,6 +2,36 @@ import Foundation
 import Combine
 
 func registerFrameSelectionTests() {
+    Registry.shared.add(suite: "Frame selection", TestCase(name: "shift arrows grow shrink and reverse a range across displayed thumbnail rows", knownBug: nil) {
+        let directory = try Temporary.directory("shift-arrow-range")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let frames = (1...8).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0)) }
+            session.updateAnalyzedFrames(frames)
+            session.groupingEnabled = false
+            let generation = session.thumbnailGeneration
+            let key = GridStageKey(revision: session.gridRevision, generation: generation, width: 400,
+                columns: 3, groupColumns: 3, grouped: false, photosSource: true, square: true)
+            let snapshot = GridStageSnapshot.make(GridStageInput(key: key, sourceURL: nil,
+                rows: session.displayedRows, frames: session.displayOrderFrames,
+                beyondCap: [:], revealed: []))
+            session.commitGridNavigation(snapshot.navigation, generation: generation)
+            session.selectFrame(frames[1].id)
+            session.focusNeighbour(1, extendingSelection: true)
+            checkEqual(session.selectedFrameIDs, Set(frames[1...2].map(\.id)), "shift right extends from anchor")
+            session.focusGroupEdge(forward: true, extendingSelection: true)
+            checkEqual(session.selectedFrameIDs, Set(frames[1...5].map(\.id)), "shift down includes intervening thumbnails")
+            session.focusGroupEdge(forward: false, extendingSelection: true)
+            checkEqual(session.selectedFrameIDs, Set(frames[1...2].map(\.id)), "shift up shrinks toward anchor")
+            session.focusNeighbour(-1, extendingSelection: true)
+            session.focusNeighbour(-1, extendingSelection: true)
+            checkEqual(session.selectedFrameIDs, Set(frames[0...1].map(\.id)), "shift left reverses across anchor")
+            session.focusNeighbour(1)
+            checkEqual(session.selectedFrameIDs, [frames[1].id], "ordinary arrow selects a single frame again")
+        }.value
+    })
+
     Registry.shared.add(suite: "Frame selection", TestCase(name: "pointer selection requests visibility checks without rebuilding grid geometry", knownBug: nil) {
         let directory = try Temporary.directory("pointer-scroll")
         try await Task { @MainActor in

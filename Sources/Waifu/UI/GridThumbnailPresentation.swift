@@ -1,3 +1,4 @@
+import Combine
 import CoreGraphics
 import SwiftUI
 
@@ -17,12 +18,22 @@ final class GridThumbnailPresentation: ObservableObject {
     private var pinnedIdentity: String?
     private var activeIdentity: String?
     private var revision: UInt64 = 0
+    private var upgradeObserver: AnyCancellable?
     private var releaseTask: Task<Void, Never>?
 
     init(identity: String, loader: GridThumbnailLoader = .shared,
          releaseDelay: Duration = .milliseconds(250)) {
         self.loader = loader
         self.releaseDelay = releaseDelay
+        upgradeObserver = NotificationCenter.default.publisher(for: GridThumbnailLoader.imageUpgraded)
+            .sink { [weak self] notification in
+                guard let identity = notification.object as? String else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, self.pinnedIdentity == identity,
+                          let pixels = self.loader.cachedImage(identity: identity) else { return }
+                    self.publish(pixels, identity: identity)
+                }
+            }
         if let pixels = loader.cachedImage(identity: identity) { publish(pixels, identity: identity) }
     }
 
@@ -34,7 +45,7 @@ final class GridThumbnailPresentation: ObservableObject {
     func image(for identity: String) -> CGImage? {
         // SwiftUI can reuse a row's StateObject for a different frame before its
         // task runs. Staged pixels must be available during that first body pass.
-        ready?.identity == identity ? ready?.image : loader.cachedImage(identity: identity)
+        loader.cachedImage(identity: identity) ?? (ready?.identity == identity ? ready?.image : nil)
     }
 
     func prepare(identity: String, load: () async -> CGImage?) async {
@@ -44,7 +55,6 @@ final class GridThumbnailPresentation: ObservableObject {
         revision &+= 1
         let ticket = revision
         activeIdentity = identity
-        if ready?.identity == identity { return }
         if let pixels = loader.cachedImage(identity: identity) {
             publish(pixels, identity: identity)
             return

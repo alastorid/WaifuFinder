@@ -11,8 +11,8 @@ struct FrameNavigationOrder: Sendable {
     /// A committed staged layout knows them exactly: one per group strip, plus the
     /// chunked lines a long ungrouped run is split into. Without it (the fallback
     /// order before the first commit), the arrangement's own rows are the closest
-    /// approximation. Flat layouts leave it empty: their lines rewrap with the
-    /// window and carry no group meaning, so ↑/↓ keep jumping group boundaries.
+    /// approximation. Committed flat layouts also supply their wrapped lines for
+    /// Shift+↑/↓ selection; ordinary arrows retain their group navigation.
     private let lineRanges: [Range<Int>]
     private let groupRows: Bool
 
