@@ -264,6 +264,40 @@ func registerPhotosWorkflowTests() {
         }
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "deleting the preview advances through the captured order and skips deleted photos", knownBug: nil) {
+        let directory = try Temporary.directory("preview-delete-next")
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let photos = (0..<5).map { index in
+                AnalyzedFrame(sampleIndex: index, timeSeconds: Double(index), artScore: Float(index),
+                    faceScore: nil, faceCount: 0, faceAreaFraction: nil, featurePrint: Data())
+            }
+            session.updateAnalyzedFrames(photos)
+            let ordered = [photos[2], photos[0], photos[3], photos[1], photos[4]]
+            session.commitGridNavigation(FrameNavigationOrder(frames: ordered, rows: [], groupRows: false),
+                                         generation: session.thumbnailGeneration)
+            session.showPreview(photos[2])
+            // A later grid commit must not change the sequence already being inspected.
+            session.commitGridNavigation(FrameNavigationOrder(frames: photos, rows: [], groupRows: false),
+                                         generation: session.thumbnailGeneration)
+            session.removeAnalyzedFrames([photos[2].id, photos[0].id])
+            checkEqual(session.previewFrame?.id, photos[3].id, "successful deletion skips all removed targets and keeps preview open")
+            checkEqual(session.focusedFrameID, photos[3].id, "focus follows the replacement")
+            checkEqual(session.selectedFrameIDs, [photos[3].id], "the next photo becomes the sole selected target")
+            session.focusNeighbour(1)
+            checkEqual(session.previewFrame?.id, photos[1].id, "right arrow retains the captured order after deletion")
+            session.removeAnalyzedFrames([photos[1].id])
+            checkEqual(session.previewFrame?.id, photos[4].id, "repeated deletion advances again")
+            session.removeAnalyzedFrames([photos[4].id])
+            checkEqual(session.previewFrame?.id, photos[3].id, "deleting the last photo falls back to the previous survivor")
+            session.removeAnalyzedFrames([photos[3].id])
+            checkNil(session.previewFrame, "preview closes when no displayed photos survive")
+            checkNil(session.focusedFrameID, "empty results clear focus")
+            check(session.selectedFrameIDs.isEmpty, "empty results clear selection")
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "removing analyzed photos preserves surviving results and workspace state", knownBug: nil) {
         let directory = try Temporary.directory("photos-incremental-deletion")
         await Task { @MainActor in

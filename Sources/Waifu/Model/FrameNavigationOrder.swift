@@ -39,6 +39,22 @@ struct FrameNavigationOrder: Sendable {
         }
     }
 
+    /// Preserve the preview's captured order and row boundaries after deletion.
+    func removing(_ removed: Set<FrameID>) -> Self {
+        let survivors = frames.filter { !removed.contains($0.id) }
+        let rows = Dictionary(grouping: survivors, by: { rowByID[$0.id] ?? 0 })
+            .sorted { $0.key < $1.key }
+            .map { FrameRow(group: $0.value.first?.groupID, frames: $0.value) }
+        var start = 0
+        let ranges = lineRanges.compactMap { range -> Range<Int>? in
+            let count = frames[range].filter { !removed.contains($0.id) }.count
+            guard count > 0 else { return nil }
+            defer { start += count }
+            return start..<start + count
+        }
+        return Self(frames: survivors, rows: rows, groupRows: groupRows, lineRanges: ranges)
+    }
+
     func neighbour(of id: FrameID, by delta: Int) -> AnalyzedFrame? {
         guard let index = indexByID[id] else { return nil }
         let next = index + delta

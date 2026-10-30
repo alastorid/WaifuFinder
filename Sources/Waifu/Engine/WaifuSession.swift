@@ -1201,6 +1201,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Remove results without clearing thumbnails, filters, tags or group IDs.
     func removeAnalyzedFrames(_ removed: Set<FrameID>) {
         guard !removed.isEmpty else { return }
+        // Choose the replacement before mutating groups or recomputing filters.
+        // Keep the captured preview sequence so repeated deletions follow the
+        // same order as arrow navigation and cannot revisit a deleted frame.
+        let previewOrder = previewFrame == nil ? nil : navigationOrder
+        let replacingPreview = previewFrame.map { removed.contains($0.id) } ?? false
+        let replacement: AnalyzedFrame?
+        if let current = previewFrame, let order = previewOrder,
+           let index = order.indexByID[current.id], replacingPreview {
+            replacement = order.frames.dropFirst(index + 1).first { !removed.contains($0.id) }
+                ?? order.frames.prefix(index).last { !removed.contains($0.id) }
+        } else { replacement = nil }
         cancelTagging()
         let rawIDs = Set(removed.map(\.description))
         groups = groups.compactMap { group in
@@ -1212,11 +1223,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if let focusedFrameID, removed.contains(focusedFrameID) { self.focusedFrameID = nil }
         if let gridNavigationFrameID, removed.contains(gridNavigationFrameID) { self.gridNavigationFrameID = nil }
         if let crystalOrbRevealID, removed.contains(crystalOrbRevealID) { self.crystalOrbRevealID = nil }
-        if let previewFrame, removed.contains(previewFrame.id) { self.previewFrame = nil }
-        previewNavigation = nil
+        previewNavigation = previewOrder?.removing(removed)
         presentedGridNavigation = nil
         revealedGroups.formIntersection(Set(groups.map(\.id)))
         frames.removeAll { removed.contains($0.id) }
+        if replacingPreview {
+            if let replacement {
+                focus(on: replacement, scrollIntoView: false)
+            } else {
+                previewFrame = nil
+            }
+        }
     }
 
     /// An album removed in Photos must not leave exportable stale results.
