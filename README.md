@@ -2,7 +2,7 @@
 
 <img src="docs/assets/WaifuFinder.png" alt="WaifuFinder abstract viewfinder icon" width="128" height="128">
 
-Find the best frames in a long video.
+Find the best frames in a long video — and explore, rank and tag your Photos albums.
 
 **[Visit the WaifuFinder showcase](https://alastorid.github.io/WaifuFinder/)** ·
 **[Get the latest macOS release](https://github.com/alastorid/WaifuFinder/releases)**
@@ -14,30 +14,85 @@ For the pinned WD Tagger, TruFor and SAFIRE versions, reference parity and
 measured speed/memory comparisons, see the
 [native model status summary](docs/Native-model-status.md).
 
-The pre-squash commit hash record is backed up in a [private GitHub archive](https://github.com/alastorid/waifufinder-history-archive/blob/main/secret%20commit%20hash.md); access requires authorization to the private repository.
+## Start here
 
-## SAFIRE for Photos
+| I want to… | Go to |
+|---|---|
+| Install the app | [Mac installation](#install-on-a-mac) |
+| Understand the workflow | [At a glance](#at-a-glance) |
+| Explore the latest additions | [Recent highlights](#recent-highlights) |
+| Work with my photo library | [Photos workspace](#photos-workspace) |
+| Share models across Macs | [Remote inference](#remote-inference) |
+| Inspect or restore pixels | [Photo analysis](#photo-analysis) · [Uncover Waifu](#uncover-waifu) |
+| Check measured performance | [WD Tagger measurements](#wd-tagger-performance-matrix) |
+| Build or contribute | [Build and run](#build-and-run) · [Tests](#tests) · [Layout](#layout) |
 
-The Photos preview offers a **SAFIRE** overlay/mask toggle for inspecting the
-model’s flagged regions. Install the model through Settings → Models. SAFIRE’s
-map does not identify editing software or establish photo chronology.
+## At a glance
 
-## TruFor forensic scores
+```text
+                           WAIFU FINDER
+                     +---------------------+
+  Videos / media URL -> Decode and score    |
+                     |                     +-> Rank -> Filter -> Preview
+  Photos albums ------> Analyze renditions |                        |
+                     +---------------------+                        v
+                                                     Compare / restore / export
+```
 
-The Forensic section in the Photos ordering panel scores still photos with
-[TruFor](https://github.com/grip-unina/TruFor) (Guillaro et al., CVPR 2023):
-the official trained detection head produces the manipulation score at native
-resolution, and the Photos preview offers a **TruFor** toggle with genuine
-anomaly, reliability and Noiseprint++ layers. Install the model through
-Settings → Models. TruFor is redistributed with credit under the GRIP-UNINA
-licence: informational and nonprofit use only, and public results must credit
-the original authors. See [TruFor](docs/TruFor.md) for validation and
-measurements.
+| Workflow | What you get | Useful boundary |
+|---|---|---|
+| Videos | Frame scoring, shot grouping, ranking and native-resolution export | Full scores every frame; Quick scores once a second |
+| Photos | Album browsing, ranking, tagging, favorites and order sync | Still photos; iCloud downloads are optional |
+| WD Tagger | General tags and rating probabilities | Optional model; start tagging after analysis |
+| Photo analysis | TruFor evidence layers and SAFIRE region maps | Model signals require interpretation |
+| Restoration | Still-photo RealESRGAN and video-region restoration | Generated detail can differ from the source |
+| Remote inference | Share installed models across connected Macs | Model inputs leave the client when remote work is enabled |
 
-The native TruFor worker targets a 2 GB process budget while preserving its
-original 24 MP input envelope. Large images stream FP32 activations through
-temporary disk storage, preserving full resolution and global model context.
-This trades speed and disk traffic for RAM. See the [RAM policy and validation](docs/TruFor.md#ram-budget-2026-10-25).
+```mermaid
+flowchart LR
+    A[Video files or URL] --> B[Decode frames]
+    P[Photos album] --> C[Photo renditions]
+    B --> D[Vision scores and visual features]
+    C --> D
+    D --> E[Rank and filter]
+    E --> T[Optional WD tagging]
+    T --> E
+    E --> F[Preview original]
+    F --> G[Compare and export]
+    F --> H[Optional restoration]
+    H --> G
+```
+
+## Recent highlights
+
+These describe the current source; check release notes for the contents of a downloaded build.
+
+| Feature | Why it helps | How to use it |
+|---|---|---|
+| **Tag rarity** | Surface photos with uncommon combinations of general tags | Finish tagging, then use Tag rarity in Sort and Filter |
+| **Distance from visual center** | Find representative images or visual outliers | Use Distance; 0 is nearest and 1 is farthest in the source set |
+| **OR tag groups** | Match alternatives while retaining other filters | Select tags with Command-click or a rectangle, then press F |
+| **Visual sequencing** | Browse similar-looking photos beside one another | Choose Minimal Visual Distance; reverse retraces the route |
+| **Original-photo preview improvements** | Reuse previews and keep navigation available after deletion | Open a photo and navigate the current results |
+| **Cached JPEG remote tagging** | Send cached thumbnails without an extra image conversion | Connect a compatible inference server in Settings → Remote |
+| **RealESRGAN x2 / x4 preview** | Compare reconstructed still photos in the existing preview | Install each model, then choose Off, x2 or x4 |
+
+```text
+Tag selection example
+
+  Required tags       Alternative tags       Unwanted tags
+  +-----------+       +---------------+       +-----------+
+  | portrait  |  AND  | smile OR hat  |  AND  | NOT blurry|
+  +-----------+       +---------------+       +-----------+
+                              |
+                              v
+                    Photos matching the filters
+```
+
+Rarity and Distance are normalized within the source collection, not universal
+quality scores. Remote JPEG input can yield different scores from the former
+lossless rendition path. See [tag controls and scoring](docs/Tag-summary.md) and
+[remote transport measurements](docs/Remote-inference.md) for definitions and limits.
 
 ## Install on a Mac
 
@@ -102,6 +157,154 @@ Use **Kick** to disconnect it, or **Rotate…** to replace its access key.
 
 See [the protocol and implementation design](docs/Remote-inference.md) for limits,
 key storage and the client/server boundary.
+
+## Open media from a URL and Firefox
+
+The empty loading panel offers **Browse files…** and **Or load from URL**.
+Paste a direct HTTP(S) media URL, or drop a web link onto the window. Import inspects the
+content rather than requiring a filename extension: extensionless endpoints and
+misnamed downloads (including `.dms`) work when their contents are supported video.
+Files chosen locally are also inspected regardless of suffix.
+
+Drop multiple videos together, or select multiple files in **Browse files…**, to
+analyze them in one workspace. The app reads each original directly, preserving
+its frame rate, size, orientation and audio. Sorting, grouping, filtering and tagging
+work across all results. Preview, export and restoration use the selected frame’s
+original video and local timestamp. Analysis and tag caches stay keyed by the
+original video and frame, so opening a video alone or in a different collection
+reuses the same results. No joined video or intermediate media file is created.
+
+Direct media URLs are downloaded to a temporary local file before analysis so
+frame sampling, preview, restoration and export share a seekable source. Finite,
+unencrypted MPEG-TS HLS playlists are followed through redirects, then their
+segments are joined in a temporary file for native AVFoundation decoding. Direct
+media downloads are inspected from their contents, independent of filename suffix
+or server MIME type. Loading, frame decoding and export use Apple's AVFoundation
+and CoreMedia frameworks; the app does not bundle FFmpeg or any GPL/LGPL media
+libraries. Unsupported containers or codecs show an error instead of falling back
+to a third-party decoder. Encrypted, live, byte-range and fragmented-MP4 HLS
+playlists and DRM-protected media are not supported.
+
+Optional Firefox forwarding is in **Settings → Firefox**. Set suffixes such as
+`mp4, dms, ts, m3u8` and click **Set Up / Update Firefox**. WaifuFinder registers
+its local bridge, opens Firefox's add-on loader, and highlights the packaged add-on
+file. The Settings indicator turns green when Firefox is connected. Registration
+and **Unregister** are managed in the app; the extension has no separate setup
+switch. Matching direct tab navigations open in WaifuFinder, embedded players stay
+in Firefox, and failed forwarding leaves Firefox's navigation alone. Local add-on
+installation is temporary until a Mozilla-signed package is available. See
+[Firefox extension setup](FirefoxExtension/README.md).
+
+## Photos workspace
+
+Choose **Or open Photos** on the loading panel. A dedicated workspace keeps the
+album list on the left and the existing ranking, filter, tagging and preview tools
+on the right. Photos integration includes still photos only; video files and URLs
+remain available through the main loading flow.
+
+My Albums follows PhotoKit's ordered top-level album/folder list and the child order
+inside each folder, without alphabetizing or flattening folders. Built-in collections
+such as Favorites and Animated remain in the separate Smart Albums section. Albums
+with no accessible still photos remain visible but cannot be selected.
+The sidebar refreshes when WaifuFinder becomes active again, so rearrangements made
+in Photos appear on returning to the app without restarting the selected analysis.
+
+Album thumbnails load lazily as you scroll. Analysis and tagging use PhotoKit
+renditions bounded by 512×512 pixels, rather than decoding full-resolution originals.
+Up to four small photo requests overlap with scoring. Ranked results appear and
+reorder in batches during analysis. Photos always uses this ranked view.
+PhotoKit renditions have a bounded memory cache. Persistent analysis results use
+ordered Photos asset identifiers and revision metadata, so unchanged albums reuse
+results while edits or membership changes invalidate them. Tagging results are
+keyed per photo by its asset identifier, revision, and pixel geometry rather than
+by its position in an album, because PhotoKit does not guarantee the order of an
+album fetch. Reopening an album therefore reuses every cached tag, reordering or
+adding to the album costs nothing, editing one photo re-scores only that photo,
+and a photo already tagged in another album is not tagged again.
+
+The thumbnail-shape icon switches between square crops and full aspect ratios.
+Ranking and tagging share PhotoKit's
+renditions requested at 512 pixels on the longest edge, preserving aspect ratio.
+Smaller cached previews appear immediately while the requested rendition loads;
+they are not treated as a completed 512-pixel rendition. If a larger rendition is
+unavailable locally, the smaller cache remains usable with iCloud downloads off.
+Thumbnail tooltips show their actual pixel dimensions. Tagging does not request originals.
+The tagger prepares its 448×448 input from these cached thumbnails.
+
+Hover over a ranked thumbnail to add or remove its Photos Favorite using the heart;
+favorites keep a filled heart visible. The Unicode order button cycles through all,
+ordered, and unordered photos without a dropdown; unordered uses a slashed glyph.
+A small matching glyph at the top right marks photos whose order was synced.
+The Photos label and both panel collapse controls live in the title bar.
+
+Right-click a ranked thumbnail and choose **Sync order** to write the displayed
+order to the album in Photos. With multiple photos selected, only those photos are
+reordered, using their displayed sequence; other album members keep their slots.
+The app marks photos as ordered only after a successful write. Photos must display
+the album's custom order for that sequence to be visible there; date or title
+sorting can override it. Smart albums do not support custom ordering. **Reset order
+state** clears the app's private markers without changing the album in Photos.
+
+**Download from iCloud** is off by default. Off uses locally available renditions
+and skips missing ones rather than blocking the rest of the album. Enable it to
+fetch missing media as needed. Changing the switch preserves completed analysis,
+tags, selection, and cached thumbnails. Enabling it retries unfinished photos;
+disabling it cancels pending analysis downloads and continues with local media.
+Grouping is updated over the combined results without decoding completed photos
+again. Originals are requested only for explicit full-resolution
+preview, restoration or export and follow the same iCloud policy. No underlying
+originals are exported into an import folder, and the app never opens the private
+Photos library filesystem.
+
+Static photos support RealESRGAN spatial restoration and export reconstructed
+results as PNG. Temporal restoration models are unavailable for still photos.
+
+
+### RealESRGAN photo preview
+
+The Photos preview's right panel includes **RealESRGAN Off / x2 / x4**, directly
+below Photo Info and above TruFor and SAFIRE. Both choices use the official
+23-block FP16 Core ML networks. Install each independently in Settings → Models.
+Off immediately returns to source pixels; changing models shows source pixels
+until the new reconstruction completes. Results remain non-destructive and use the
+existing zoom, pan and navigation controls.
+
+Compatible enabled inference servers show the raised **R** beside each supported
+variant. x2 support never implies x4 support. TruFor and SAFIRE continue analyzing
+original pixels; their evidence views take display priority over reconstructed
+pixels. AI reconstruction must not be interpreted as original forensic evidence.
+
+Original models by **Xintao Wang, Liangbin Xie, Chao Dong and Ying Shan**, authors
+of *Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic
+Data*, with reference architecture by BasicSR contributors. WaifuFinder supplies
+conversion, optimization investigation and native integration. See
+[the integration report](docs/RealESRGAN-x4-integration.md),
+[CPU + ANE optimization results](docs/RealESRGAN-ANE.md), and [credits](docs/Credits.md).
+
+## Photo analysis
+
+### SAFIRE for Photos
+
+The Photos preview offers a **SAFIRE** overlay/mask toggle for inspecting the
+model’s flagged regions. Install the model through Settings → Models. SAFIRE’s
+map does not identify editing software or establish photo chronology.
+
+### TruFor forensic scores
+
+The Forensic section in the Photos ordering panel scores still photos with
+[TruFor](https://github.com/grip-unina/TruFor) (Guillaro et al., CVPR 2023):
+the official trained detection head produces the manipulation score at native
+resolution, and the Photos preview offers a **TruFor** toggle with genuine
+anomaly, reliability and Noiseprint++ layers. Install the model through
+Settings → Models. TruFor is redistributed with credit under the GRIP-UNINA
+licence: informational and nonprofit use only, and public results must credit
+the original authors. See [TruFor](docs/TruFor.md) for validation and
+measurements.
+
+Production TruFor runs entirely in FP32 through native Swift/MLX. Activations stay
+in RAM and inputs and evidence travel through anonymous pipes; no activation
+scratch files or disk spill are used. This does not disable macOS paging.
+See the [current memory policy and validation](docs/TruFor.md).
 
 ## WD Tagger performance matrix
 
@@ -246,6 +449,9 @@ libraries are vendored, so no package installation or network access is needed.
 alias after remounting; the release workflow runs this check before packaging.
 
 ## Tests
+
+Only automated, noninteractive tests are permitted. Do not create or run interactive
+UI tests or use the UI-test launcher. See [repository instructions](AGENTS.md).
 
 ```sh
 ./run-tests.sh                  # compile + run everything
@@ -711,7 +917,6 @@ until the next read completes.
 waifu/
 ├── build.sh                 # swiftc-based app build + bundle + icon + codesign
 ├── run-tests.sh             # compiles Sources + Tests into one test binary
-├── run-ui-tests.sh          # prompts for approval, then notifies when UI control is returned
 ├── docs/API.md              # the engine↔UI contract
 ├── tools/make-icon.swift    # draws AppIcon.icns from code
 ├── Sources/Waifu/           # App, Model, Video, Vision, Grouping, Engine, Export, UI
@@ -738,126 +943,3 @@ Test and benchmark fixtures use Apple-native generation. See [AGENTS.md](AGENTS.
 for the repository instructions and [credits](docs/Credits.md) for project acknowledgements.
 
 Final model files and published bundles are documented in [models/README.md](models/README.md). Final installations use `~/Library/Application Support/Waifu/Models/`; published bundles are retained under `models/published/`.
-
-### Open media from a URL and Firefox
-
-The empty loading panel offers **Browse files…** and **Or load from URL**.
-Paste a direct HTTP(S) media URL, or drop a web link onto the window. Import inspects the
-content rather than requiring a filename extension: extensionless endpoints and
-misnamed downloads (including `.dms`) work when their contents are supported video.
-Files chosen locally are also inspected regardless of suffix.
-
-Drop multiple videos together, or select multiple files in **Browse files…**, to
-analyze them in one workspace. The app reads each original directly, preserving
-its frame rate, size, orientation and audio. Sorting, grouping, filtering and tagging
-work across all results. Preview, export and restoration use the selected frame’s
-original video and local timestamp. Analysis and tag caches stay keyed by the
-original video and frame, so opening a video alone or in a different collection
-reuses the same results. No joined video or intermediate media file is created.
-
-Direct media URLs are downloaded to a temporary local file before analysis so
-frame sampling, preview, restoration and export share a seekable source. Finite,
-unencrypted MPEG-TS HLS playlists are followed through redirects, then their
-segments are joined in a temporary file for native AVFoundation decoding. Direct
-media downloads are inspected from their contents, independent of filename suffix
-or server MIME type. Loading, frame decoding and export use Apple's AVFoundation
-and CoreMedia frameworks; the app does not bundle FFmpeg or any GPL/LGPL media
-libraries. Unsupported containers or codecs show an error instead of falling back
-to a third-party decoder. Encrypted, live, byte-range and fragmented-MP4 HLS
-playlists and DRM-protected media are not supported.
-
-Optional Firefox forwarding is in **Settings → Firefox**. Set suffixes such as
-`mp4, dms, ts, m3u8` and click **Set Up / Update Firefox**. WaifuFinder registers
-its local bridge, opens Firefox's add-on loader, and highlights the packaged add-on
-file. The Settings indicator turns green when Firefox is connected. Registration
-and **Unregister** are managed in the app; the extension has no separate setup
-switch. Matching direct tab navigations open in WaifuFinder, embedded players stay
-in Firefox, and failed forwarding leaves Firefox's navigation alone. Local add-on
-installation is temporary until a Mozilla-signed package is available. See
-[Firefox extension setup](FirefoxExtension/README.md).
-
-### Photos workspace
-
-Choose **Or open Photos** on the loading panel. A dedicated workspace keeps the
-album list on the left and the existing ranking, filter, tagging and preview tools
-on the right. Photos integration includes still photos only; video files and URLs
-remain available through the main loading flow.
-
-My Albums follows PhotoKit's ordered top-level album/folder list and the child order
-inside each folder, without alphabetizing or flattening folders. Built-in collections
-such as Favorites and Animated remain in the separate Smart Albums section. Albums
-with no accessible still photos remain visible but cannot be selected.
-The sidebar refreshes when WaifuFinder becomes active again, so rearrangements made
-in Photos appear on returning to the app without restarting the selected analysis.
-
-Album thumbnails load lazily as you scroll. Analysis and tagging use PhotoKit
-renditions bounded by 512×512 pixels, rather than decoding full-resolution originals.
-Up to four small photo requests overlap with scoring. Ranked results appear and
-reorder in batches during analysis. Photos always uses this ranked view.
-PhotoKit renditions have a bounded memory cache. Persistent analysis results use
-ordered Photos asset identifiers and revision metadata, so unchanged albums reuse
-results while edits or membership changes invalidate them. Tagging results are
-keyed per photo by its asset identifier, revision, and pixel geometry rather than
-by its position in an album, because PhotoKit does not guarantee the order of an
-album fetch. Reopening an album therefore reuses every cached tag, reordering or
-adding to the album costs nothing, editing one photo re-scores only that photo,
-and a photo already tagged in another album is not tagged again.
-
-The thumbnail-shape icon switches between square crops and full aspect ratios.
-Ranking and tagging share PhotoKit's
-renditions requested at 512 pixels on the longest edge, preserving aspect ratio.
-Smaller cached previews appear immediately while the requested rendition loads;
-they are not treated as a completed 512-pixel rendition. If a larger rendition is
-unavailable locally, the smaller cache remains usable with iCloud downloads off.
-Thumbnail tooltips show their actual pixel dimensions. Tagging does not request originals.
-The tagger prepares its 448×448 input from these cached thumbnails.
-
-Hover over a ranked thumbnail to add or remove its Photos Favorite using the heart;
-favorites keep a filled heart visible. The Unicode order button cycles through all,
-ordered, and unordered photos without a dropdown; unordered uses a slashed glyph.
-A small matching glyph at the top right marks photos whose order was synced.
-The Photos label and both panel collapse controls live in the title bar.
-
-Right-click a ranked thumbnail and choose **Sync order** to write the displayed
-order to the album in Photos. With multiple photos selected, only those photos are
-reordered, using their displayed sequence; other album members keep their slots.
-The app marks photos as ordered only after a successful write. Photos must display
-the album's custom order for that sequence to be visible there; date or title
-sorting can override it. Smart albums do not support custom ordering. **Reset order
-state** clears the app's private markers without changing the album in Photos.
-
-**Download from iCloud** is off by default. Off uses locally available renditions
-and skips missing ones rather than blocking the rest of the album. Enable it to
-fetch missing media as needed. Changing the switch preserves completed analysis,
-tags, selection, and cached thumbnails. Enabling it retries unfinished photos;
-disabling it cancels pending analysis downloads and continues with local media.
-Grouping is updated over the combined results without decoding completed photos
-again. Originals are requested only for explicit full-resolution
-preview, restoration or export and follow the same iCloud policy. No underlying
-originals are exported into an import folder, and the app never opens the private
-Photos library filesystem.
-
-Static photos support RealESRGAN spatial restoration and export reconstructed
-results as PNG. Temporal restoration models are unavailable for still photos.
-
-
-### RealESRGAN photo preview
-
-The Photos preview's right panel includes **RealESRGAN Off / x2 / x4**, directly
-below Photo Info and above TruFor and SAFIRE. Both choices use the official
-23-block FP16 Core ML networks. Install each independently in Settings → Models.
-Off immediately returns to source pixels; changing models shows source pixels
-until the new reconstruction completes. Results remain non-destructive and use the
-existing zoom, pan and navigation controls.
-
-Compatible enabled inference servers show the raised **R** beside each supported
-variant. x2 support never implies x4 support. TruFor and SAFIRE continue analyzing
-original pixels; their evidence views take display priority over reconstructed
-pixels. AI reconstruction must not be interpreted as original forensic evidence.
-
-Original models by **Xintao Wang, Liangbin Xie, Chao Dong and Ying Shan**, authors
-of *Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic
-Data*, with reference architecture by BasicSR contributors. WaifuFinder supplies
-conversion, optimization investigation and native integration. See
-[the integration report](docs/RealESRGAN-x4-integration.md),
-[CPU + ANE optimization results](docs/RealESRGAN-ANE.md), and [credits](docs/Credits.md).

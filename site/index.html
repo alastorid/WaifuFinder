@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#141714" />
     <meta
       name="description"
-      content="Find, tag, compare and restore video frames on your Mac. WaifuFinder combines frame-by-frame analysis with an optimized WD Tagger you can run locally, remotely, or across connected Macs, plus local AI restoration."
+      content="Find, tag, compare and restore video frames and explore Photos albums on your Mac. WaifuFinder combines frame-by-frame analysis with an optimized WD Tagger you can run locally, remotely, or across connected Macs, plus local AI restoration."
     />
     <meta
       property="og:title"
@@ -34,7 +34,7 @@
         ></a
       >
       <nav aria-label="Main navigation">
-        <a href="#workflow">Frame finder</a><a href="#sequence">Visual sequence</a
+        <a href="#photos">New in Photos</a><a href="#workflow">Frame finder</a><a href="#sequence">Visual sequence</a
         ><a href="#tagger">WD Tagger</a><a href="#distributed">Distributed</a
         ><a href="#credits">Credits</a
         ><a href="https://github.com/alastorid/WaifuFinder">Source ↗</a
@@ -126,6 +126,29 @@
         <div class="hero-footnote">
           <span>EVERY FRAME HAS A CHANCE.</span
           ><span>VISION + CORE ML + SWIFT / MLX</span>
+        </div>
+      </section>
+      <section class="recent-photos light-section" id="photos" aria-labelledby="photos-heading">
+        <div class="wrap">
+          <div class="section-label"><span>RECENT HIGHLIGHTS / PHOTOS</span><span>FIND WHAT MAKES A PHOTO DIFFERENT.</span></div>
+          <div class="section-heading">
+            <h2 id="photos-heading">Your library.<br /><em>A fresh perspective.</em></h2>
+            <p>Open Photos to rank still images, discover unusual tags, and move from a broad collection to the pictures you want. These highlights describe the current source; see release notes for packaged availability.</p>
+          </div>
+          <div class="features">
+            <article><span class="feature-index">01 — DISCOVER</span><h3>Find the uncommon.</h3><p>Tag rarity brings unusual general tags into view after tagging finishes. Distance from the visual center helps surface representative photos or visual outliers. Both scores run from 0 to 1 within your source collection.</p></article>
+            <article><span class="feature-index">02 — COMBINE</span><h3>Give your filters options.</h3><p>Select several tags and press F to create an OR group. Combine alternatives with required and unwanted tags, then drag tags between groups as you refine your selection.</p></article>
+            <article><span class="feature-index">03 — INSPECT</span><h3>Get closer to the original.</h3><p>Improved original-photo loading and preview reuse make browsing smoother, with navigation preserved after deletion. Optional RealESRGAN x2 and x4 previews let you compare reconstructed detail.</p></article>
+          </div>
+          <div class="photo-flow" aria-label="Photo workflow">
+            <span>Open an album</span><b aria-hidden="true">→</b><span>Rank &amp; tag</span><b aria-hidden="true">→</b><span>Combine filters</span><b aria-hidden="true">→</b><span>Inspect &amp; export</span>
+          </div>
+          <div class="features">
+            <article><h3>Inspect evidence layers.</h3><p>TruFor offers anomaly, reliability and Noiseprint++ views; SAFIRE highlights model-flagged regions. Install them in Settings → Models. These signals do not establish an image’s editing history. TruFor is for informational and nonprofit use with author credit.</p></article>
+            <article><h3>Share the tagging work.</h3><p>Connected Macs can tag cached JPEG thumbnails without an extra image conversion. Hold Option when starting tagging to include this Mac in the pool. JPEG inputs can produce different scores from the previous lossless rendition path.</p></article>
+            <article><h3>Keep the source in context.</h3><p>Photo reconstruction is non-destructive. TruFor and SAFIRE analyze original pixels, and their evidence views take priority over reconstructed previews. Generated detail is not original forensic evidence.</p></article>
+          </div>
+          <p><a href="https://github.com/alastorid/WaifuFinder#recent-highlights">Explore the feature guide ↗</a> · <a href="https://github.com/alastorid/WaifuFinder/releases">Read release notes ↗</a></p>
         </div>
       </section>
       <section class="workflow light-section" id="workflow">
