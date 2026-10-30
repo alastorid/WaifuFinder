@@ -220,6 +220,32 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             if !taggingProgress.isRunning || !isTagUpdate { recomputeDisplayedFrames() }
         }
     }
+    private var photoDistanceScores: [FrameID: Float] = [:]
+    private var photoDistanceInput: [VisualOrderInput]?
+    private var photoDistanceTask: Task<Void, Never>?
+
+    private func schedulePhotoDistance() {
+        let input = frames.map { VisualOrderInput(id: $0.id, featurePrint: $0.featurePrint) }
+        guard input != photoDistanceInput else { return }
+        photoDistanceInput = input
+        photoDistanceTask?.cancel()
+        let source = frames
+        photoDistanceTask = Task { [weak self] in
+            let worker = Task.detached(priority: .utility) { try PhotoCenterDistance.scores(source) }
+            let scores = await withTaskCancellationHandler {
+                try? await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self, let scores, self.photoDistanceInput == input else { return }
+            self.photoDistanceScores = scores
+            self.displayFilterResults.removeAll()
+            if self.frameOrder.photoDistance.enabled || !self.frameLimits.photoDistance.isUnlimited {
+                self.recomputeDisplayedFrames()
+            } else {
+                self.displayedFrames = self.displayedFrames.map(self.withPhotoRarity)
+            }
+        }
+    }
+
     @Published private(set) var photoRarityReady = false
     private var photoRarityScores: [FrameID: Float] = [:]
     private var photoRarityInput: String?
@@ -255,6 +281,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     private func withPhotoRarity(_ frame: AnalyzedFrame) -> AnalyzedFrame {
         var frame = frame
+        frame.photoDistance = photoDistanceScores[frame.id]
         frame.tagRarity = photoRarityScores[frame.id]
         return frame
     }
@@ -885,8 +912,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         } else {
             let requestID = UUID()
             // Photos grid/analysis thumbnails use 512px renditions, regardless
-            // of the video analysis-width setting. Still-photo tagging requests
-            // its own model-sized rendition through TaggingImageLoader.
+            // of the video analysis-width setting. Remote tagging reuses these
+            // JPEGs; local-only tagging requests a model-sized rendition.
             let width = PhotosMedia.isPhotos(sourceURL)
                 ? PhotosMedia.analysisPixelSize
                 : settings.analysisWidth
@@ -1547,7 +1574,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             guard !lanes.isEmpty else { throw ModelInstaller.fail("No tagging server or local model is available.") }
             let tagger = BalancedTaggerBackend(lanes: lanes)
             let next: @Sendable () async throws -> [PendingTagFrame]? = {
-                try await self.nextTaggingBatch(token: token)
+                try await self.nextTaggingBatch(token: token, preferCachedJPEG: !clients.isEmpty)
             }
             let whenEmpty: @Sendable () async -> Bool = {
                 await self.finishTaggingIfDrained(token: token, elapsed: Date().timeIntervalSince(started))
@@ -1590,17 +1617,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         if acquired { await ModelLibrary.shared.releaseTagger() }
     }
 
-    private func nextTaggingBatch(token: UUID) async throws -> [PendingTagFrame]? {
+    private func nextTaggingBatch(token: UUID, preferCachedJPEG: Bool) async throws -> [PendingTagFrame]? {
         guard token == taggingGeneration, taggingProgress.isRunning, let video else { return nil }
+        let videoStem = video.url.deletingPathExtension().lastPathComponent
         var batch: [PendingTagFrame] = []
         while taggingQueueIndex < taggingQueue.count && batch.count < WDTaggerBackend.batchSize {
+            try Task.checkCancellation()
             let id = taggingQueue[taggingQueueIndex]
             taggingQueueIndex += 1
             guard let frame = frameByID[id], !frame.hasTaggingResult else { continue }
             if let photoURL = PhotosMedia.shared.photoItemURL(for: video.url, seconds: frame.timeSeconds) {
-                // Ask PhotoKit for model-sized pixels; do not encode and decode
-                // the scoring/grid JPEG or shrink its 512px rendition again.
-                batch.append(PendingTagFrame(frame: frame, source: .photo(photoURL)))
+                let cachedJPEG = preferCachedJPEG
+                    ? thumbnailCache.thumbnailDataSync(forKey: frame.thumbnailKey,
+                        videoStem: videoStem, touchLRU: false, allowPrefixMatch: false)
+                    : nil
+                batch.append(PendingTagFrame(frame: frame, source: TaggingImageLoader.photoSource(
+                    photoURL, preferCachedJPEG: preferCachedJPEG, cachedJPEG: cachedJPEG)))
                 continue
             }
             guard let data = await thumbnailData(for: frame, retainRegeneratedThumbnail: false) else {
@@ -2628,6 +2660,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func recomputeDisplayedFrames() {
         guard !applyingPanelPreset else { return }
         schedulePhotoRarity()
+        schedulePhotoDistance()
         let grouping = settings.grouping.validated()
         let taggingSelection = taggingCandidates(grouping)
         let taggingCandidates = taggingSelection.frames
@@ -3153,6 +3186,18 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// by group boundaries instead strands ↑/↓ inside that run — every ungrouped
     /// frame shares `groupID == nil`, so "next group" skips all of its lines.
     /// Line steps land on the cell nearest the column the focus left.
+    /// Follow the committed thumbnail rows, which change with width and zoom.
+    func focusThumbnailRow(forward: Bool, extendingSelection: Bool = false) {
+        guard uncover == nil, previewFrame == nil, !crystalOrbIsOpen else { return }
+        let order = navigationOrder
+        if let current = focusedFrameID, order.indexByID[current] != nil {
+            guard let target = order.verticalNeighbour(of: current, forward: forward) else { return }
+            focus(on: target, extendingSelection: extendingSelection)
+        } else if let first = order.frames.first {
+            focus(on: first, extendingSelection: extendingSelection)
+        }
+    }
+
     func focusGroupEdge(forward: Bool, extendingSelection: Bool = false) {
         guard uncover == nil else { return }
         let order = navigationOrder

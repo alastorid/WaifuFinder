@@ -96,6 +96,7 @@ final class RemoteClient: ObservableObject {
     private var backoff = 1.0
     private var generation = UUID()
     private var connectTask: Task<Void, Never>?
+    private let tagInputPreparer = RemoteTagInputPreparer()
 
     /// A short identity for the connected server, readable synchronously.
     ///
@@ -633,8 +634,10 @@ final class RemoteClient: ObservableObject {
     func tag(images: [CGImage], codec: RemoteTagImageCodec) async throws -> [QuantizedTagRow] {
         guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
         guard (1...WDTaggerBackend.batchSize).contains(images.count) else { throw TaggerError.invalidBatch }
-        let payload = try await RemoteTagBatchPayload.encode(images: images,
-            codec: codec == .rgba8 ? losslessTagCodec : codec)
+        let selectedCodec = codec == .rgba8 ? losslessTagCodec : codec
+        let payload = try await tagInputPreparer.prepare {
+            try await RemoteTagBatchPayload.encode(images: images, codec: selectedCodec)
+        }
         let reply = try await connection.request(.tagBatch, payload: payload)
         let expected = capabilities?.tagger?.vocabularyFingerprint
         return try await Self.decodeTagResult(reply, count: images.count, fingerprint: expected)
@@ -644,7 +647,10 @@ final class RemoteClient: ObservableObject {
     /// Preparation is off the UI actor and overlaps requests to other servers.
     func tag(sources: [TaggingImageSource]) async throws -> [QuantizedTagRow] {
         guard offersRemoteTagging, let connection else { throw RemoteError.framing("Not connected.") }
-        let payload = try await RemoteTagBatchPayload.encode(sources: sources, losslessCodec: losslessTagCodec)
+        let selectedCodec = losslessTagCodec
+        let payload = try await tagInputPreparer.prepare {
+            try await RemoteTagBatchPayload.encode(sources: sources, losslessCodec: selectedCodec)
+        }
         let reply = try await connection.request(.tagBatch, payload: payload)
         let expected = capabilities?.tagger?.vocabularyFingerprint
         return try await Self.decodeTagResult(reply, count: sources.count, fingerprint: expected)

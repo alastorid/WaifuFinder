@@ -28,6 +28,56 @@ private func bruteForceOpenCost(_ matrix: TSPDistanceMatrix) -> Double {
 
 func registerCuOptMetalTSPTests() {
     let suite = "frame arrangement: cuOpt Metal"
+    Registry.shared.add(suite: suite, TestCase(name: "native photo center scores stay fixed while session filters change", knownBug: nil) {
+        let observations = try await [makeFeaturePrintObservation(0), makeFeaturePrintObservation(2), makeFeaturePrintObservation(4)]
+        let payloads = try observations.map { try JSONEncoder().encode($0) }
+        let frames = (0..<3).map { index in
+            FrameFixture.make(id: String(format: "f%06d", index), time: Double(index), featurePrint: payloads[index])
+        } + [FrameFixture.make(id: "f000003", time: 3, featurePrint: Data("corrupt".utf8))]
+        let expected = try PhotoCenterDistance.scores(frames)
+        checkEqual(expected.count, 3, "corrupt feature has no invented score")
+        checkEqual(expected.values.min(), 0, "nearest native vector scores zero")
+        checkEqual(expected.values.max(), 1, "farthest native vector scores one")
+        let directory = try Temporary.directory("photo-center-session")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.photoDistance])
+            session.updateAnalyzedFrames(frames)
+            for _ in 0..<500 {
+                if session.displayedFrames.contains(where: { $0.photoDistance != nil }) { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            checkEqual(session.displayedFrames.first?.photoDistance, 1, "background scores sort farthest first")
+            checkEqual(session.displayedFrames.last?.id, frames[3].id, "missing vector sorts last")
+            session.frameLimits.setLimit(FrameLimit(low: 0.5, high: 1), for: .photoDistance)
+            checkEqual(Set(session.displayedFrames.map(\.id)), Set(expected.filter { $0.value >= 0.5 }.keys), "range uses source scores")
+            for frame in session.displayedFrames { checkEqual(frame.photoDistance, expected[frame.id], "filter leaves centroid unchanged") }
+            session.frameLimits = .none
+            checkEqual(session.displayedFrames.count, 4, "clearing range restores all source photos")
+            session.updateAnalyzedFrames([])
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "photo center distance uses the centroid and full normalized range", knownBug: nil) {
+        let vectors = VisualFeatureVectors(count: 3, dimensions: 1, values: [0, 1, 5])!
+        let scores = try PhotoCenterDistance.normalizedDistances(vectors)
+        // Center is 2, so raw distances are [2, 1, 3].
+        checkEqual(scores, [0.5, 0, 1], "distance to the mean, not a pairwise average")
+        let squared = VisualFeatureVectors(count: 3, dimensions: 1, values: [0, 1, 5], metric: .squaredEuclidean)!
+        checkEqual(try PhotoCenterDistance.normalizedDistances(squared), [0.375, 0, 1], "preserves the native squared-distance convention")
+        let tied = VisualFeatureVectors(count: 2, dimensions: 2, values: [1, 2, 1, 2])!
+        checkEqual(try PhotoCenterDistance.normalizedDistances(tied), [0, 0], "identical photos have zero distance")
+        var frames = (0..<3).map { FrameFixture.make(id: "f00000\($0)", time: Double($0), artScore: 1) }
+        for index in frames.indices { frames[index].photoDistance = scores[index] }
+        let order = FrameOrder.only([.photoDistance])
+        let sorted = FrameArrangement.arrange(frames, order: order, perGroupTopCount: 99, grouping: .default)
+        checkEqual(sorted.visible.map(\.id), [frames[2].id, frames[0].id, frames[1].id], "sorts farthest first")
+        var limits = FrameLimits.none
+        limits.setLimit(FrameLimit(low: 0.25, high: 0.75), for: .photoDistance)
+        checkEqual(frames.filter { limits.admits($0, grouping: .default) }.map(\.id), [frames[0].id], "filters normalized distance")
+        checkEqual(FrameLimitBounds.bounds(of: frames, grouping: .default).range(for: .photoDistance), 0...1, "fixed bounds")
+        checkEqual(try JSONDecoder().decode(FrameOrder.self, from: JSONEncoder().encode(order)), order, "sort persists")
+        checkEqual(try JSONDecoder().decode(FrameLimits.self, from: JSONEncoder().encode(limits)), limits, "range persists")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "small CPU and Metal paths agree with brute-force open optima", knownBug: nil) {
         let solver = try testedMetalSolver()
         for points: [Float] in [[0, 10, 1, 9, 2, 8], [0, 0, 2, 0, 3, 1, 2, 3, 0, 2]] {

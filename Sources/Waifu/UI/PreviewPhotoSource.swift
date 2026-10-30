@@ -15,6 +15,14 @@ struct PreviewPhotoSource: Sendable {
         return Int64(image.width) * Int64(image.height) > Int64(previous.width) * Int64(previous.height)
     }
 
+    /// PhotoKit may return a tiny successful rendition even when another cache
+    /// already has larger pixels. Success alone never makes a candidate best.
+    static func sharpest(_ candidates: [CGImage?]) -> CGImage? {
+        candidates.compactMap { $0 }.reduce(nil as CGImage?) { best, image in
+            isSharper(image, than: best) ? image : best
+        }
+    }
+
     private static func still(_ image: CGImage, isOriginal: Bool,
                               cached: CGImage?, cachedIsOriginal: Bool) -> Self {
         if let cached, isSharper(cached, than: image)

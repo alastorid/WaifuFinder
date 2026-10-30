@@ -594,22 +594,56 @@ struct FramePreviewView: View {
             }
         }
 
-        // Never paint an analysis thumbnail while the original is being read.
+        // Cached inspection pixels are ready immediately; probe local originals before falling back.
         let identity = session.thumbnailGeneration.uuidString + ":" + target.thumbnailKey
         if let cached = Self.availablePreview(target, session: session) {
             image = NSImage(cgImage: cached.image, size: NSSize(width: cached.image.width, height: cached.image.height))
             displayedFrameID = target.id
             displayedSourceURL = source
-            displayedIsOriginal = true
+            displayedIsOriginal = cached.isOriginal
         }
         do {
             if let photoURL = PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) {
-                let content = try await PhotosMedia.shared.previewContent(photoURL)
+                let preview: PreviewPhotoSource
+                do {
+                    preview = PreviewPhotoSource(content: try await PhotosMedia.shared.previewContent(photoURL, localOnly: true), isOriginal: true)
+                } catch {
+                    try Task.checkCancellation()
+                    // Resolve the best local inspection rendition before exposing a grid thumbnail.
+                    let inspection = try? await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in })
+                    // The panel's decoded thumbnail and encoded session thumbnail
+                    // remain candidates even when PhotoKit successfully returns pixels.
+                    var grid = GridThumbnailLoader.shared.cachedImage(identity: identity)
+                    if grid == nil, let data = await session.thumbnailData(for: target) {
+                        grid = await GridThumbnailLoader.shared.image(data: data, identity: identity)
+                    }
+                    let retained = displayedFrameID == target.id && displayedSourceURL == source
+                        ? image.flatMap(PhotosMedia.renditionPixels) : nil
+                    let fallback = PreviewPhotoSource.sharpest([
+                        retained,
+                        PreviewImageCache.shared.cached(Self.previewKey(target, session: session))?.image,
+                        PhotosMedia.shared.cachedPreview(photoURL)?.image,
+                        PhotosMedia.shared.cachedRendition(photoURL, maxPixelSize: PhotosMedia.analysisPixelSize),
+                        grid, inspection
+                    ])
+                    guard !Task.isCancelled, loadID == request,
+                          session.previewFrame?.id == target.id, session.video?.url == source else { return }
+                    if let fallback {
+                        image = NSImage(cgImage: fallback, size: NSSize(width: fallback.width, height: fallback.height))
+                        displayedFrameID = target.id
+                        displayedSourceURL = source
+                        displayedIsOriginal = false
+                    }
+                    preview = try await PreviewPhotoSource.load(
+                        original: { try await PhotosMedia.shared.previewContent(photoURL) },
+                        rendition: { throw PhotosMedia.localUnavailable() }, cached: fallback)
+                }
+                let content = preview.content
                 // Rasterization and thumbnail generation must never run on the UI actor.
                 let prepared = await Task.detached(priority: .userInitiated) { () -> PreviewEvidenceInput? in
                     if case .still(let pixels) = content {
                         GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
-                        return PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: true)
+                        return PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: preview.isOriginal)
                     }
                     return nil as PreviewEvidenceInput?
                 }.value
@@ -620,8 +654,9 @@ struct FramePreviewView: View {
                     let native = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
                     native.cacheMode = .never
                     image = native
-                    PreviewImageCache.shared.store(pixels, isOriginal: true, key: Self.previewKey(target, session: session))
-                    displayedIsOriginal = true
+                    PreviewImageCache.shared.store(pixels, isOriginal: preview.isOriginal, key: Self.previewKey(target, session: session))
+                    displayedIsOriginal = preview.isOriginal
+                    if !preview.isOriginal { note = "Preview image" }
                     animation = nil
                     evidenceInput = prepared
                 case .animated(let sequence):

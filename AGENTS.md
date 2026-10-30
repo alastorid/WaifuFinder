@@ -1,5 +1,13 @@
 # Repository instructions
 
+## Build artifact housekeeping
+
+Use `dist/WaifuFinder.app` as the standard app output. Do not leave additional app
+variants, superseded installers, or ad hoc benchmark executables in the checkout.
+Build and run standalone benchmarks in temporary directories with cleanup on exit;
+retain their source and measurement reports. Keep build-system-managed caches and
+required native runtimes. Do not quit the user's running app for housekeeping.
+
 ## Interactive UI testing
 
 The user permanently prohibited interactive UI tests on 2026-10-26: no

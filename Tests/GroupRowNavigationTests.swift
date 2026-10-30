@@ -5,6 +5,34 @@ import Foundation
 // split into chunked lines. Stepping by group boundaries stranded the arrows
 // inside that run, where every frame shares `groupID == nil`.
 func registerGroupRowNavigationTests() {
+    Registry.shared.add(suite: "Group row navigation", TestCase(name: "flat thumbnail arrows follow resized committed rows without grouping", knownBug: nil) {
+        let directory = try Temporary.directory("flat-nav")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let frames = (1...11).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0)) }
+            session.updateAnalyzedFrames(frames)
+            session.groupingEnabled = false
+            for columns in [3, 5, 2] {
+                let key = GridStageKey(revision: session.gridRevision, generation: session.thumbnailGeneration,
+                    width: CGFloat(columns * 131 + 2), columns: columns, groupColumns: 2,
+                    grouped: false, photosSource: false, square: true, targetWidth: 130)
+                let snapshot = GridStageSnapshot.make(GridStageInput(key: key, sourceURL: nil,
+                    rows: session.displayedRows, frames: session.displayOrderFrames, beyondCap: [:], revealed: []))
+                session.commitGridNavigation(snapshot.navigation, generation: session.thumbnailGeneration)
+                session.focusFromPointer(frames[1].id)
+                session.focusThumbnailRow(forward: true)
+                checkEqual(session.focusedFrameID, frames[1 + columns].id, "down preserves the current column after reflow")
+                checkEqual(session.selectedFrameIDs, Set([frames[1 + columns].id]), "arrow selects its destination")
+                checkEqual(session.gridNavigationFrameID, frames[1 + columns].id, "destination requests full visibility")
+                session.focusThumbnailRow(forward: false)
+                checkEqual(session.focusedFrameID, frames[1].id, "up returns to the exact column")
+                session.focusThumbnailRow(forward: false)
+                checkEqual(session.focusedFrameID, frames[1].id, "top boundary stays put")
+            }
+        }.value
+    })
+
     Registry.shared.add(suite: "Group row navigation", TestCase(name: "vertical neighbour walks drawn lines and keeps the column", knownBug: nil) {
         let a = FrameGroupID(raw: "A"), b = FrameGroupID(raw: "B")
         var frames = [

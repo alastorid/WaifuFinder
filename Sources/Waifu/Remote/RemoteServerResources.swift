@@ -200,8 +200,8 @@ actor RemoteTagSession {
 
 /// The images a tagging batch can carry.
 ///
-/// Selected per batch: cached JPEG/PNG containers for video, or exact model-size
-/// RGBA pixels for Photos, optionally losslessly compressed when negotiated.
+/// Selected per batch: cached JPEG/PNG containers for video and remote Photos,
+/// or exact RGBA pixels for decoded-image callers, optionally LZ4-compressed.
 enum RemoteTagImageCodec: UInt8, CaseIterable, Sendable {
     /// A JPEG or PNG container, decoded by the server at analysis resolution.
     case encoded
@@ -225,7 +225,10 @@ enum RemoteTagImageDecoder {
     static func decode(codec: RemoteTagImageCodec, bytes: [UInt8]) throws -> CGImage {
         switch codec {
         case .encoded:
-            return try WDTaggerBackend.thumbnailImage(data: Data(bytes))
+            // Finish JPEG decoding on the request's preparation executor, before
+            // entering the serial model actor. Otherwise ImageIO can defer this
+            // CPU work until Core Image needs the pixels during model staging.
+            return try WDTaggerBackend.thumbnailImage(data: Data(bytes), cacheImmediately: true)
         case .rgba8LZ4:
             return try decode(codec: .rgba8, bytes: RemoteTagInputCompression.decode(bytes))
         case .rgba8:
@@ -240,8 +243,7 @@ enum RemoteTagImageDecoder {
             // Copied into the context's own buffer: a `CGImage` does not retain
             // the byte array it was drawn from, and the receive buffer is about
             // to be released.
-            var mutable = bytes
-            return try mutable.withUnsafeMutableBytes { source in
+            return try bytes.withUnsafeBytes { source in
                 guard let base = source.baseAddress, let target = context.data else {
                     throw TaggerError.preprocessing
                 }

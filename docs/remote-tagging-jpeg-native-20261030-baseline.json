@@ -1,0 +1,58 @@
+{
+  "frames" : 64,
+  "measurements" : [
+    {
+      "fps" : 15.586896108682172,
+      "mode" : "client-rgba-lz4",
+      "round" : 0,
+      "seconds" : 4.1060131249832921,
+      "thermal" : 0
+    },
+    {
+      "fps" : 16.526243448546001,
+      "mode" : "cached-jpeg",
+      "round" : 0,
+      "seconds" : 3.8726284166914411,
+      "thermal" : 0
+    },
+    {
+      "fps" : 16.253262397912469,
+      "mode" : "cached-jpeg",
+      "round" : 1,
+      "seconds" : 3.9376710000215098,
+      "thermal" : 0
+    },
+    {
+      "fps" : 15.51184310532577,
+      "mode" : "client-rgba-lz4",
+      "round" : 1,
+      "seconds" : 4.1258797916816548,
+      "thermal" : 1
+    },
+    {
+      "fps" : 15.454554830166121,
+      "mode" : "client-rgba-lz4",
+      "round" : 2,
+      "seconds" : 4.1411739583127201,
+      "thermal" : 1
+    },
+    {
+      "fps" : 15.604524934478397,
+      "mode" : "cached-jpeg",
+      "round" : 2,
+      "seconds" : 4.1013744582887739,
+      "thermal" : 1
+    }
+  ],
+  "medianFPS" : {
+    "cached-jpeg" : 16.253262397912469,
+    "client-rgba-lz4" : 15.51184310532577
+  },
+  "outputSHA256" : "d59a85b9873d252a49d117ddf3fd5a5c9d2029385a754e52af848bdde52cc7e8",
+  "quantizedResultsIdentical" : true,
+  "requestDepth" : 8,
+  "rounds" : 3,
+  "scope" : "Actual production native Metal\/MLX worker, preprocessing, encrypted loopback TCP and result derivation on one Mac. Generated cached 512px portrait\/landscape JPEGs. Alternating mode order; model warmup excluded. No PhotoKit fetch, physical LAN, second host, or interactive UI. Both modes start from identical JPEG pixels; the RGBA control includes client decode, preprocessing and negotiated LZ4.",
+  "thermalAfter" : 1,
+  "thermalBefore" : 0
+}

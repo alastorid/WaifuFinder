@@ -2,8 +2,9 @@ import CoreGraphics
 import Compression
 import Foundation
 
-/// Model input preparation runs independently in each server lane. Cached video
-/// thumbnails travel verbatim; Photos retain the exact lossless RGBA input.
+/// Cached video and Photos thumbnails travel verbatim. Evicted Photos JPEGs are
+/// regenerated inside the lane's bounded preparation stage. Callers supplying
+/// decoded images can still use exact lossless RGBA input.
 enum RemoteTagBatchPayload {
     /// Leave the connection's dispatcher free to receive the next tagging batch
     /// while ImageIO decodes this one on the generic executor.
@@ -28,15 +29,18 @@ enum RemoteTagBatchPayload {
         guard (1...WDTaggerBackend.batchSize).contains(sources.count) else { throw TaggerError.invalidBatch }
         guard losslessCodec == .rgba8 || losslessCodec == .rgba8LZ4 else { throw TaggerError.preprocessing }
         var thumbnails: [Data] = []
+        var needsRegeneration = false
         for source in sources {
             try Task.checkCancellation()
             switch source {
             case .thumbnail(let data): thumbnails.append(data)
+            case .photoJPEG: needsRegeneration = true
             case .photo:
                 let images = try await TaggingImageLoader.load(sources)
                 return try await encode(images: images, codec: losslessCodec)
             }
         }
+        if needsRegeneration { thumbnails = try await TaggingImageLoader.jpegData(sources) }
         return try encoded(thumbnails, codec: .encoded)
     }
 
@@ -67,6 +71,25 @@ enum RemoteTagBatchPayload {
             writer.data(frame)
         }
         return writer.bytes
+    }
+}
+
+/// One preparation batch per connection, overlapping that server's existing
+/// uploads and inference. Eight queued requests must not become 32 simultaneous
+/// PhotoKit/CI regeneration jobs when an album's thumbnails have been evicted.
+actor RemoteTagInputPreparer {
+    private var tail: Task<Void, Never>?
+
+    func prepare(_ operation: @escaping @Sendable () async throws -> [UInt8]) async throws -> [UInt8] {
+        try Task.checkCancellation()
+        let previous = tail
+        let work = Task {
+            await previous?.value
+            try Task.checkCancellation()
+            return try await operation()
+        }
+        tail = Task { _ = await work.result }
+        return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
 }
 

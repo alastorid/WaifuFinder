@@ -21,12 +21,21 @@ a batch, counting requests through preparation, transport and completion. Equal 
 rotate fairly. Each remote lane has an eight-batch window. Option-start adds a local
 lane with capacity two, after verifying that local labels match. Each frame is inferred
 once. Source batches enter the scheduler before pixel loading, so preparation runs
-independently in the selected lanes instead of serially limiting every server. Video
-thumbnails upload as the original cached JPEG bytes, without client decoding, resizing
-or another lossy encoding. Photos upload the exact model-input RGBA bytes; peers that
-advertise `rgba8LZ4` receive losslessly compressed inputs, with a raw fallback when
-compression would enlarge a frame. Older version-2 servers keep receiving raw RGBA8.
-Image decoding on the server runs off its request-dispatch actor. Vocabulary downloads
+independently in the selected lanes instead of serially limiting every server.
+Video and remote Photos thumbnails upload as the original cached JPEG bytes, without
+client decoding, resizing, or another lossy encoding on a cache hit. Evicted Photos
+JPEGs are regenerated after reserving a server lane. Each connection prepares one
+batch at a time, with at most four concurrent PhotoKit requests, while earlier batches
+upload and run inference. Eight pending requests therefore do not become 32 concurrent
+PhotoKit/rendering jobs per server. Local-only Photos tagging retains its lossless
+448px rendition path; Option-start uses the JPEG source for both local and remote
+lanes. JPEG thumbnail inputs can produce different scores from the former lossless
+PhotoKit rendition; transport preserves the chosen JPEG bytes exactly.
+
+Decoded-image callers still support exact RGBA and negotiated `rgba8LZ4` input,
+including the raw fallback for incompressible frames and older version-2 peers.
+Server JPEG decoding is eager on the preparation executor, so deferred ImageIO decode
+does not occupy the serial model actor. Vocabulary downloads
 from connected servers start concurrently. Completed frame updates commit immediately
 so a slow server cannot hold up
 refilling a faster server's queue. Follow-up tagging preserves the local participation
@@ -161,7 +170,7 @@ probability rows and compressed vocabulary travel as binary payloads, never JSON
   Codec 2 requires the server's optional `tagger.inputCodecs` capability to include
   `2`. Each frame begins with a mode byte: `0` followed by exactly 802,816 raw bytes,
   or `1` followed by Apple LZ4 bytes that decode to exactly 802,816 bytes. In either
-  case model pixels are unchanged. Cached video JPEGs use codec 0 verbatim.
+  case model pixels are unchanged. Cached video and Photos JPEGs use codec 0 verbatim.
 - Tag result: u8 count, u64 vocabulary fingerprint, then count × { u32 byte length,
   `WDT4` bytes }. Each row decompresses to four rating bytes, a UInt16 trait-pair
   count, then sparse UInt16 head index / UInt8 score pairs. Apple LZ4 compression
@@ -211,6 +220,25 @@ it checks scheduling and transport scaling, not physical GPU or LAN performance.
 The October 26, 2026 run completed in **2.55 s with one server** and **1.29 s with
 two servers (1.98× throughput)**. Both servers filled their eight-request windows;
 cached-JPEG and lossless-RGBA pixel parity checks passed.
+
+That synthetic test does not measure PhotoKit rendition fetching or real GPU work.
+The October 30 Photos regression exposed a missing path: Photos still requested new
+448px renditions and rendered/compressed them on the client even though the video
+path already sent cached JPEGs. `tools/run-wd-tagger-remote-jpeg-benchmark.sh` now
+runs a background benchmark with the actual native Metal/MLX worker, encrypted
+loopback sockets, alternating RGBA/LZ4 versus JPEG runs, and quantized-output parity.
+It excludes PhotoKit fetching and physical LAN traffic; it cannot establish a frame
+rate for a different remote Mac. The fixture JPEGs are generated with Apple APIs.
+The runner builds into a temporary directory and removes its executable on exit;
+only the requested JSON report persists.
+
+The [October 30 native M3 run](remote-tagging-jpeg-native-20261030.json) measured
+median **16.13 fps for JPEG** versus **15.88 fps for the bounded RGBA/LZ4 control**,
+with nominal thermal state throughout and identical quantized output across all
+runs. The first eight-image upload shrank from **4,054,332 bytes to 140,064 bytes**
+(96.5% less payload). This comparison excludes the additional PhotoKit fetching
+removed by cache hits and does not claim the user's original remote-server fps
+has been reproduced on that server.
 
 The app links only Apple frameworks for this feature: Network, CryptoKit and Compression. No third-party dependency or media executable is added. Interactive UI tests
 are prohibited by `AGENTS.md`; use noninteractive protocol and runtime checks.

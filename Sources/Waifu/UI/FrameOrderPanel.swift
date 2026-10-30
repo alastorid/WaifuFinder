@@ -123,6 +123,7 @@ struct FrameOrderPanel: View {
             signalRow(.face)
             signalRow(.definition)
             signalRow(.art)
+            signalRow(.photoDistance)
             ratingSection
         }
         .animation(.easeInOut(duration: 0.33), value: showsPhotoRarity)

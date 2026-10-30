@@ -369,7 +369,10 @@ struct WireWriter {
         bytes.append(contentsOf: value)
     }
 
-    mutating func data(_ value: Data) { raw([UInt8](value)) }
+    mutating func data(_ value: Data) {
+        u32(UInt32(clamping: value.count))
+        bytes.append(contentsOf: value)
+    }
 
     /// Raw Float32 without a length prefix, for the fixed-size probability rows.
     mutating func floats(_ values: [Float]) {

@@ -2,6 +2,23 @@ import AVFoundation
 import Foundation
 
 func registerPreviewFrameTests() {
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "offline inspection never chooses a tiny successful rendition over the panel image", knownBug: nil) {
+        let tiny = try ImageFixture.cgImage(width: 64, height: 96)
+        let panel = try ImageFixture.cgImage(width: 341, height: 512)
+        let inspection = try ImageFixture.cgImage(width: 1365, height: 2048)
+        check(PreviewPhotoSource.sharpest([nil, panel, tiny]) === panel,
+              "a nonnil low-resolution PhotoKit response cannot hide sharper panel pixels")
+        check(PreviewPhotoSource.sharpest([tiny, panel, inspection]) === inspection,
+              "larger local inspection pixels win over the panel")
+        check(PreviewPhotoSource.sharpest([inspection, tiny, panel]) === inspection,
+              "late degraded results cannot downgrade retained inspection pixels")
+        let result = try await PreviewPhotoSource.load(
+            original: { throw PhotosMedia.localUnavailable() }, rendition: { tiny },
+            cached: PreviewPhotoSource.sharpest([panel, tiny]))
+        guard case .still(let pixels) = result.content else { check(false, "still preview expected"); return }
+        check(pixels === panel, "cloud-disabled preview retains at least the panel resolution")
+    })
+
     Registry.shared.add(suite: "Frame preview", TestCase(name: "decoded preview cache retains the sharpest revision and original provenance", knownBug: nil) {
         let cache = PreviewImageCache()
         let small = try ImageFixture.cgImage(width: 32, height: 24)

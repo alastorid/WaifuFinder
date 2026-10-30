@@ -809,7 +809,7 @@ final class PhotosMedia: @unchecked Sendable {
 
     /// Reads a Photos still directly into memory and detects animated formats for
     /// preview playback. Ordinary analysis continues to use small PhotoKit renditions.
-    private func originalPreviewData(_ url: URL, priority: PhotosCloudQueue.Priority) async throws -> (Data, CGImagePropertyOrientation) {
+    private func originalPreviewData(_ url: URL, priority: PhotosCloudQueue.Priority, localOnly: Bool = false) async throws -> (Data, CGImagePropertyOrientation) {
         try Task.checkCancellation()
         guard let item = item(url), item.isStill, let identity = item.assetCacheKey else {
             throw Self.failure("This photo is no longer available in Photos.")
@@ -817,25 +817,24 @@ final class PhotosMedia: @unchecked Sendable {
         let key = "\(identity.identifier)|\(identity.modifiedMilliseconds)|\(identity.pixelWidth)x\(identity.pixelHeight)" as NSString
         if let cached = previewOriginals.object(forKey: key) { return (cached.data, cached.orientation) }
         let result: (Data, CGImagePropertyOrientation)
-        if Self.downloadFromICloud {
+        if Self.downloadFromICloud && !localOnly {
             result = try await PhotosCloudQueue.shared.perform(priority: priority) {
                 try Task.checkCancellation()
-                return try await self.requestOriginalData(item)
+                return try await self.requestOriginalData(item, allowNetwork: Self.downloadFromICloud)
             }
         } else {
-            result = try await requestOriginalData(item)
+            result = try await requestOriginalData(item, allowNetwork: false)
         }
         try Task.checkCancellation()
         previewOriginals.setObject(OriginalBox(data: result.0, orientation: result.1), forKey: key, cost: result.0.count)
         return result
     }
 
-    private func requestOriginalData(_ item: Item) async throws -> (Data, CGImagePropertyOrientation) {
+    private func requestOriginalData(_ item: Item, allowNetwork: Bool) async throws -> (Data, CGImagePropertyOrientation) {
         let options = PHImageRequestOptions()
         options.version = .current
         options.deliveryMode = .highQualityFormat
-        options.isNetworkAccessAllowed = Self.downloadFromICloud
-        let allowNetwork = options.isNetworkAccessAllowed
+        options.isNetworkAccessAllowed = allowNetwork
         let request = PhotosRequest<(Data, CGImagePropertyOrientation)>(
             timeout: allowNetwork ? 120 : 10,
             timeoutError: allowNetwork ? Self.failure("Photos did not return this image. Try again.") : Self.localUnavailable())
@@ -857,9 +856,9 @@ final class PhotosMedia: @unchecked Sendable {
         _ = try await previewContent(url, priority: .preload)
     }
 
-    func previewContent(_ url: URL, priority: PhotosCloudQueue.Priority = .viewing) async throws -> PhotosPreviewContent {
+    func previewContent(_ url: URL, priority: PhotosCloudQueue.Priority = .viewing, localOnly: Bool = false) async throws -> PhotosPreviewContent {
         if let cached = cachedPreview(url), cached.isOriginal { return .still(cached.image) }
-        let result = try await originalPreviewData(url, priority: priority)
+        let result = try await originalPreviewData(url, priority: priority, localOnly: localOnly)
         guard let item = item(url) else { throw Self.failure("This photo is no longer available in Photos.") }
         let (imageData, orientation) = result
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil) else {

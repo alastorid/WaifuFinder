@@ -46,12 +46,13 @@ actor WDTaggerBackend: TaggerBackend {
 
     /// Video tagging consumes cached JPEGs. Photos stills arrive directly from
     /// PhotoKit at model size. Bound decoding for legacy and video thumbnails.
-    static func thumbnailImage(data: Data) throws -> CGImage {
+    static func thumbnailImage(data: Data, cacheImmediately: Bool = false) throws -> CGImage {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: PhotosMedia.analysisPixelSize,
-                kCGImageSourceCreateThumbnailWithTransform: true
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: cacheImmediately
               ] as CFDictionary) else {
             throw ModelInstaller.fail("A cached frame could not be loaded for tagging.")
         }

@@ -12,7 +12,7 @@ struct FrameNavigationOrder: Sendable {
     /// chunked lines a long ungrouped run is split into. Without it (the fallback
     /// order before the first commit), the arrangement's own rows are the closest
     /// approximation. Committed flat layouts also supply their wrapped lines for
-    /// Shift+↑/↓ selection; ordinary arrows retain their group navigation.
+    /// both ordinary and Shift+↑/↓ selection.
     private let lineRanges: [Range<Int>]
     private let groupRows: Bool
 

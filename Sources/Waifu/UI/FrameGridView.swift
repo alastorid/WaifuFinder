@@ -18,7 +18,7 @@ import SwiftUI
 ///
 /// Keyboard (when focused): ←/→ walk the list, ↑/↓ step one drawn line (a group
 /// strip, or one of the chunked lines of an ungrouped run) in one-group-per-line
-/// mode and jump group boundaries in the flow grid, **Space
+/// mode or the current wrapped row in the flow grid, **Space
 /// opens the zoomable preview** (it no longer toggles selection — selecting has its
 /// own click, and the preview is what a frame deserves when you stop on it), Home and
 /// ⌘←/↑ focus the first frame, End and ⌘→/↓ focus the last, and Return selects.
@@ -393,11 +393,11 @@ struct FrameGridView: View {
             result = .handled
         case .upArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: false) }
-            else { session.focusGroupEdge(forward: false, extendingSelection: press.modifiers.contains(.shift)) }
+            else { session.focusThumbnailRow(forward: false, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .downArrow:
             if commandOnly { session.focusDisplayedBoundary(forward: true) }
-            else { session.focusGroupEdge(forward: true, extendingSelection: press.modifiers.contains(.shift)) }
+            else { session.focusThumbnailRow(forward: true, extendingSelection: press.modifiers.contains(.shift)) }
             result = .handled
         case .home:
             session.focusDisplayedBoundary(forward: false)

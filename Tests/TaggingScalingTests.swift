@@ -28,8 +28,75 @@ private struct PreparingTaggingLane: TaggerBackend {
     }
 }
 
+private actor TaggingJPEGRegenerationProbe {
+    private(set) var active = 0
+    private(set) var peak = 0
+    private(set) var arrivals = 0
+    func regenerate(_ url: URL) async throws -> Data {
+        active += 1; arrivals += 1; peak = max(peak, active)
+        defer { active -= 1 }
+        try await Task.sleep(for: .milliseconds(10))
+        return Data(url.lastPathComponent.utf8)
+    }
+}
+
 func registerTaggingScalingTests() {
     let suite = "Remote tagging scaling"
+    Registry.shared.add(suite: suite, TestCase(name: "remote Photos reuse the cached JPEG instead of requesting another rendition", knownBug: nil) {
+        let photo = URL(string: "waifu-photos://test/cached-photo")!
+        let jpeg = try ThumbnailCache.encodeJPEG(ImageFixture.rgbGradient())
+        let source = TaggingImageLoader.photoSource(photo, preferCachedJPEG: true, cachedJPEG: jpeg)
+        guard case .thumbnail(let cached) = source else {
+            check(false, "a Photos URL must not force the remote path back through PhotoKit and RGBA")
+            return
+        }
+        checkEqual(cached, jpeg, "the already cached JPEG is retained without encoding it again")
+        let payload = try await RemoteTagBatchPayload.encode(sources: [source])
+        var reader = WireReader(payload)
+        _ = try reader.u8()
+        checkEqual(try reader.u8(), RemoteTagImageCodec.encoded.rawValue, "Photos use direct encoded-image transport")
+        _ = try reader.u16()
+        checkEqual(Data(try reader.raw()), jpeg, "the exact photo JPEG reaches the wire")
+        let missing = TaggingImageLoader.photoSource(photo, preferCachedJPEG: true)
+        guard case .photoJPEG(let deferred) = missing else { check(false, "cache misses are deferred until a server lane is reserved"); return }
+        checkEqual(deferred, photo, "the queue carries only the Photos URL on a cache miss")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "evicted Photos JPEGs regenerate with bounded preparation while requests remain pipelined", knownBug: nil) {
+        let preparer = RemoteTagInputPreparer(), probe = TaggingJPEGRegenerationProbe()
+        let sources = (0..<8).map { TaggingImageSource.photoJPEG(URL(string: "waifu-photos://test/\($0)")!) }
+        try await withThrowingTaskGroup(of: [UInt8].self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    try await preparer.prepare {
+                        let data = try await TaggingImageLoader.jpegData(sources, regenerate: { try await probe.regenerate($0) })
+                        checkEqual(data, (0..<8).map { Data(String($0).utf8) }, "regeneration preserves batch order")
+                        return [1]
+                    }
+                }
+            }
+            for try await value in group { checkEqual(value, [1], "all queued batches prepare") }
+        }
+        checkEqual(await probe.peak, 4, "eight pending requests do not multiply four PhotoKit jobs into thirty-two")
+        checkEqual(await probe.arrivals, 64, "each missing JPEG is regenerated exactly once")
+        checkEqual(await probe.active, 0, "preparation joins every regeneration")
+        _ = await checkThrowsAsync("a preparation failure propagates") {
+            _ = try await preparer.prepare { throw TaggerError.preprocessing }
+        }
+        checkEqual(try await preparer.prepare { [2] }, [2], "a failed preparation does not poison later tagging")
+        let cancelled = Task { try await preparer.prepare { try await Task.sleep(for: .seconds(30)); return [3] } }
+        cancelled.cancel()
+        _ = await cancelled.result
+        checkEqual(try await preparer.prepare { [4] }, [4], "cancelled queued work releases the preparation queue")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "local-only Photos retain lossless model-sized renditions", knownBug: nil) {
+        let photo = URL(string: "waifu-photos://test/local-photo")!
+        let source = TaggingImageLoader.photoSource(photo, preferCachedJPEG: false)
+        guard case .photo(let selected) = source else { check(false, "local Photos retain their rendition path"); return }
+        checkEqual(selected, photo, "the original Photos URL reaches the rendition loader")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "each server lane prepares its source batch concurrently", knownBug: nil) {
         let gate = TaggingPreparationGate()
         let backend = BalancedTaggerBackend(lanes: (0..<2).map {
