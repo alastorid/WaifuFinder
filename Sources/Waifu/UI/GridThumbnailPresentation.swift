@@ -26,7 +26,10 @@ final class GridThumbnailPresentation: ObservableObject {
         self.loader = loader
         self.releaseDelay = releaseDelay
         upgradeObserver = NotificationCenter.default.publisher(for: GridThumbnailLoader.imageUpgraded)
-            .sink { [weak self] notification in
+            // NotificationCenter delivers on the posting thread. Explicitly
+            // Sendable prevents this callback inheriting the initializer's actor;
+            // only the nested task may inspect or publish presentation state.
+            .sink { @Sendable [weak self] notification in
                 guard let identity = notification.object as? String else { return }
                 Task { @MainActor [weak self] in
                     guard let self, self.pinnedIdentity == identity,

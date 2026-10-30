@@ -87,6 +87,29 @@ private final class ThumbnailReadGate {
 
 func registerThumbnailCacheTests() {
     let suite = "thumbnail cache"
+    Registry.shared.add(suite: "Thumbnail cache", TestCase(name: "background upgrades safely publish to a main-actor thumbnail presentation", knownBug: nil) {
+        let small = try ImageFixture.cgImage(width: 32, height: 24)
+        let sharp = try ImageFixture.cgImage(width: 1024, height: 768)
+        await Task { @MainActor in
+            let loader = GridThumbnailLoader.shared
+            let identity = UUID().uuidString
+            let owner = UUID()
+            loader.retainVisibleImage(small, identity: identity, owner: owner)
+            defer { loader.releaseVisibleImage(identity: identity, owner: owner) }
+            let presentation = GridThumbnailPresentation(identity: identity)
+            checkEqual(presentation.ready?.image.width, 32, "presentation starts with small pixels")
+            await Task.detached(priority: .userInitiated) {
+                loader.upgrade(sharp, identity: identity)
+            }.value
+            // Let the subscriber's main-actor handoff commit. No windows or UI events.
+            for _ in 0..<100 {
+                if presentation.ready?.image.width == 512 { break }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            checkEqual(presentation.ready?.image.width, 512, "background notification upgrades the live presentation without an actor trap")
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "prefetched Photos thumbnails appear stable; only late arrivals fade", knownBug: nil) {
         let directory = try Temporary.directory("thumbnail-prefetched-reveal")
         let url = directory.appendingPathComponent("photo.png")
