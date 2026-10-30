@@ -872,7 +872,7 @@ final class PhotosMedia: @unchecked Sendable {
             return .animated(PhotosAnimatedImage(source: source, identity: "\(item.asset.localIdentifier):\(modified)", orientation: orientation))
         }
         guard let input = CIImage(data: imageData)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent) else {
+              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()
@@ -889,7 +889,7 @@ final class PhotosMedia: @unchecked Sendable {
         if !item.isStill { return try await PreviewFrameReader(asset: try await videoAsset(resolved).value).image(at: time) }
         let (data, orientation) = try await originalPreviewData(resolved, priority: .background)
         guard let input = CIImage(data: data)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent) else {
+              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()

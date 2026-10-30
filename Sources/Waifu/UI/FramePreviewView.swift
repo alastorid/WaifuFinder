@@ -87,21 +87,14 @@ struct FramePreviewView: View {
             || (photo.isOriginal && photo.image.width == best?.image.width && photo.image.height == best?.image.height) {
             best = photo
         }
-        let identity = session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey
-        if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity),
-           PreviewPhotoSource.isSharper(pixels, than: best?.image) {
-            best = PreviewImageCache.Entry(pixels, isOriginal: false)
-        }
-        return best
+        return best?.isOriginal == true ? best : nil
     }
 
     init(frame: AnalyzedFrame, session: WaifuSession) {
         self.frame = frame; self.session = session
-        let identity = session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey
         let preview = Self.availablePreview(frame, session: session)
-        let cached = preview?.image ?? GridThumbnailLoader.shared.cachedImage(identity: identity)
+        let cached = preview?.image
         let initial = cached.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
-            ?? session.cachedThumbnailData(forKey: frame.thumbnailKey).flatMap(NSImage.init(data:))
         _image = State(initialValue: initial)
         _displayedIsOriginal = State(initialValue: preview?.isOriginal ?? false)
         _displayedFrameID = State(initialValue: initial == nil ? nil : frame.id)
@@ -589,7 +582,6 @@ struct FramePreviewView: View {
         let request = UUID()
         loadID = request
         note = nil
-        let keepingCurrent = displayedFrameID == target.id && displayedSourceURL == source
         evidenceInput = nil
         reading = true
         showReadingStatus = false
@@ -602,57 +594,36 @@ struct FramePreviewView: View {
             }
         }
 
-        // A load can restart for the same photo when thumbnail caches refresh.
-        // Only replace its displayed pixels with a sharper rendition. A new
-        // target must still get its own thumbnail, regardless of resolution.
+        // Never paint an analysis thumbnail while the original is being read.
         let identity = session.thumbnailGeneration.uuidString + ":" + target.thumbnailKey
-        let current = keepingCurrent ? image.flatMap(PhotosMedia.renditionPixels) : nil
         if let cached = Self.availablePreview(target, session: session) {
-            if PreviewPhotoSource.isSharper(cached.image, than: current) || current == nil {
-                image = NSImage(cgImage: cached.image, size: NSSize(width: cached.image.width, height: cached.image.height))
-                displayedFrameID = target.id
-                displayedSourceURL = source
-                displayedIsOriginal = cached.isOriginal
-            }
-            GridThumbnailLoader.shared.upgrade(cached.image, identity: identity)
-        } else if let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity) {
-            if PreviewPhotoSource.isSharper(pixels, than: current) {
-                image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
-                displayedFrameID = target.id
-                displayedSourceURL = source
-                displayedIsOriginal = false
-            }
-        } else if let data = await session.thumbnailData(for: target),
-                  let thumbnail = NSImage(data: data), let pixels = PhotosMedia.renditionPixels(thumbnail) {
-            guard !Task.isCancelled, loadID == request, session.previewFrame?.id == target.id else { return }
-            if PreviewPhotoSource.isSharper(pixels, than: current) {
-                image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
-                displayedFrameID = target.id
-                displayedSourceURL = source
-                displayedIsOriginal = false
-            }
+            image = NSImage(cgImage: cached.image, size: NSSize(width: cached.image.width, height: cached.image.height))
+            displayedFrameID = target.id
+            displayedSourceURL = source
+            displayedIsOriginal = true
         }
         do {
             if let photoURL = PhotosMedia.shared.photoItemURL(for: source, seconds: target.timeSeconds) {
-                let cached = displayedFrameID == target.id && displayedSourceURL == source
-                    ? image.flatMap(PhotosMedia.renditionPixels) : nil
-                let preview = try await PreviewPhotoSource.load(
-                    original: { try await PhotosMedia.shared.previewContent(photoURL) },
-                    rendition: { try await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in }) },
-                    cached: cached, cachedIsOriginal: displayedIsOriginal && displayedFrameID == target.id && displayedSourceURL == source)
+                let content = try await PhotosMedia.shared.previewContent(photoURL)
+                // Rasterization and thumbnail generation must never run on the UI actor.
+                let prepared = await Task.detached(priority: .userInitiated) { () -> PreviewEvidenceInput? in
+                    if case .still(let pixels) = content {
+                        GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
+                        return PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: true)
+                    }
+                    return nil as PreviewEvidenceInput?
+                }.value
                 guard !Task.isCancelled, loadID == request,
                       session.previewFrame?.id == target.id, session.video?.url == source else { return }
-                switch preview.content {
+                switch content {
                 case .still(let pixels):
                     let native = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
                     native.cacheMode = .never
                     image = native
-                    PreviewImageCache.shared.store(pixels, isOriginal: preview.isOriginal, key: Self.previewKey(target, session: session))
-                    GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
-                    displayedIsOriginal = preview.isOriginal
+                    PreviewImageCache.shared.store(pixels, isOriginal: true, key: Self.previewKey(target, session: session))
+                    displayedIsOriginal = true
                     animation = nil
-                    evidenceInput = PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: preview.isOriginal)
-                    if !preview.isOriginal { note = "Preview image" }
+                    evidenceInput = prepared
                 case .animated(let sequence):
                     animation = sequence
                 }
@@ -673,7 +644,9 @@ struct FramePreviewView: View {
             native.cacheMode = .never
             image = native
             PreviewImageCache.shared.store(original, isOriginal: true, key: Self.previewKey(target, session: session))
-            GridThumbnailLoader.shared.upgrade(original, identity: identity)
+            Task.detached(priority: .utility) {
+                GridThumbnailLoader.shared.upgrade(original, identity: identity)
+            }
             displayedIsOriginal = true
             displayedFrameID = target.id
             displayedSourceURL = source
