@@ -149,7 +149,7 @@ struct RootView: View {
         }
     }
 
-    var body: some View {
+    private var workspaceWithHelpers: some View {
         routedWorkspace
         .background {
             ToolbarDisplayPolicy().frame(width: 0, height: 0)
@@ -165,6 +165,10 @@ struct RootView: View {
             ExportPanel(session: session, isPresented: $session.showExportSheet)
                 .frame(width: 0, height: 0)
         }
+    }
+
+    private var observedWorkspace: some View {
+        workspaceWithHelpers
         .onChange(of: session.photosAlbumURL) { old, new in
             if old != nil && new == nil { showPhotosWorkspace = false }
         }
@@ -185,6 +189,10 @@ struct RootView: View {
                 preview.pause()
             }
         }
+    }
+
+    var body: some View {
+        observedWorkspace
         .toolbar {
             // The title bar carries the window-level controls and the workspace's
             // icon actions, top right; status text rides in the same right edge,
