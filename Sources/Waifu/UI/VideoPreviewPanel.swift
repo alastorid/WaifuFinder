@@ -13,6 +13,7 @@ struct VideoPreviewPanel: View {
     @ObservedObject var session: WaifuSession
     @ObservedObject var preview: PreviewController
     @State private var selectedThumbnail: NSImage?
+    @State private var photoFilename: String?
     @State private var photosPlayerSource: URL?
     @State private var videoPlayerOffset: Double?
 
@@ -46,6 +47,13 @@ struct VideoPreviewPanel: View {
         }
         .background(Color(nsColor: .controlBackgroundColor))
         .task(id: focusedFrame?.id) {
+            photoFilename = nil
+            if let source = session.video?.url, let frame = focusedFrame,
+               let url = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) {
+                let metadata = await PhotoMetadataService.shared.basic(for: url)
+                guard !Task.isCancelled else { return }
+                photoFilename = metadata?.filename
+            }
             guard let frame = focusedFrame,
                   let data = await session.thumbnailData(for: frame) else {
                 selectedThumbnail = nil
@@ -94,6 +102,10 @@ struct VideoPreviewPanel: View {
                 .foregroundStyle(.secondary)
             Text("Preview")
                 .font(.headline)
+            if let photoFilename {
+                Text(photoFilename).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle).help(photoFilename)
+            }
             Spacer()
             if !isPhotosMode {
                 if let frame = focusedFrame {

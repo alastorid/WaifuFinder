@@ -269,7 +269,7 @@ final class PhotosMedia: @unchecked Sendable {
         return error.domain == PHPhotosErrorDomain && error.code == PHPhotosError.Code.userCancelled.rawValue
     }
 
-    func deleteAssets(identifiers: [String], collectionIdentifier: String) async throws {
+    func deleteAssets(identifiers: [String], collectionIdentifier: String?) async throws {
         var uniqueIdentifiers: [String] = []
         var seen = Set<String>()
         for identifier in identifiers where seen.insert(identifier).inserted {
@@ -283,6 +283,7 @@ final class PhotosMedia: @unchecked Sendable {
         guard status == .authorized || status == .limited else {
             throw Self.failure("Allow WaifuFinder to make changes to Photos in System Settings → Privacy & Security → Photos.")
         }
+        if let collectionIdentifier {
         guard let collection = PHAssetCollection.fetchAssetCollections(
             withLocalIdentifiers: [collectionIdentifier], options: nil).firstObject else {
             throw Self.failure("This album is no longer available in Photos.")
@@ -295,6 +296,8 @@ final class PhotosMedia: @unchecked Sendable {
         }
         guard uniqueIdentifiers.allSatisfy(memberIdentifiers.contains) else {
             throw Self.failure("The album changed after the selection was made. Review the refreshed album and try again.")
+        }
+
         }
 
         let result = PHAsset.fetchAssets(withLocalIdentifiers: uniqueIdentifiers, options: nil)

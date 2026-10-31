@@ -53,6 +53,7 @@ struct FrameGridView: View {
     @StateObject private var thumbnailPrefetcher = GridThumbnailPrefetcher()
     /// The rung a pinch started from, so cumulative magnification scales one base.
     @State private var pinchBaseWidth: CGFloat?
+    @State private var deletionRevision = 0
 
     private let spacing: CGFloat = 1
     private let padding: CGFloat = 1
@@ -70,6 +71,10 @@ struct FrameGridView: View {
         .background(Color(nsColor: .textBackgroundColor))
         .overlay {
             FrameGridStatusView(session: session, stage: thumbnailStage)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            PendingPhotoDeletionView(session: session).padding(12)
+                .animation(.easeInOut(duration: 0.33), value: session.pendingPhotoDeletions.isEmpty)
         }
         .onAppear { if !session.frames.isEmpty { isFocused = true } }
     }
@@ -116,7 +121,9 @@ struct FrameGridView: View {
         }
         .onDisappear { thumbnailStage.stop(); thumbnailPrefetcher.stop() }
         .onReceive(session.gridLayoutUpdates) { _ in
-            prepareStage(size: size)
+            let deleting = deletionRevision != session.deletionLayoutRevision
+            deletionRevision = session.deletionLayoutRevision
+            prepareStage(size: size, animated: deleting)
         }
         .onChange(of: size) { _, _ in
             prepareStage(size: size)

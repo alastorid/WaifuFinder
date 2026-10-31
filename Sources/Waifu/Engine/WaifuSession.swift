@@ -668,43 +668,97 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         deletePhotos(identifiers: identifiers, from: albumURL)
     }
 
-    /// Shared PhotoKit deletion path for ranking and Image Lineage. The captured
-    /// identifiers are validated again by PhotosMedia at the mutation boundary.
-    /// Completion runs only after Photos commits; failed/denied requests keep all
-    /// lineage evidence intact. Never derives targets from scores or hypotheses.
+    @Published private(set) var pendingPhotoDeletions: Set<String> = []
+    @Published private(set) var pendingDeletionBytes: Int64 = 0
+    @Published private(set) var pendingDeletionUnknownSizes = 0
+    private var deletionSizes: [String: Int64] = [:]
+    private var deletionSizeGeneration = UUID()
+    private var deletionCallbacks: [(Set<String>, @MainActor (Set<String>) -> Void)] = []
+    private(set) var deletionLayoutRevision = 0
+
+    /// Staging only changes the app's view. No PhotoKit mutation happens here.
     func deletePhotos(identifiers: [String], from albumURL: URL,
                       onSuccess: @escaping @MainActor (Set<String>) -> Void = { _ in }) {
-        guard !identifiers.isEmpty, !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
-              !progress.isRunning, uncover == nil, !showExportSheet, !showPreviewExportSheet,
-              photosAlbumURL == albumURL,
-              let collectionIdentifier = PhotosMedia.shared.collectionIdentifier(for: albumURL) else { return }
+        guard !isDeletingPhotos, photosAlbumURL == albumURL else { return }
+        let added = Set(identifiers).subtracting(pendingPhotoDeletions)
+        guard !added.isEmpty else { return }
+        deletionCallbacks.append((added, onSuccess))
+        pendingPhotoDeletions.formUnion(added)
+        pendingDeletionUnknownSizes = pendingPhotoDeletions.count - deletionSizes.count
+        deletionLayoutRevision += 1
+        recomputeDisplayedFrames()
+        selectedFrameIDs = selectedFrameIDs.filter { id in
+            guard let frame = frame(id: id), let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds) else { return true }
+            return !pendingPhotoDeletions.contains(asset)
+        }
+        if let preview = previewFrame,
+           let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: preview.timeSeconds),
+           pendingPhotoDeletions.contains(asset) { previewFrame = nil }
+        if let focusedFrameID, !displayOrderFrames.contains(where: { $0.id == focusedFrameID }) {
+            self.focusedFrameID = displayOrderFrames.first?.id
+        }
+        let sizeGeneration = deletionSizeGeneration
+        let urls = PhotosMedia.shared.album(albumURL)?.items.filter { added.contains($0.asset.localIdentifier) }.map { ($0.asset.localIdentifier, $0.url) } ?? []
+        Task {
+            for (id, url) in urls {
+                // Local resource reads only; cloud-only sizes remain explicitly unknown.
+                let metadata = try? await PhotoMetadataService.shared.load(for: url)
+                guard deletionSizeGeneration == sizeGeneration else { return }
+                guard pendingPhotoDeletions.contains(id) else { continue }
+                if let bytes = metadata?.fileSizeBytes { deletionSizes[id] = bytes }
+                pendingDeletionBytes = deletionSizes.values.reduce(0, +)
+                pendingDeletionUnknownSizes = pendingPhotoDeletions.count - deletionSizes.count
+            }
+        }
+    }
+
+    func undoPendingPhotoDeletions() {
+        guard !isDeletingPhotos else { return }
+        deletionSizeGeneration = UUID()
+        pendingPhotoDeletions.removeAll()
+        deletionSizes.removeAll()
+        deletionCallbacks.removeAll()
+        pendingDeletionBytes = 0
+        pendingDeletionUnknownSizes = 0
+        deletionLayoutRevision += 1
+        recomputeDisplayedFrames()
+    }
+
+    func commitPendingPhotoDeletions() {
+        guard !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
+              !progress.isRunning, !pendingPhotoDeletions.isEmpty else { return }
+        let batch = pendingPhotoDeletions
         isDeletingPhotos = true
         Task {
             defer { isDeletingPhotos = false }
             do {
-                try await PhotosMedia.shared.deleteAssets(identifiers: identifiers,
-                                                         collectionIdentifier: collectionIdentifier)
-                let deleted = Set(identifiers)
-                if photosAlbumURL == albumURL {
+                // Exactly one change block and one deleteAssets call for the entire batch.
+                try await PhotosMedia.shared.deleteAssets(identifiers: Array(batch), collectionIdentifier: nil)
+                if let albumURL = photosAlbumURL {
                     let removed = Set(frames.compactMap { frame -> FrameID? in
-                        guard let identifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
-                              deleted.contains(identifier) else { return nil }
+                        guard let id = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds), batch.contains(id) else { return nil }
                         return frame.id
                     })
                     if isRegrouping { cancel() }
-                    PhotosMedia.shared.removeDeletedAssets(deleted, from: albumURL)
+                    PhotosMedia.shared.removeDeletedAssets(batch, from: albumURL)
                     removeAnalyzedFrames(removed)
                     if let checkpoint = photosAnalysisCheckpoint {
-                        photosAnalysisCheckpoint = PhotosAnalysisCheckpoint(sourceURL: albumURL,
-                            settings: checkpoint.settings, frames: frames)
+                        photosAnalysisCheckpoint = PhotosAnalysisCheckpoint(sourceURL: albumURL, settings: checkpoint.settings, frames: frames)
                     }
-                    photosOrderSyncMessage = nil
                 }
-                onSuccess(deleted)
+                let callbacks = deletionCallbacks
+                deletionSizeGeneration = UUID()
+                pendingPhotoDeletions.removeAll()
+                deletionSizes.removeAll()
+                deletionCallbacks.removeAll()
+                pendingDeletionBytes = 0
+                pendingDeletionUnknownSizes = 0
+                for (ids, callback) in callbacks { callback(ids.intersection(batch)) }
             } catch {
-                if photosAlbumURL == albumURL && !PhotosMedia.isDeletionCancellation(error) {
-                    errorMessage = "Couldn’t delete selected items from Photos: \(error.localizedDescription)"
+                if !PhotosMedia.isDeletionCancellation(error) {
+                    errorMessage = "Couldn’t delete queued photos: \(error.localizedDescription)"
                 }
+                // Keep the batch available for retry or undo after denial/failure.
             }
         }
     }
@@ -2699,6 +2753,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         // IDs before ranking and group caps so one frame contributes once.
         func candidates(_ filter: TagFilter) -> [AnalyzedFrame] {
             uniqueFramesByID(filteredDisplayCandidates(grouping: grouping, filter: filter).filter { frame in
+            if let source = photosAlbumURL,
+               let id = PhotosMedia.shared.assetIdentifier(for: source, seconds: frame.timeSeconds),
+               pendingPhotoDeletions.contains(id) { return false }
             guard favoriteFilter != .all else { return true }
             guard let sourceURL = photosAlbumURL else { return true }
             guard let identifier = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: frame.timeSeconds) else {

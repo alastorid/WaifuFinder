@@ -365,7 +365,7 @@ final class GridThumbnailStage: ObservableObject {
         if request.animated {
             // The reflow rides a normal animation; the transaction key lets the
             // containers that strip grid animations wave it through.
-            var transaction = Transaction(animation: .snappy(duration: 0.28))
+            var transaction = Transaction(animation: .easeInOut(duration: 0.33))
             transaction[GridZoomTransactionKey.self] = true
             withTransaction(transaction) {
                 onCommit?(snapshot)
