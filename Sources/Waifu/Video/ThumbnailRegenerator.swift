@@ -12,7 +12,7 @@ final class ThumbnailRegenerator: @unchecked Sendable {
     func jpegData(for url: URL, timeSeconds: Double, analysisWidth: Int) async throws -> Data {
         let (url, timeSeconds) = VideoCollection.resolve(url, seconds: timeSeconds)
         if PhotosMedia.isPhotos(url) {
-            let image = try await PhotosMedia.shared.analysisImage(url, seconds: timeSeconds, maxPixelSize: analysisWidth)
+            let image = try await PhotosMedia.shared.analysisImage(url, seconds: timeSeconds, maxPixelSize: analysisWidth, allowNetwork: false)
             try Task.checkCancellation()
             let picture = image.cropping(to: FramePictureArea.bounds(image)) ?? image
             let input = CIImage(cgImage: picture)

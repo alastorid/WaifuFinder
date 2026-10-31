@@ -1404,6 +1404,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
+    private func resumeMissingPhotosAfterLocalPass(token: UUID) {
+        guard analysisGeneration == token, PhotosMedia.downloadFromICloud else { return }
+        photosDownloadPolicyChanged(allowNetwork: true)
+    }
+
     /// Change PhotoKit policy without clearing the grid, tags, selection, or
     /// thumbnail cache. Serializing retries also handles rapid switch changes.
     func photosDownloadPolicyChanged(allowNetwork: Bool) {
@@ -1414,6 +1419,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             for request in thumbnailRequests.values { request.task.cancel() }
             thumbnailRequests.removeAll()
         }
+        // Enabling downloads must not restart the initial local pass. Its
+        // completion schedules missing-item recovery using the latest policy.
+        // Disabling still cancels an active cloud recovery and resumes locally.
+        if progress.isRunning && allowNetwork { return }
         // Turning downloads off after a finished/cancelled pass needs no work.
         // Turning them on only retries when there are unfinished photos.
         guard allowNetwork || progress.isRunning,
@@ -2270,7 +2279,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private nonisolated func runAnalysisPipeline(for url: URL?, existing: VideoInfo?,
                                                 settings: WaifuSettings, token: UUID, preparedSource: PreparedMedia? = nil,
                                                 sourceURLs: [URL]? = nil, photosCheckpoint: PhotosAnalysisCheckpoint? = nil,
-                                                allowNetwork: Bool = PhotosMedia.downloadFromICloud) async {
+                                                allowNetwork: Bool = false) async {
         let started = Date()
         var progress = AnalysisProgress(phase: .probing, total: 1, message: "Reading video…")
         var analyzed: [AnalyzedFrame] = []
@@ -2401,6 +2410,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             let skipped = await photosSampler?.unavailableItemCount ?? 0
             progress.message = skipped == 0 ? "Complete" : "Complete · \(skipped) items unavailable locally"
             await completeAnalysis(frames: finalFrames, groups: groups, progress: progress, token: token)
+            if album != nil, !allowNetwork, skipped > 0 {
+                await resumeMissingPhotosAfterLocalPass(token: token)
+            }
         } catch {
             // Async stream producers own separate tasks. Join them explicitly
             // so no old PhotoKit request or checkpoint write outlives a retry.

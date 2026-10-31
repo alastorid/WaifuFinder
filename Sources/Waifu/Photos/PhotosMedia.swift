@@ -733,9 +733,9 @@ final class PhotosMedia: @unchecked Sendable {
     }
 
     /// Regenerating an analysis/tagging thumbnail must not reopen the original.
-    func analysisImage(_ url: URL, seconds: Double, maxPixelSize: Int = analysisPixelSize) async throws -> CGImage {
+    func analysisImage(_ url: URL, seconds: Double, maxPixelSize: Int = analysisPixelSize, allowNetwork: Bool = PhotosMedia.downloadFromICloud) async throws -> CGImage {
         let (source, time) = resolve(url, seconds: seconds)
-        if isStill(source) { return try await rendition(source, maxPixelSize: maxPixelSize, allowNetwork: Self.downloadFromICloud) }
+        if isStill(source) { return try await rendition(source, maxPixelSize: maxPixelSize, allowNetwork: allowNetwork) }
         let asset = try await videoAsset(source).value
         return try await PreviewFrameReader(asset: asset, maximumPixelSize: min(Self.analysisPixelSize, maxPixelSize)).image(at: time)
     }

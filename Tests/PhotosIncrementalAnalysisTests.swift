@@ -3,6 +3,27 @@ import Foundation
 
 func registerPhotosIncrementalAnalysisTests() {
     let suite = "Photos incremental analysis"
+    Registry.shared.add(suite: suite, TestCase(name: "cloud-only first photo cannot block cached photos later in the album", knownBug: nil) {
+        let tiny = try ImageFixture.cgImage(width: 64, height: 64)
+        let log = PhotosAnalysisTestLog()
+        let items = (0..<6).map {
+            PhotosAlbumSampler.Item(url: URL(string: "waifu-photos://asset/\($0)")!, offset: Double($0), isStill: true)
+        }
+        let sampler = PhotosAlbumSampler(items: items, width: 512, mode: .full, allowNetwork: false,
+            photoRendition: { url, _, network in
+                let index = Int(url.lastPathComponent)!
+                log.read(index, network: network)
+                if index == 0 && !network { throw PhotosMedia.localUnavailable() }
+                return tiny
+            })
+        for expected in 1..<6 {
+            let frame = try await sampler.next()
+            checkEqual(frame?.timeSeconds, Double(expected), "cached photos, even tiny ones, load before any cloud request")
+            check(log.networkReads.isEmpty, "cloud cannot start during the local pass")
+        }
+        checkNil(try await sampler.next(), "local pass finishes without waiting for cloud")
+        checkEqual(await sampler.unavailableItemCount, 1, "only the missing item needs a later recovery pass")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "manual refresh reuses moved photos and requests only new edited or unfinished photos", knownBug: nil) {
         func revision(_ id: String, _ modified: Double = 10) -> PhotosMedia.Revision {
             PhotosMedia.Revision(identifier: id, modified: modified, width: 100, height: 80, duration: 1)
