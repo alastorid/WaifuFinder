@@ -858,9 +858,13 @@ final class PhotosMedia: @unchecked Sendable {
         return result
     }
 
+    /// Owned by the preview view's structured task; leaving preview or changing
+    /// its target cancels both queued and active speculative cloud requests.
     func preloadPreview(_ url: URL) async throws {
+        try Task.checkCancellation()
         guard Self.downloadFromICloud else { return }
-        _ = try await previewContent(url, priority: .preload, localOnly: true)
+        _ = try await previewContent(url, priority: .preload)
+        try Task.checkCancellation()
     }
 
     func previewContent(_ url: URL, priority: PhotosCloudQueue.Priority = .viewing, localOnly: Bool = false) async throws -> PhotosPreviewContent {

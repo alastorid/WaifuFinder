@@ -108,10 +108,12 @@ func registerPhotosCloudQueueTests() {
         checkEqual(try await preload.value,1,"preempted preload can finish later if its owner still wants it")
         checkEqual(events.all,[1,-1,2,1],"foreground runs ahead of speculative work")
     })
-    Registry.shared.add(suite: suite, TestCase(name: "preload order is next, previous, then forward through seven without wrapping", knownBug: nil) {
-        checkEqual(PhotosPreviewNeighbours.indices(current:3,count:20),[4,2,5,6,7,8,9,10],"next and previous lead the bounded forward window")
+    Registry.shared.add(suite: suite, TestCase(name: "preload covers three photos in both directions without wrapping", knownBug: nil) {
+        checkEqual(PhotosPreviewNeighbours.indices(current:3,count:20),[4,2,5,1,6,0],"nearest right and left photos lead the six-photo window")
         checkEqual(PhotosPreviewNeighbours.indices(current:0,count:3),[1,2],"start does not wrap backwards")
-        checkEqual(PhotosPreviewNeighbours.indices(current:2,count:3),[1],"end does not wrap forwards")
+        checkEqual(PhotosPreviewNeighbours.indices(current:2,count:3),[1,0],"end does not wrap forwards")
+        checkEqual(PhotosPreviewNeighbours.indices(current:0,count:20),[1,2,3],"start preloads only the next three")
+        checkEqual(PhotosPreviewNeighbours.indices(current:19,count:20),[18,17,16],"end preloads only the previous three")
         checkEqual(PhotosPreviewNeighbours.indices(current:0,count:1),[],"single photo has no speculative downloads")
         checkEqual(PhotosPreviewNeighbours.indices(current:0,count:0),[],"empty album has no speculative downloads")
     })

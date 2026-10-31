@@ -71,12 +71,12 @@ actor PhotosCloudQueue {
     }
 }
 
-/// The next item, the previous item, then the rest of the next seven items.
+/// Three items in each direction, nearest first, alternating right and left.
 /// The caller supplies the same ordering used by preview navigation.
 enum PhotosPreviewNeighbours {
     static func indices(current: Int, count: Int) -> [Int] {
         guard (0..<count).contains(current) else { return [] }
-        return ([current + 1, current - 1] + (2...7).map { current + $0 })
+        return (1...3).flatMap { [current + $0, current - $0] }
             .filter { (0..<count).contains($0) }
     }
 }
