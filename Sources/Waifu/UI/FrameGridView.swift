@@ -580,6 +580,11 @@ private struct FrameCell: View {
             }
         }
         .onHover { isHovered = $0 }
+        .task(id: isHovered ? thumbnailIdentity : nil) {
+            guard isHovered, isPhotosSource, let sourceURL,
+                  let url = PhotosMedia.shared.photoItemURL(for: sourceURL, seconds: frame.timeSeconds) else { return }
+            await PhotoMetadataService.shared.prefetchFilename(for: url)
+        }
         .onChange(of: topTagFilterActive) { _, _ in showsFrameNumber = false }
         .onChange(of: thumbnailIdentity) { _, _ in showsFrameNumber = false }
         // strokeBorder consumes picture space inward without changing cell geometry.

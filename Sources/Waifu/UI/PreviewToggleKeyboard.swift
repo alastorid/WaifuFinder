@@ -63,9 +63,10 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                             if let orb = self.orb, orb.isOpen { return orb.handleKey(event) }
                         }
                         if self.orb?.isOpen == true { return false }
-                        if event.type == .keyDown, event.keyCode == 51, modifiers == .command,
-                           self.isPhotosMode, !hasTextFocus,
-                           session.uncover == nil, !session.progress.isRunning,
+                        if event.type == .keyDown, (event.keyCode == 51 || event.keyCode == 117),
+                           (modifiers.isEmpty || modifiers == .command),
+                           session.photosAlbumURL != nil, !hasTextFocus,
+                           session.uncover == nil,
                            !session.showExportSheet, !session.showPreviewExportSheet, session.errorMessage == nil,
                            window.attachedSheet == nil {
                             if !event.isARepeat { session.deleteSelectedPhotos() }

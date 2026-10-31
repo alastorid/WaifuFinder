@@ -55,6 +55,13 @@ struct FrameNavigationOrder: Sendable {
         return Self(frames: survivors, rows: rows, groupRows: groupRows, lineRanges: ranges)
     }
 
+    /// Continue to the right after a deletion, or left at the end of the list.
+    func replacement(afterRemoving removed: Set<FrameID>, current: FrameID) -> AnalyzedFrame? {
+        guard removed.contains(current), let index = indexByID[current] else { return nil }
+        return frames.dropFirst(index + 1).first { !removed.contains($0.id) }
+            ?? frames.prefix(index).last { !removed.contains($0.id) }
+    }
+
     func neighbour(of id: FrameID, by delta: Int) -> AnalyzedFrame? {
         guard let index = indexByID[id] else { return nil }
         let next = index + delta

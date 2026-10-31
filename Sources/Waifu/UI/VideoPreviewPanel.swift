@@ -13,7 +13,6 @@ struct VideoPreviewPanel: View {
     @ObservedObject var session: WaifuSession
     @ObservedObject var preview: PreviewController
     @State private var selectedThumbnail: NSImage?
-    @State private var photoFilename: String?
     @State private var photosPlayerSource: URL?
     @State private var videoPlayerOffset: Double?
 
@@ -25,6 +24,11 @@ struct VideoPreviewPanel: View {
 
     private var isPhotosMode: Bool {
         session.video.map { PhotosMedia.isPhotos($0.url) } == true
+    }
+
+    private var focusedPhotoURL: URL? {
+        guard let source = session.video?.url, let frame = focusedFrame else { return nil }
+        return PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds)
     }
 
     /// Still photos have no playback transport. Resolve through the album at the
@@ -46,14 +50,18 @@ struct VideoPreviewPanel: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
-        .task(id: focusedFrame?.id) {
-            photoFilename = nil
-            if let source = session.video?.url, let frame = focusedFrame,
-               let url = PhotosMedia.shared.photoItemURL(for: source, seconds: frame.timeSeconds) {
-                let metadata = await PhotoMetadataService.shared.basic(for: url)
-                guard !Task.isCancelled else { return }
-                photoFilename = metadata?.filename
+        .task(id: focusedPhotoURL) {
+            guard let frame = focusedFrame, let source = session.video?.url,
+                  PhotosMedia.isPhotos(source) else { return }
+            let urls = session.previewPreloadFrames(after: frame.id).prefix(2).compactMap {
+                PhotosMedia.shared.photoItemURL(for: source, seconds: $0.timeSeconds)
             }
+            for url in urls {
+                guard !Task.isCancelled else { return }
+                await PhotoMetadataService.shared.prefetchFilename(for: url)
+            }
+        }
+        .task(id: focusedFrame?.id) {
             guard let frame = focusedFrame,
                   let data = await session.thumbnailData(for: frame) else {
                 selectedThumbnail = nil
@@ -102,9 +110,11 @@ struct VideoPreviewPanel: View {
                 .foregroundStyle(.secondary)
             Text("Preview")
                 .font(.headline)
-            if let photoFilename {
+            if let url = focusedPhotoURL,
+               let photoFilename = PhotoMetadataService.shared.filename(for: url) {
                 Text(photoFilename).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle).help(photoFilename)
+                    .contentTransition(.identity)
             }
             Spacer()
             if !isPhotosMode {

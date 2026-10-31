@@ -173,6 +173,30 @@ final class PhotoMetadataService: @unchecked Sendable {
     private let lock = NSLock()
     private var cache: [PhotosMedia.AssetCacheKey: PhotoMetadata] = [:]
     private let maximumCachedAssets = 128
+    private var filenames: [PhotosMedia.AssetCacheKey: String] = [:]
+
+    /// PhotoKit exposes the original filename without reading or downloading
+    /// the original data. Cache it so header redraws never repeat the lookup.
+    func filename(for photoURL: URL) -> String? {
+        guard let item = PhotosMedia.shared.item(photoURL), item.isStill,
+              let key = item.assetCacheKey else { return nil }
+        if let filename = lock.withLock({ filenames[key] ?? cache[key]?.filename }) { return filename }
+        let resources = PHAssetResource.assetResources(for: item.asset)
+        let original = resources.first(where: { $0.type == .photo })
+            ?? resources.first(where: { $0.type == .alternatePhoto })
+        let filename = original?.originalFilename ?? "Photo"
+        lock.withLock {
+            if filenames.count >= 512 { filenames.removeAll(keepingCapacity: true) }
+            filenames[key] = filename
+        }
+        return filename
+    }
+
+    /// Warm filename metadata away from the main actor before selection.
+    func prefetchFilename(for photoURL: URL) async {
+        guard !Task.isCancelled else { return }
+        _ = filename(for: photoURL)
+    }
 
     /// Returns the inexpensive PhotoKit fields first. The inspector can show
     /// these while the original's bytes are streamed for exact size and EXIF.

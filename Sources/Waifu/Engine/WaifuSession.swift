@@ -311,6 +311,18 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     func commitGridNavigation(_ order: FrameNavigationOrder, generation: UUID) {
         guard generation == thumbnailGeneration else { return }
         presentedGridNavigation = order
+        // Loading can add photos after preview was opened. Keep its navigation
+        // current with the grid while excluding any queued deletions.
+        if progress.isRunning, photosAlbumURL != nil,
+           let preview = previewFrame, order.indexByID[preview.id] != nil {
+            let removed = Set(order.frames.compactMap { frame -> FrameID? in
+                guard let source = photosAlbumURL,
+                      let asset = PhotosMedia.shared.assetIdentifier(for: source, seconds: frame.timeSeconds),
+                      pendingPhotoDeletions.contains(asset) else { return nil }
+                return frame.id
+            })
+            previewNavigation = order.removing(removed)
+        }
     }
     private var visualOrderTask: Task<[FrameID]?, Never>?
     private var visualOrderGeneration = UUID()
@@ -655,12 +667,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// from one Photos video resolve to the same asset and are deleted only once.
     func deleteSelectedPhotos() {
         guard !isDeletingPhotos, !isSyncingPhotosOrder, !isWritingPhotosTags,
-              !progress.isRunning, uncover == nil, !showExportSheet, !showPreviewExportSheet,
+              uncover == nil, !showExportSheet, !showPreviewExportSheet,
               let albumURL = photosAlbumURL else { return }
 
         var seen = Set<String>()
-        let identifiers = displayOrderFrames.compactMap { frame -> String? in
-            guard selectedFrameIDs.contains(frame.id),
+        let targets = previewFrame.map { [$0] } ?? displayOrderFrames.filter { selectedFrameIDs.contains($0.id) }
+        let identifiers = targets.compactMap { frame -> String? in
+            guard
                   let identifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
                   seen.insert(identifier).inserted else { return nil }
             return identifier
@@ -682,6 +695,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard !isDeletingPhotos, photosAlbumURL == albumURL else { return }
         let added = Set(identifiers).subtracting(pendingPhotoDeletions)
         guard !added.isEmpty else { return }
+        let currentOrder = navigationOrder
+        let previewOrder = previewFrame == nil ? nil : currentOrder
+        let removed = Set(currentOrder.frames.compactMap { frame -> FrameID? in
+            guard let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
+                  added.contains(asset) else { return nil }
+            return frame.id
+        })
+        let replacingPreview = previewFrame.map { removed.contains($0.id) } ?? false
+        let replacement = previewFrame.flatMap { previewOrder?.replacement(afterRemoving: removed, current: $0.id) }
+        let replacingFocus = previewFrame == nil && (focusedFrameID.map { removed.contains($0) } ?? false)
+        let focusReplacement = focusedFrameID.flatMap { currentOrder.replacement(afterRemoving: removed, current: $0) }
         deletionCallbacks.append((added, onSuccess))
         pendingPhotoDeletions.formUnion(added)
         pendingDeletionUnknownSizes = pendingPhotoDeletions.count - deletionSizes.count
@@ -691,9 +715,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             guard let frame = frame(id: id), let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds) else { return true }
             return !pendingPhotoDeletions.contains(asset)
         }
-        if let preview = previewFrame,
-           let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: preview.timeSeconds),
-           pendingPhotoDeletions.contains(asset) { previewFrame = nil }
+        if let previewOrder { previewNavigation = previewOrder.removing(removed) }
+        if replacingPreview {
+            if let replacement { focus(on: replacement, scrollIntoView: false) }
+            else { previewFrame = nil }
+        } else if replacingFocus {
+            if let focusReplacement { focus(on: focusReplacement) }
+            else { focusedFrameID = nil }
+        }
         if let focusedFrameID, !displayOrderFrames.contains(where: { $0.id == focusedFrameID }) {
             self.focusedFrameID = displayOrderFrames.first?.id
         }
@@ -1288,10 +1317,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let previewOrder = previewFrame == nil ? nil : navigationOrder
         let replacingPreview = previewFrame.map { removed.contains($0.id) } ?? false
         let replacement: AnalyzedFrame?
-        if let current = previewFrame, let order = previewOrder,
-           let index = order.indexByID[current.id], replacingPreview {
-            replacement = order.frames.dropFirst(index + 1).first { !removed.contains($0.id) }
-                ?? order.frames.prefix(index).last { !removed.contains($0.id) }
+        if let current = previewFrame, let order = previewOrder, replacingPreview {
+            replacement = order.replacement(afterRemoving: removed, current: current.id)
         } else { replacement = nil }
         cancelTagging()
         let rawIDs = Set(removed.map(\.description))

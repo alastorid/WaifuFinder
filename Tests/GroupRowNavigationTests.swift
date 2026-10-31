@@ -5,6 +5,20 @@ import Foundation
 // split into chunked lines. Stepping by group boundaries stranded the arrows
 // inside that run, where every frame shares `groupID == nil`.
 func registerGroupRowNavigationTests() {
+    Registry.shared.add(suite: "Group row navigation", TestCase(name: "queued preview deletions advance right and skip queued frames", knownBug: nil) {
+        let frames = (1...5).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0)) }
+        let order = FrameNavigationOrder(frames: frames, rows: [], groupRows: false)
+        let removed = Set([frames[1].id, frames[2].id])
+        checkEqual(order.replacement(afterRemoving: removed, current: frames[1].id)?.id, frames[3].id,
+                   "the next surviving photo is chosen")
+        let remaining = order.removing(removed)
+        checkEqual(remaining.neighbour(of: frames[0].id, by: 1)?.id, frames[3].id,
+                   "repeated arrow navigation cannot revisit queued photos")
+        checkEqual(remaining.replacement(afterRemoving: [frames[4].id], current: frames[4].id)?.id, frames[3].id,
+                   "the last photo falls back to its surviving left neighbor")
+        checkNil(remaining.replacement(afterRemoving: Set(remaining.frames.map(\.id)), current: frames[3].id),
+                 "no replacement exists when all remaining photos are removed")
+    })
     Registry.shared.add(suite: "Group row navigation", TestCase(name: "flat thumbnail arrows follow resized committed rows without grouping", knownBug: nil) {
         let directory = try Temporary.directory("flat-nav")
         try await Task { @MainActor in
