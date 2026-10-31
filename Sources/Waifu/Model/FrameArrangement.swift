@@ -346,7 +346,7 @@ enum FrameSortKey: String, CaseIterable, Identifiable, Sendable {
         case .tagRarity: return "Mean inverse tag frequency across the tagged source, normalized from the most common photo (0) to the rarest (1). Empty tag sets score 0. Filters do not change these scores."
         case .face: return "Vision face capture quality. Frames with no significant face sort last."
         case .trufor: return "TruFor’s official forgery detection score. Lower values suggest less manipulation; unscored photos remain visible and sort last."
-        case .photoDistance: return "Distance from the average visual feature vector of all source photos. Scaled from nearest (0) to farthest (1); filtering does not move the center. Missing or unsupported features have no score."
+        case .photoDistance: return "Visual distance to the nearest other source photo. Scaled from least isolated (0) to most isolated (1); similar pairs and series score low. Filtering does not change scores. Missing or unsupported features, or a photo without a valid neighbor, have no score."
         case .art: return "Apple's image aesthetics score."
         case .ratingGeneral: return "WD Tagger's probability for the general rating class."
         case .ratingSensitive: return "WD Tagger's probability for the sensitive rating class."

@@ -35,7 +35,7 @@ struct PhotosAlbum: Identifiable, Equatable, Sendable {
 final class PhotosMedia: @unchecked Sendable {
     static let shared = PhotosMedia()
     static let analysisPixelSize = 512
-    static var downloadFromICloud: Bool { UserDefaults.standard.bool(forKey: "photosDownloadFromICloud") }
+    static var downloadFromICloud: Bool { (UserDefaults.standard.object(forKey: "photosEffectiveDownloadFromICloud") as? Bool) ?? UserDefaults.standard.bool(forKey: "photosDownloadFromICloud") }
     static func isUnavailableLocally(_ error: Error) -> Bool {
         let error = error as NSError
         return error.domain == "Waifu.Photos" && error.code == 2

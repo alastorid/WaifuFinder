@@ -35,6 +35,27 @@ struct RootView: View {
     @AppStorage("gridThumbnailZoomWidth") private var gridZoomWidth = Double(GridZoom.defaultValue)
     @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
 
+    @AppStorage("photosCloudModeOverrides") private var cloudOverrides = ""
+
+    private var cloudMode: String {
+        if orb.isOpen { return "orb" }
+        if session.uncover != nil { return "uncover" }
+        return session.previewFrame == nil ? "thumbnails" : "preview"
+    }
+    private var modeOverride: Bool? {
+        if cloudOverrides.split(separator: ",").contains(Substring("\(cloudMode):on")) { return true }
+        if cloudOverrides.split(separator: ",").contains(Substring("\(cloudMode):off")) { return false }
+        return nil
+    }
+    private var effectiveCloudDownload: Bool { modeOverride ?? downloadFromICloud }
+    private func cycleCloudOverride() {
+        var entries = cloudOverrides.split(separator: ",").map(String.init)
+        entries.removeAll { $0.hasPrefix("\(cloudMode):") }
+        if modeOverride == nil { entries.append("\(cloudMode):on") }
+        else if modeOverride == true { entries.append("\(cloudMode):off") }
+        cloudOverrides = entries.joined(separator: ",")
+    }
+
     private var gridZoomTarget: Binding<CGFloat> {
         Binding(
             get: { GridZoom.snapped(CGFloat(gridZoomWidth)) },
@@ -131,6 +152,9 @@ struct RootView: View {
     var body: some View {
         routedWorkspace
         .background {
+            ToolbarDisplayPolicy().frame(width: 0, height: 0)
+        }
+        .background {
             PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb)
                 .frame(width: 0, height: 0)
         }
@@ -144,9 +168,11 @@ struct RootView: View {
         .onChange(of: session.photosAlbumURL) { old, new in
             if old != nil && new == nil { showPhotosWorkspace = false }
         }
-        .onChange(of: downloadFromICloud) { _, enabled in
+        .onChange(of: effectiveCloudDownload, initial: true) { _, enabled in
+            UserDefaults.standard.set(enabled, forKey: "photosEffectiveDownloadFromICloud")
             session.photosDownloadPolicyChanged(allowNetwork: enabled)
         }
+        .onChange(of: downloadFromICloud) { _, _ in cloudOverrides = "" }
         .onChange(of: session.previewFrame?.id) { _, frameID in
             Diag.trace(.preview, message: "root preview rendered frame=\(frameID?.description ?? "nil")")
         }
@@ -298,15 +324,27 @@ struct RootView: View {
         HStack(spacing: 8) {
             if !orb.isOpen { thumbnailShapeButton }
 
-            Button { downloadFromICloud.toggle() } label: {
-                Label("iCloud downloads", systemImage: downloadFromICloud ? "icloud.and.arrow.down.fill" : "icloud.slash")
+            Button {
+                let enabled = !effectiveCloudDownload
+                cloudOverrides = ""
+                downloadFromICloud = enabled
+            } label: {
+                Label("iCloud downloads", systemImage: effectiveCloudDownload ? "icloud.and.arrow.down.fill" : "icloud.slash")
             }
             .labelStyle(.iconOnly)
             .frame(width: 30)
             // The light's destination, but only while the cloud is switched off: that
             // is the icon the fraction in the Sort and Filter panel is linked to.
-            .chiaroscuroDestination(link, isEligible: !downloadFromICloud)
-            .accessibilityValue(downloadFromICloud ? "On" : "Off")
+            .overlay {
+                if modeOverride != nil {
+                    Circle().strokeBorder(.primary, lineWidth: 1).frame(width: 29, height: 29)
+                        .allowsHitTesting(false)
+                }
+            }
+            .background(CloudSecondaryClick(action: cycleCloudOverride))
+            .help("Click to set downloads globally and clear overrides. Right-click: enable for this mode, disable for this mode, then use global setting.")
+            .chiaroscuroDestination(link, isEligible: !effectiveCloudDownload)
+            .accessibilityValue("\(effectiveCloudDownload ? "On" : "Off") — \(modeOverride == nil ? "Global" : "This mode")")
 
             Button {
                 if session.progress.isRunning { session.cancel() } else { session.analyze() }
@@ -415,5 +453,34 @@ struct RootView: View {
     /// keys off.
     private var isAnalyzing: Bool {
         session.progress.isRunning
+    }
+}
+
+/// A background hit region preserves the standard toolbar button's left click.
+private struct CloudSecondaryClick: NSViewRepresentable {
+    var action: () -> Void
+    func makeNSView(context: Context) -> ClickRegion { ClickRegion() }
+    func updateNSView(_ view: ClickRegion, context: Context) { view.action = action }
+    final class ClickRegion: NSView {
+        var action: (() -> Void)?
+        nonisolated(unsafe) private var monitor: Any?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [weak self] event in
+                let handled = MainActor.assumeIsolated {
+                    guard let self, let window = self.window, event.window === window,
+                          !self.isHiddenOrHasHiddenAncestor,
+                          self.bounds.contains(self.convert(event.locationInWindow, from: nil)) else { return false }
+                    self.action?()
+                    return true
+                }
+                return handled ? nil : event
+            }
+        }
+        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }

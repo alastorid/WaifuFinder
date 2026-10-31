@@ -231,7 +231,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         photoDistanceTask?.cancel()
         let source = frames
         photoDistanceTask = Task { [weak self] in
-            let worker = Task.detached(priority: .utility) { try PhotoCenterDistance.scores(source) }
+            let worker = Task.detached(priority: .utility) { try PhotoNearestDistance.scores(source) }
             let scores = await withTaskCancellationHandler {
                 try? await worker.value
             } onCancel: { worker.cancel() }

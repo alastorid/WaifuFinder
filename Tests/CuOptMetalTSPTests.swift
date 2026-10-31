@@ -28,17 +28,17 @@ private func bruteForceOpenCost(_ matrix: TSPDistanceMatrix) -> Double {
 
 func registerCuOptMetalTSPTests() {
     let suite = "frame arrangement: cuOpt Metal"
-    Registry.shared.add(suite: suite, TestCase(name: "native photo center scores stay fixed while session filters change", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "native nearest-neighbor scores stay fixed while session filters change", knownBug: nil) {
         let observations = try await [makeFeaturePrintObservation(0), makeFeaturePrintObservation(2), makeFeaturePrintObservation(4)]
         let payloads = try observations.map { try JSONEncoder().encode($0) }
         let frames = (0..<3).map { index in
             FrameFixture.make(id: String(format: "f%06d", index), time: Double(index), featurePrint: payloads[index])
         } + [FrameFixture.make(id: "f000003", time: 3, featurePrint: Data("corrupt".utf8))]
-        let expected = try PhotoCenterDistance.scores(frames)
+        let expected = try PhotoNearestDistance.scores(frames)
         checkEqual(expected.count, 3, "corrupt feature has no invented score")
         checkEqual(expected.values.min(), 0, "nearest native vector scores zero")
         checkEqual(expected.values.max(), 1, "farthest native vector scores one")
-        let directory = try Temporary.directory("photo-center-session")
+        let directory = try Temporary.directory("photo-neighbor-session")
         try await Task { @MainActor in
             let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
             session.frameOrder = .only([.photoDistance])
@@ -51,32 +51,44 @@ func registerCuOptMetalTSPTests() {
             checkEqual(session.displayedFrames.last?.id, frames[3].id, "missing vector sorts last")
             session.frameLimits.setLimit(FrameLimit(low: 0.5, high: 1), for: .photoDistance)
             checkEqual(Set(session.displayedFrames.map(\.id)), Set(expected.filter { $0.value >= 0.5 }.keys), "range uses source scores")
-            for frame in session.displayedFrames { checkEqual(frame.photoDistance, expected[frame.id], "filter leaves centroid unchanged") }
+            for frame in session.displayedFrames { checkEqual(frame.photoDistance, expected[frame.id], "filter leaves neighbors unchanged") }
             session.frameLimits = .none
             checkEqual(session.displayedFrames.count, 4, "clearing range restores all source photos")
             session.updateAnalyzedFrames([])
         }.value
     })
-    Registry.shared.add(suite: suite, TestCase(name: "photo center distance uses the centroid and full normalized range", knownBug: nil) {
-        let vectors = VisualFeatureVectors(count: 3, dimensions: 1, values: [0, 1, 5])!
-        let scores = try PhotoCenterDistance.normalizedDistances(vectors)
-        // Center is 2, so raw distances are [2, 1, 3].
-        checkEqual(scores, [0.5, 0, 1], "distance to the mean, not a pairwise average")
-        let squared = VisualFeatureVectors(count: 3, dimensions: 1, values: [0, 1, 5], metric: .squaredEuclidean)!
-        checkEqual(try PhotoCenterDistance.normalizedDistances(squared), [0.375, 0, 1], "preserves the native squared-distance convention")
+    Registry.shared.add(suite: suite, TestCase(name: "photo distance uses nearest neighbors and full normalized range", knownBug: nil) {
+        let vectors = VisualFeatureVectors(count: 4, dimensions: 1, values: [0, 1, 3, 7])!
+        let scores = try PhotoNearestDistance.normalizedDistances(vectors)
+        // Nearest other distances are [1, 1, 2, 4]; self must be excluded.
+        checkEqual(scores, [0, 0, 1 / Float(3), 1], "uses the nearest other image")
+        let squared = VisualFeatureVectors(count: 4, dimensions: 1, values: [0, 1, 3, 7], metric: .squaredEuclidean)!
+        checkEqual(try PhotoNearestDistance.normalizedDistances(squared), [0, 0, 0.2, 1], "preserves the native squared-distance convention")
         let tied = VisualFeatureVectors(count: 2, dimensions: 2, values: [1, 2, 1, 2])!
-        checkEqual(try PhotoCenterDistance.normalizedDistances(tied), [0, 0], "identical photos have zero distance")
-        var frames = (0..<3).map { FrameFixture.make(id: "f00000\($0)", time: Double($0), artScore: 1) }
+        checkEqual(try PhotoNearestDistance.normalizedDistances(tied), [0, 0], "identical photos have zero distance")
+        var frames = (0..<4).map { FrameFixture.make(id: "f00000\($0)", time: Double($0), artScore: 1) }
         for index in frames.indices { frames[index].photoDistance = scores[index] }
         let order = FrameOrder.only([.photoDistance])
         let sorted = FrameArrangement.arrange(frames, order: order, perGroupTopCount: 99, grouping: .default)
-        checkEqual(sorted.visible.map(\.id), [frames[2].id, frames[0].id, frames[1].id], "sorts farthest first")
+        checkEqual(sorted.visible.map(\.id), [frames[3].id, frames[2].id, frames[0].id, frames[1].id], "sorts most isolated first")
         var limits = FrameLimits.none
         limits.setLimit(FrameLimit(low: 0.25, high: 0.75), for: .photoDistance)
-        checkEqual(frames.filter { limits.admits($0, grouping: .default) }.map(\.id), [frames[0].id], "filters normalized distance")
+        checkEqual(frames.filter { limits.admits($0, grouping: .default) }.map(\.id), [frames[2].id], "filters normalized distance")
         checkEqual(FrameLimitBounds.bounds(of: frames, grouping: .default).range(for: .photoDistance), 0...1, "fixed bounds")
         checkEqual(try JSONDecoder().decode(FrameOrder.self, from: JSONEncoder().encode(order)), order, "sort persists")
         checkEqual(try JSONDecoder().decode(FrameLimits.self, from: JSONEncoder().encode(limits)), limits, "range persists")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "isolated central photos outrank distant series and duplicates", knownBug: nil) {
+        let series = VisualFeatureVectors(count: 5, dimensions: 1, values: [-100, -99, 0, 99, 100])!
+        checkEqual(try PhotoNearestDistance.normalizedDistances(series), [0, 0, 1, 0, 0], "lonely central photo outranks both remote pairs")
+        let duplicates = VisualFeatureVectors(count: 3, dimensions: 1, values: [0, 0, 5])!
+        checkEqual(try PhotoNearestDistance.normalizedDistances(duplicates), [0, 0, 1], "a duplicate is a valid zero-distance neighbor")
+        let pair = VisualFeatureVectors(count: 2, dimensions: 1, values: [0, 5])!
+        checkEqual(try PhotoNearestDistance.normalizedDistances(pair), [0, 0], "equally isolated photos tie")
+        checkEqual(try PhotoNearestDistance.scores([]).count, 0, "empty source has no scores")
+        let observation = try await makeFeaturePrintObservation(0)
+        let lone = FrameFixture.make(id: "lone", time: 0, featurePrint: try JSONEncoder().encode(observation))
+        checkEqual(try PhotoNearestDistance.scores([lone]).count, 0, "a lone photo has no neighbor score")
     })
     Registry.shared.add(suite: suite, TestCase(name: "small CPU and Metal paths agree with brute-force open optima", knownBug: nil) {
         let solver = try testedMetalSolver()

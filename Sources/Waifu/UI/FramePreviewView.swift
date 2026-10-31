@@ -72,7 +72,7 @@ struct FramePreviewView: View {
     /// the workspace's key so one expand/collapse icon rules every right panel,
     /// including the Crystal Orb's inspector.
     @AppStorage("rightPanelExpanded") private var inspectorExpanded = true
-    @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
+    @AppStorage("photosEffectiveDownloadFromICloud") private var downloadFromICloud = false
 
     private static func previewKey(_ frame: AnalyzedFrame, session: WaifuSession) -> String {
         "preview|\(session.video?.url.absoluteString ?? "")|\(session.thumbnailGeneration)|\(frame.thumbnailKey)"

@@ -44,16 +44,21 @@ uses Apple's Accelerate vDSP for vector normalization. The result is cached by
 source revision, vocabulary and threshold, so moving a filter does not repeat
 the reduction. No dense image-by-tag matrix or additional dependency is needed.
 
-## Photo distance from the visual center
+## Photo distance to the nearest neighbor
 
-Distance follows Art in Sort and Filter. It averages the full source set's
-valid visual feature vectors, then measures each vector's distance to that center
-using the metric validated against Vision by Minimal Visual Distance. Accelerate
-computes vector distances in a cancellable background task. The observed nearest
-and farthest distances map to 0.00 and 1.00, respectively; equal distances map to
-zero. Missing or corrupt features have no score and sort last.
+Distance follows Art in Sort and Filter. Each photo's score is its distance to
+its nearest other photo in the full source set, using the same visual features
+and validated metric as Minimal Visual Distance. Similar pairs and series have
+low distances, while isolated images have high distances regardless of their
+position relative to the collection's center.
 
-Display filters and tag selections do not change the center or scores. Results
+Accelerate computes each distinct pair once in a cancellable background task,
+retaining only per-photo minima rather than a quadratic distance matrix. The
+smallest and largest nearest-neighbor distances map to 0.00 and 1.00; equal
+distances map to zero. Scores are relative to the source collection. Missing or
+corrupt features and a lone valid photo have no score and sort last.
+
+Display filters and tag selections do not change the neighbors or scores. Results
 are reused until source photo identifiers or feature payloads change. Sorting,
 range filtering and saved presets use the normalized score and fixed 0–1 bounds.
 

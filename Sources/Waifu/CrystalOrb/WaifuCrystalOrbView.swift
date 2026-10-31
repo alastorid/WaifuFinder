@@ -102,7 +102,7 @@ struct WaifuCrystalOrbView: View {
     private var tileSide: CGFloat {
         min(96, max(20, ((candidateStripWidth - 14) / 13).rounded(.down)))
     }
-    @AppStorage("photosDownloadFromICloud") private var downloadFromICloud = false
+    @AppStorage("photosEffectiveDownloadFromICloud") private var downloadFromICloud = false
 
     var body: some View {
         VStack(spacing: 0) {
