@@ -521,6 +521,7 @@ private struct FrameCell: View {
     let topTagFilterActive: Bool
     @StateObject private var thumbnail: GridThumbnailPresentation
     @State private var isSelected: Bool
+    @AppStorage("photosEffectiveDownloadFromICloud") private var cloudDownloads = false
     @State private var isThumbnailVisible = false
     @State private var isHovered = false
     @State private var showsFrameNumber = false
@@ -608,6 +609,20 @@ private struct FrameCell: View {
                     return await GridThumbnailLoader.shared.image(data: data, identity: thumbnailIdentity)
                 }
             }
+        }
+        .task(id: "\(thumbnailIdentity)|\(isThumbnailVisible)|\(cloudDownloads)|\(session.previewFrame != nil)") {
+            guard isThumbnailVisible, cloudDownloads, isPhotosSource,
+                  session.previewFrame == nil, let sourceURL else { return }
+            let identity = thumbnailIdentity
+            let (photoURL, _) = PhotosMedia.shared.resolve(sourceURL, seconds: frame.timeSeconds)
+            do {
+                for try await pixels in PhotosMedia.shared.renditionPreviews(
+                    photoURL, allowNetwork: true, priority: .thumbnail
+                ) {
+                    guard !Task.isCancelled, session.thumbnailGeneration == generation else { return }
+                    GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
+                }
+            } catch { /* Keep the cached thumbnail when an upgrade is unavailable. */ }
         }
         .onDisappear { thumbnail.disappear(identity: thumbnailIdentity) }
 

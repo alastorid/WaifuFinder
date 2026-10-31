@@ -5,7 +5,7 @@ import Foundation
 /// while cancellation from its owner removes it permanently.
 actor PhotosCloudQueue {
     static let shared = PhotosCloudQueue()
-    enum Priority: Int, Sendable { case viewing, background, preload }
+    enum Priority: Int, Sendable { case viewing, thumbnail, background, preload }
     private struct Job: Sendable {
         let id: UUID
         let priority: Priority

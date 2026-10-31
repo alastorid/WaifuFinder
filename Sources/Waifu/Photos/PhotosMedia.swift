@@ -639,12 +639,12 @@ final class PhotosMedia: @unchecked Sendable {
     /// Show degraded cached pixels immediately, then replace them with the exact
     /// requested rendition. Tiny previews never satisfy the completed cache key.
     func renditionPreviews(_ url: URL, maxPixelSize: Int = analysisPixelSize,
-                           allowNetwork: Bool) -> AsyncThrowingStream<CGImage, Error> {
+                           allowNetwork: Bool, priority: PhotosCloudQueue.Priority = .background) -> AsyncThrowingStream<CGImage, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let final = try await rendition(url, maxPixelSize: maxPixelSize, allowNetwork: allowNetwork,
-                                                    onPreview: { continuation.yield($0) })
+                                                    priority: priority, onPreview: { continuation.yield($0) })
                     continuation.yield(final)
                     continuation.finish()
                 } catch { continuation.finish(throwing: error) }
@@ -657,12 +657,16 @@ final class PhotosMedia: @unchecked Sendable {
     /// Prefer the final requested pixels, with a smaller cached thumbnail as a
     /// fallback if Photos cannot supply a larger local rendition.
     func rendition(_ url: URL, maxPixelSize: Int = analysisPixelSize, allowNetwork: Bool,
+                   priority: PhotosCloudQueue.Priority = .background,
                    onPreview: (@Sendable (CGImage) -> Void)? = nil) async throws -> CGImage {
+        // Album work accepts a usable cached thumbnail. Only visible requests
+        // insist on the full display target; missing/tiny local images may fetch.
+        let minimumSize = priority == .background && maxPixelSize == Self.analysisPixelSize ? 488 : maxPixelSize
         return try await PhotosRenditionLoader.load(allowNetwork: allowNetwork,
-            requestedSize: item(url).map { Self.renditionSize(width: $0.asset.pixelWidth, height: $0.asset.pixelHeight, maxPixelSize: maxPixelSize) },
+            requestedSize: item(url).map { Self.renditionSize(width: $0.asset.pixelWidth, height: $0.asset.pixelHeight, maxPixelSize: minimumSize) },
             local: { try await self.requestRendition(url, maxPixelSize: maxPixelSize, allowNetwork: false, onPreview: onPreview) },
             cloud: {
-                try await PhotosCloudQueue.shared.perform(priority: .background) {
+                try await PhotosCloudQueue.shared.perform(priority: priority) {
                     try await self.requestRendition(url, maxPixelSize: maxPixelSize,
                         allowNetwork: Self.downloadFromICloud, onPreview: onPreview)
                 }
@@ -853,7 +857,7 @@ final class PhotosMedia: @unchecked Sendable {
 
     func preloadPreview(_ url: URL) async throws {
         guard Self.downloadFromICloud else { return }
-        _ = try await previewContent(url, priority: .preload)
+        _ = try await previewContent(url, priority: .preload, localOnly: true)
     }
 
     func previewContent(_ url: URL, priority: PhotosCloudQueue.Priority = .viewing, localOnly: Bool = false) async throws -> PhotosPreviewContent {
