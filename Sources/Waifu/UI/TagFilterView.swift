@@ -202,6 +202,13 @@ struct TagFilterView: View {
             }
         }
         .disabled(!enabled)
+        .onChange(of: session.tagControlsResetRevision) { _, _ in
+            quickFilterText = ""
+            selectedTags.removeAll()
+            selectionRect = nil
+            groupingEnabled = false
+            collapsedGroups = [TagRarity.normal.title]
+        }
         .onChange(of: quickFilterText) { _, text in
             if !text.isEmpty { collapsedGroups.removeAll() }
         }

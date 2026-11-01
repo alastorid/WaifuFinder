@@ -46,6 +46,12 @@ struct GridStageKey: Hashable, Sendable {
     var tokenPrefix: String {
         "\(revision):\(generation):\(width):\(grouped):\(square):"
     }
+
+    var geometryKey: Self {
+        Self(revision: 0, generation: generation, width: width, columns: columns,
+             groupColumns: groupColumns, grouped: grouped, photosSource: photosSource,
+             square: square, targetWidth: targetWidth)
+    }
 }
 
 struct GridStageInput: Sendable {
@@ -90,6 +96,13 @@ struct GridStageSnapshot: Sendable {
     let contentHeight: CGFloat
     let rowIndexByToken: [String: Int]
     let rowIndexByFrameID: [FrameID: Int]
+
+    func rekeyed(_ key: GridStageKey) -> Self {
+        Self(key: key, navigation: navigation, sourceURL: sourceURL, rows: rows,
+             contentHeight: contentHeight,
+             rowIndexByToken: Dictionary(uniqueKeysWithValues: rows.enumerated().map { (key.tokenPrefix + $0.element.id, $0.offset) }),
+             rowIndexByFrameID: rowIndexByFrameID)
+    }
 
     static func make(_ input: GridStageInput) -> Self {
         let key = input.key
@@ -219,6 +232,11 @@ private final class GridPreparedImages {
     }
 }
 
+private struct GridDeletionSpeculation: Sendable {
+    let input: GridStageInput
+    let snapshot: GridStageSnapshot
+}
+
 /// Holds the last displayed layout while preparing its replacement. A deadline
 /// commits ready pixels together; unfinished cells then use the ordinary late
 /// scroll-loading fade. Superseded requests never become a displayed baseline.
@@ -236,6 +254,7 @@ final class GridThumbnailStage: ObservableObject {
         let deadline: ContinuousClock.Instant
         /// Zoom commits animate the reflow; scroll and filter commits must not.
         let animated: Bool
+        let immediate: Bool
         let load: @MainActor (AnalyzedFrame) async -> CGImage?
         let pixels = GridPreparedImages()
         var snapshot: GridStageSnapshot?
@@ -246,9 +265,9 @@ final class GridThumbnailStage: ObservableObject {
         var install: Task<Void, Never>?
         var timeout: Task<Void, Never>?
 
-        init(key: GridStageKey, deadline: ContinuousClock.Instant, animated: Bool,
+        init(key: GridStageKey, deadline: ContinuousClock.Instant, animated: Bool, immediate: Bool,
              load: @escaping @MainActor (AnalyzedFrame) async -> CGImage?) {
-            self.key = key; self.deadline = deadline; self.animated = animated; self.load = load
+            self.key = key; self.deadline = deadline; self.animated = animated; self.immediate = immediate; self.load = load
         }
         func cancel() {
             build?.cancel(); install?.cancel(); timeout?.cancel()
@@ -258,6 +277,9 @@ final class GridThumbnailStage: ObservableObject {
     }
 
     private var request: Request?
+    private var speculations: [GridDeletionSpeculation] = []
+    private var speculationTask: Task<GridDeletionSpeculation?, Never>?
+    private var frozenSpeculationTask: Task<GridDeletionSpeculation?, Never>?
     private var viewport = CGRect.zero
     private var horizontalOffsets: [String: CGFloat] = [:]
     private var handoffs: [UUID: Task<Void, Never>] = [:]
@@ -270,7 +292,57 @@ final class GridThumbnailStage: ObservableObject {
         self.readTime = now
     }
 
-    func submit(_ input: GridStageInput, viewportSize: CGSize, animated: Bool = false,
+    /// Prepare the likely single-selection deletion without changing the grid.
+    /// The result is used only if the actual arrangement still matches exactly.
+    func prepareDeletion(_ input: GridStageInput, removing ids: Set<FrameID>,
+                         build: @escaping @Sendable (GridStageInput) -> GridStageSnapshot = { GridStageSnapshot.make($0) }) {
+        speculationTask?.cancel()
+        guard !ids.isEmpty else { return }
+        let work = Task.detached(priority: .utility) { () -> GridDeletionSpeculation? in
+            guard !Task.isCancelled else { return nil }
+            let frames = input.frames.filter { !ids.contains($0.id) }
+            let rows = input.rows.map { FrameRow(group: $0.group, frames: $0.frames.filter { !ids.contains($0.id) }) }
+                .filter { !$0.frames.isEmpty }
+            let projected = GridStageInput(key: input.key, sourceURL: input.sourceURL, rows: rows,
+                frames: frames, beyondCap: input.beyondCap, revealed: input.revealed)
+            guard !Task.isCancelled else { return nil }
+            let snapshot = build(projected)
+            guard !Task.isCancelled else { return nil }
+            return GridDeletionSpeculation(input: projected, snapshot: snapshot)
+        }
+        speculationTask = work
+        Task { [weak self] in
+            guard let result = await work.value, !work.isCancelled, let self else { return }
+            self.speculations.append(result)
+            if self.speculations.count > 4 { self.speculations.removeFirst() }
+        }
+    }
+
+    /// Keep the selected photo's in-flight work alive when focus moves to its
+    /// replacement; the next deletion submission awaits this exact task.
+    func freezeDeletionPreparation() {
+        frozenSpeculationTask?.cancel()
+        frozenSpeculationTask = speculationTask
+        speculationTask = nil
+    }
+
+    func preparedDeletion(for input: GridStageInput) -> GridStageSnapshot? {
+        guard let candidate = speculations.last(where: { Self.matches($0.input, input) }) else { return nil }
+        return candidate.snapshot.rekeyed(input.key)
+    }
+
+    private nonisolated static func matches(_ candidate: GridStageInput, _ input: GridStageInput) -> Bool {
+        candidate.key.geometryKey == input.key.geometryKey && candidate.sourceURL == input.sourceURL
+            && candidate.frames == input.frames && candidate.rows == input.rows
+            && candidate.beyondCap == input.beyondCap && candidate.revealed == input.revealed
+    }
+
+    func cancelPending() {
+        request?.cancel()
+        request = nil
+    }
+
+    func submit(_ input: GridStageInput, viewportSize: CGSize, animated: Bool = false, immediate: Bool = false,
                 load: @escaping @MainActor (AnalyzedFrame) async -> CGImage?) {
         guard request?.key != input.key else { return }
         request?.cancel()
@@ -283,14 +355,24 @@ final class GridThumbnailStage: ObservableObject {
             horizontalOffsets.removeAll()
         }
         let next = Request(key: input.key, deadline: readTime().advanced(by: preparationLimit),
-                           animated: animated, load: load)
+                           animated: animated, immediate: immediate, load: load)
         request = next
         let ticket = next.ticket
-        let work = Task.detached(priority: .userInitiated) { GridStageSnapshot.make(input) }
-        next.build = work
+        let frozen = immediate ? frozenSpeculationTask : nil
+        if immediate { frozenSpeculationTask = nil }
         next.install = Task { [weak self] in
-            let snapshot = await work.value
+            let awaited = await withTaskCancellationHandler { await frozen?.value } onCancel: { frozen?.cancel() }
             guard !Task.isCancelled, let self, self.request?.ticket == ticket else { return }
+            let candidates = immediate ? self.speculations + (awaited.map { [$0] } ?? []) : []
+            let work = Task.detached(priority: .userInitiated) {
+                if let match = candidates.last(where: { Self.matches($0.input, input) }) {
+                    return match.snapshot.rekeyed(input.key)
+                }
+                return GridStageSnapshot.make(input)
+            }
+            self.request?.build = work
+            let snapshot = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            guard !Task.isCancelled, self.request?.ticket == ticket else { return }
             self.request?.snapshot = snapshot
             self.refresh()
         }
@@ -317,6 +399,9 @@ final class GridThumbnailStage: ObservableObject {
 
     func stop() {
         request?.cancel(); request = nil
+        speculationTask?.cancel(); speculationTask = nil
+        frozenSpeculationTask?.cancel(); frozenSpeculationTask = nil
+        speculations.removeAll()
         for task in handoffs.values { task.cancel() }
         handoffs.removeAll()
     }
@@ -336,7 +421,7 @@ final class GridThumbnailStage: ObservableObject {
                 request.pixels.pin(image, identity: identity)
             }
         }
-        if wanted.allSatisfy({ request.pixels.contains($0) }) || readTime() >= request.deadline {
+        if request.immediate || wanted.allSatisfy({ request.pixels.contains($0) }) || readTime() >= request.deadline {
             commit(request, snapshot: snapshot)
             return
         }

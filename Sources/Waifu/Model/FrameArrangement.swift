@@ -2,7 +2,7 @@ import Foundation
 
 /// A prepared sidebar row. Tagging changes scores, but not group timestamps or
 /// cap counts, so rendering this row never needs to scan the frame collection.
-struct CappedGroupSummary: Equatable, Identifiable {
+struct CappedGroupSummary: Equatable, Identifiable, Sendable {
     let id: FrameGroupID
     let count: Int
     let label: String

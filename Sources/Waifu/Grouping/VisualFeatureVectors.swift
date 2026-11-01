@@ -58,24 +58,33 @@ struct VisualFeatureVectors: Sendable {
     }
 
     func distance(_ left: Int, _ right: Int) -> Float {
-        values.withUnsafeBufferPointer { buffer in
-            var squared: Float = 0
-            vDSP_distancesq(buffer.baseAddress! + left * dimensions, 1,
-                            buffer.baseAddress! + right * dimensions, 1,
-                            &squared, vDSP_Length(dimensions))
-            return metric == .squaredEuclidean ? max(0, squared) : sqrt(max(0, squared))
+        withDistances { $0(left, right) }
+    }
+
+    /// Keep one buffer access alive across a whole route/matrix calculation.
+    func withDistances<Result>(_ body: ((Int, Int) -> Float) throws -> Result) rethrows -> Result {
+        try values.withUnsafeBufferPointer { buffer in
+            try body { left, right in
+                var squared: Float = 0
+                vDSP_distancesq(buffer.baseAddress! + left * dimensions, 1,
+                               buffer.baseAddress! + right * dimensions, 1,
+                               &squared, vDSP_Length(dimensions))
+                return metric == .squaredEuclidean ? max(0, squared) : sqrt(max(0, squared))
+            }
         }
     }
 
     func matrix() throws -> TSPDistanceMatrix {
         guard count <= CuOptMetalTSP.denseLimit else { throw TSPError.allocationFailed }
         var values = [Float](repeating: 0, count: count * count)
-        for left in 0..<count {
-            try Task.checkCancellation()
-            for right in (left + 1)..<count {
-                let value = distance(left, right)
-                values[left * count + right] = value
-                values[right * count + left] = value
+        try withDistances { distance in
+            for left in 0..<count {
+                try Task.checkCancellation()
+                for right in (left + 1)..<count {
+                    let value = distance(left, right)
+                    values[left * count + right] = value
+                    values[right * count + left] = value
+                }
             }
         }
         return try TSPDistanceMatrix(count: count, values: values)

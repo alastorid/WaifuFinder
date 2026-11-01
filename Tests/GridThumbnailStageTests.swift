@@ -38,6 +38,75 @@ private final class StageReads {
 
 func registerGridThumbnailStageTests() {
     let suite = "thumbnail staging"
+    Registry.shared.add(suite: suite, TestCase(name: "deletion awaits in-flight preparation without blocking the UI actor", knownBug: nil) {
+        await Task { @MainActor in
+            let stage = GridThumbnailStage(), generation = UUID()
+            let frames = (3000..<3005).map(stageFrame)
+            let gate = DispatchSemaphore(value: 0), events = TickLog()
+            stage.prepareDeletion(stageInput(1, frames, generation: generation), removing: [frames[0].id]) { input in
+                events.record(1)
+                gate.wait()
+                return GridStageSnapshot.make(input)
+            }
+            await stageWait { events.all == [1] }
+            stage.freezeDeletionPreparation()
+            let remaining = Array(frames.dropFirst())
+            stage.submit(stageInput(2, remaining, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), animated: true, immediate: true) { _ in nil }
+            // This timer must run while the worker is blocked: the main actor
+            // waits asynchronously, and the grid cannot install a duplicate.
+            try? await Task.sleep(for: .milliseconds(35))
+            checkNil(stage.current, "the grid waits for the existing preparation")
+            gate.signal()
+            await stageWait { stage.current?.key.revision == 2 }
+            checkEqual(stage.current?.navigation.frames.map(\.id), remaining.map(\.id), "the prepared grid is committed")
+            checkEqual(events.all, [1], "the selected layout is prepared once")
+            stage.stop()
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "prepared deletion is reused only for the matching arrangement", knownBug: nil) {
+        await Task { @MainActor in
+            let stage = GridThumbnailStage(), generation = UUID()
+            let frames = (2000..<2005).map(stageFrame)
+            let original = stageInput(10, frames, generation: generation)
+            stage.prepareDeletion(original, removing: [frames[1].id])
+            let remaining = [frames[0]] + Array(frames.dropFirst(2))
+            let expected = stageInput(11, remaining, generation: generation)
+            await stageWait { stage.preparedDeletion(for: expected) != nil }
+            let prepared = stage.preparedDeletion(for: expected)
+            checkEqual(prepared?.key.revision, 11, "the prepared layout adopts the current revision")
+            checkEqual(prepared?.navigation.frames.map(\.id), remaining.map(\.id), "the prepared order removes the selected photo")
+            checkNil(stage.preparedDeletion(for: stageInput(11, Array(remaining.reversed()), generation: generation)),
+                     "changed sort order cannot reuse stale geometry")
+            checkNil(stage.preparedDeletion(for: stageInput(11, remaining, generation: UUID())),
+                     "a different source generation cannot reuse the prepared layout")
+            stage.stop()
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "deletion reflow commits without waiting for missing thumbnail reads", knownBug: nil) {
+        await Task { @MainActor in
+            let generation = UUID()
+            let stage = GridThumbnailStage(preparationLimit: .seconds(5))
+            let frames = (1000..<1004).map(stageFrame)
+            let reads = StageReads()
+            stage.submit(stageInput(1, frames, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), immediate: true) { frame in
+                await reads.read(frame)
+            }
+            await stageWait { stage.current?.key.revision == 1 }
+            let remaining = Array(frames.dropFirst())
+            stage.submit(stageInput(2, remaining, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), animated: true, immediate: true) { frame in
+                await reads.read(frame)
+            }
+            await stageWait { stage.current?.key.revision == 2 }
+            checkEqual(stage.current?.navigation.frames.map(\.id), remaining.map(\.id),
+                       "the removed photo leaves the grid even when its replacements are not decoded")
+            check(reads.waiting.isEmpty, "an immediate deletion does not wait for image reads")
+            reads.finishAll()
+            stage.stop()
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "visible thumbnails preempt bounded offscreen prefetching which resumes at the new viewport in both modes", knownBug: nil) {
         let directory = try Temporary.directory("thumbnail-prefetch-priority")
         await Task { @MainActor in

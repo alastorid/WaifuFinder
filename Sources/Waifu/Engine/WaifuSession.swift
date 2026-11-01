@@ -121,7 +121,7 @@ private func frameLimitsAreSuperset(_ broader: FrameLimits, of narrower: FrameLi
     }
 }
 
-private struct VisualOrderInput: Equatable, Sendable {
+struct VisualOrderInput: Equatable, Sendable {
     let id: FrameID
     let featurePrint: Data?
 }
@@ -604,6 +604,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published var tagFilter = TagFilter() {
         didSet { recomputeDisplayedFrames() }
     }
+    @Published private(set) var tagControlsResetRevision = 0
+
+    func resetTagControls() {
+        applyingPanelPreset = true
+        tagFilter = TagFilter()
+        var updated = settings
+        updated.tagTopCount = WaifuSettings.default.tagTopCount
+        updated.taggerThreshold = WaifuSettings.default.taggerThreshold
+        settings = updated
+        applyingPanelPreset = false
+        tagControlsResetRevision += 1
+        recomputeDisplayedFrames()
+    }
 
     @Published private(set) var tagVocabulary: TagVocabulary?
 
@@ -671,63 +684,89 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
               let albumURL = photosAlbumURL else { return }
 
         var seen = Set<String>()
-        let targets = previewFrame.map { [$0] } ?? displayOrderFrames.filter { selectedFrameIDs.contains($0.id) }
+        let targets = previewFrame.map { [$0] } ?? selectedFrameIDs.compactMap { frameByID[$0] }
         let identifiers = targets.compactMap { frame -> String? in
             guard
                   let identifier = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
                   seen.insert(identifier).inserted else { return nil }
             return identifier
         }
-        deletePhotos(identifiers: identifiers, from: albumURL)
+        deletePhotos(identifiers: identifiers, from: albumURL, knownFrames: targets)
     }
 
     @Published private(set) var pendingPhotoDeletions: Set<String> = []
+    struct GridDeletionEvent: Equatable {
+        let id = UUID()
+        let focusedFrameID: FrameID
+        let removedFrameIDs: Set<FrameID>
+    }
+    @Published private(set) var gridDeletionEvent: GridDeletionEvent?
     @Published private(set) var pendingDeletionBytes: Int64 = 0
     @Published private(set) var pendingDeletionUnknownSizes = 0
     private var deletionSizes: [String: Int64] = [:]
     private var deletionSizeGeneration = UUID()
     private var deletionCallbacks: [(Set<String>, @MainActor (Set<String>) -> Void)] = []
     private(set) var deletionLayoutRevision = 0
+    private var deletionRecomputeTask: Task<Void, Never>?
+    private var deletionCalculationToken = UUID()
+    private var queuedDeletionFrameIDs: [URL: Set<FrameID>] = [:]
 
     /// Staging only changes the app's view. No PhotoKit mutation happens here.
-    func deletePhotos(identifiers: [String], from albumURL: URL,
+    func deletePhotos(identifiers: [String], from albumURL: URL, knownFrames: [AnalyzedFrame]? = nil,
                       onSuccess: @escaping @MainActor (Set<String>) -> Void = { _ in }) {
         guard !isDeletingPhotos, photosAlbumURL == albumURL else { return }
         let added = Set(identifiers).subtracting(pendingPhotoDeletions)
         guard !added.isEmpty else { return }
         let currentOrder = navigationOrder
         let previewOrder = previewFrame == nil ? nil : currentOrder
-        let removed = Set(currentOrder.frames.compactMap { frame -> FrameID? in
+        // A still photo has one sampled frame. Keep the general scan for video
+        // assets, which can contribute several frames to the same deletion.
+        let knownStills = knownFrames?.allSatisfy {
+            PhotosMedia.shared.photoItemURL(for: albumURL, seconds: $0.timeSeconds) != nil
+        } ?? false
+        let removed = Set((knownStills ? knownFrames! : currentOrder.frames).compactMap { frame -> FrameID? in
             guard let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds),
                   added.contains(asset) else { return nil }
             return frame.id
         })
+        let allRemoved = (queuedDeletionFrameIDs[albumURL] ?? []).union(removed)
+        queuedDeletionFrameIDs[albumURL] = allRemoved
         let replacingPreview = previewFrame.map { removed.contains($0.id) } ?? false
-        let replacement = previewFrame.flatMap { previewOrder?.replacement(afterRemoving: removed, current: $0.id) }
+        let replacement = previewFrame.flatMap { previewOrder?.replacement(afterRemoving: allRemoved, current: $0.id) }
         let replacingFocus = previewFrame == nil && (focusedFrameID.map { removed.contains($0) } ?? false)
-        let focusReplacement = focusedFrameID.flatMap { currentOrder.replacement(afterRemoving: removed, current: $0) }
+        let focusReplacement = focusedFrameID.flatMap { currentOrder.replacement(afterRemoving: allRemoved, current: $0) }
+        if replacingFocus, let focusedFrameID {
+            gridDeletionEvent = GridDeletionEvent(focusedFrameID: focusedFrameID, removedFrameIDs: removed)
+        }
         deletionCallbacks.append((added, onSuccess))
         pendingPhotoDeletions.formUnion(added)
         pendingDeletionUnknownSizes = pendingPhotoDeletions.count - deletionSizes.count
         deletionLayoutRevision += 1
-        recomputeDisplayedFrames()
         selectedFrameIDs = selectedFrameIDs.filter { id in
             guard let frame = frame(id: id), let asset = PhotosMedia.shared.assetIdentifier(for: albumURL, seconds: frame.timeSeconds) else { return true }
             return !pendingPhotoDeletions.contains(asset)
         }
-        if let previewOrder { previewNavigation = previewOrder.removing(removed) }
+        if let previewOrder { previewNavigation = previewOrder.removing(allRemoved) }
         if replacingPreview {
             if let replacement { focus(on: replacement, scrollIntoView: false) }
             else { previewFrame = nil }
         } else if replacingFocus {
-            if let focusReplacement { focus(on: focusReplacement) }
+            gridNavigationFrameID = nil
+            if let focusReplacement { focus(on: focusReplacement, scrollIntoView: false) }
             else { focusedFrameID = nil }
         }
-        if let focusedFrameID, !displayOrderFrames.contains(where: { $0.id == focusedFrameID }) {
-            self.focusedFrameID = displayOrderFrames.first?.id
-        }
+        scheduleDeletionCalculation(for: albumURL)
         let sizeGeneration = deletionSizeGeneration
-        let urls = PhotosMedia.shared.album(albumURL)?.items.filter { added.contains($0.asset.localIdentifier) }.map { ($0.asset.localIdentifier, $0.url) } ?? []
+        let urls: [(String, URL)]
+        if let knownFrames, knownStills {
+            urls = knownFrames.compactMap { frame in
+                guard let url = PhotosMedia.shared.photoItemURL(for: albumURL, seconds: frame.timeSeconds),
+                      let item = PhotosMedia.shared.item(url), added.contains(item.asset.localIdentifier) else { return nil }
+                return (item.asset.localIdentifier, url)
+            }
+        } else {
+            urls = PhotosMedia.shared.album(albumURL)?.items.filter { added.contains($0.asset.localIdentifier) }.map { ($0.asset.localIdentifier, $0.url) } ?? []
+        }
         Task {
             for (id, url) in urls {
                 // Local resource reads only; cloud-only sizes remain explicitly unknown.
@@ -741,8 +780,66 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
     }
 
+    /// Reconcile ranking, group caps and grid geometry without blocking the UI.
+    /// Newer selections, album changes and layout revisions invalidate the work.
+    private func scheduleDeletionCalculation(for source: URL) {
+        guard photosAlbumURL == source, !pendingPhotoDeletions.isEmpty else { return }
+        deletionRecomputeTask?.cancel()
+        let token = UUID()
+        deletionCalculationToken = token
+        let revision = gridRevision
+        let generation = thumbnailGeneration
+        let pending = pendingPhotoDeletions
+        let snapshot = PhotosDeletionLayout.Input(
+            frames: frames, source: source, pendingAssets: pending,
+            favoriteAssets: favoriteAssetIdentifiers, favoriteFilter: favoriteFilter,
+            rarity: photoRarityScores, distance: photoDistanceScores, order: frameOrder,
+            faceFilter: faceFilter, limits: frameLimits, settings: settings,
+            revealedGroups: revealedGroups, groupingEnabled: groupingEnabled,
+            tagFilter: tagFilter, vocabulary: tagVocabulary, groups: groups,
+            defersVisualOrder: defersVisualOrder)
+        // Any previous route was computed for a different visible set.
+        visualOrderTask?.cancel()
+        visualOrderTask = nil
+        pendingVisualOrderInput = nil
+        visualOrderGeneration = UUID()
+        isSortingVisualDistance = false
+        deletionRecomputeTask = Task { [weak self] in
+            let worker = Task.detached(priority: .userInitiated) { try PhotosDeletionLayout.compute(snapshot) }
+            let result = await withTaskCancellationHandler {
+                try? await worker.value
+            } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self, let result,
+                  self.deletionCalculationToken == token, self.photosAlbumURL == source,
+                  self.thumbnailGeneration == generation, self.pendingPhotoDeletions == pending else { return }
+            guard self.gridRevision == revision else {
+                self.scheduleDeletionCalculation(for: source)
+                return
+            }
+            self.visualOrderBaseFrames = result.base
+            self.visualOrderIDs = result.visualIDs
+            self.completedVisualOrderInput = result.visualInput
+            self.displayedFrames = result.displayed
+            self.displayedRows = result.rows
+            self.displayOrderFrames = result.displayOrder
+            self.rowPosition = result.rowPosition
+            self.rowHeightRatios = result.rowHeightRatios
+            self.tagSummaryFrames = result.summaryFrames
+            self.topTagsByFrame = result.topTags
+            self.beyondCapByGroup = result.beyond
+            self.cappedGroupSummaries = result.capped
+            self.scheduleTagSummary()
+            self.invalidateGridLayout()
+            self.deletionRecomputeTask = nil
+        }
+    }
+
     func undoPendingPhotoDeletions() {
         guard !isDeletingPhotos else { return }
+        deletionRecomputeTask?.cancel()
+        deletionRecomputeTask = nil
+        deletionCalculationToken = UUID()
+        queuedDeletionFrameIDs.removeAll()
         deletionSizeGeneration = UUID()
         pendingPhotoDeletions.removeAll()
         deletionSizes.removeAll()
@@ -776,6 +873,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     }
                 }
                 let callbacks = deletionCallbacks
+                deletionRecomputeTask?.cancel()
+                deletionRecomputeTask = nil
+                deletionCalculationToken = UUID()
+                queuedDeletionFrameIDs.removeAll()
                 deletionSizeGeneration = UUID()
                 pendingPhotoDeletions.removeAll()
                 deletionSizes.removeAll()
@@ -2790,9 +2891,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         // Cache-based filters can outlive a live refresh. Resolve any repeated
         // IDs before ranking and group caps so one frame contributes once.
+        // Still-photo frame IDs come directly from their album offsets. Resolve
+        // queued assets once per pass rather than taking PhotoKit locks and
+        // searching the album for every candidate frame.
+        var pendingStillFrames = Set<FrameID>()
+        var hasPendingVideo = false
+        if !pendingPhotoDeletions.isEmpty, let source = photosAlbumURL,
+           let album = PhotosMedia.shared.album(source) {
+            for item in album.items where pendingPhotoDeletions.contains(item.asset.localIdentifier) {
+                if item.isStill { pendingStillFrames.insert(FrameID(sampleIndex: PhotosMedia.frameIndex(seconds: item.offset))) }
+                else { hasPendingVideo = true }
+            }
+        }
         func candidates(_ filter: TagFilter) -> [AnalyzedFrame] {
             uniqueFramesByID(filteredDisplayCandidates(grouping: grouping, filter: filter).filter { frame in
-            if let source = photosAlbumURL,
+            if pendingStillFrames.contains(frame.id) { return false }
+            if hasPendingVideo, let source = photosAlbumURL,
                let id = PhotosMedia.shared.assetIdentifier(for: source, seconds: frame.timeSeconds),
                pendingPhotoDeletions.contains(id) { return false }
             guard favoriteFilter != .all else { return true }
@@ -2937,14 +3051,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// direction reverses the cached route without recalculating any distances.
     private func visuallyOrderedFrames(_ shown: [AnalyzedFrame]) -> [AnalyzedFrame] {
         guard frameOrder.minimalVisualDistance.enabled, !defersVisualOrder, shown.count > 1 else {
-            if visualOrderTask != nil {
-                visualOrderTask?.cancel()
-                visualOrderTask = nil
-                pendingVisualOrderInput = nil
-                visualOrderGeneration = UUID()
-            }
+            visualOrderTask?.cancel()
+            visualOrderTask = nil
+            pendingVisualOrderInput = nil
+            visualOrderGeneration = UUID()
             if isSortingVisualDistance { isSortingVisualDistance = false }
-            if shown.isEmpty {
+            if shown.count <= 1 {
                 completedVisualOrderInput = nil
                 visualOrderIDs = []
             }
@@ -3256,7 +3368,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     func focusNeighbour(_ delta: Int, extendingSelection: Bool = false) {
-        guard uncover == nil else { return }
+        guard uncover == nil, delta != 0 else { return }
         let order = navigationOrder
         let frames = order.frames
         guard !frames.isEmpty else { return }
@@ -3267,8 +3379,20 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         }
         let target: AnalyzedFrame?
         if extendingSelection, let index = order.indexByID[current], frames.indices.contains(index + delta) {
-            target = frames[index + delta]
-        } else { target = order.neighbour(of: current, by: delta) }
+            var offset = index + delta
+            let pending = photosAlbumURL.flatMap { queuedDeletionFrameIDs[$0] } ?? []
+            while frames.indices.contains(offset), pending.contains(frames[offset].id) { offset += delta.signum() }
+            target = frames.indices.contains(offset) ? frames[offset] : nil
+        } else {
+            let pending = photosAlbumURL.flatMap { queuedDeletionFrameIDs[$0] } ?? []
+            var step = delta
+            var next = order.neighbour(of: current, by: step)
+            while let candidate = next, pending.contains(candidate.id) {
+                step += delta.signum()
+                next = order.neighbour(of: current, by: step)
+            }
+            target = next
+        }
         guard let target else { return }
         focus(on: target, extendingSelection: extendingSelection)
     }

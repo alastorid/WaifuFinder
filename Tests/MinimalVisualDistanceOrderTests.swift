@@ -4,6 +4,42 @@ import Vision
 func registerMinimalVisualDistanceOrderTests() {
     let suite = "frame arrangement: visual distance"
 
+    Registry.shared.add(suite: suite, TestCase(name: "single filtered match is published immediately with MVD enabled", knownBug: nil) {
+        let directory = try Temporary.directory("visual-single-match")
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            let frames = (0..<12).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0)) }
+            session.updateAnalyzedFrames(frames)
+            session.frameLimits.time.low = 11
+            check(!session.isComputingVisualDistance, "a singleton needs no route")
+            checkEqual(session.displayOrderFrames.map(\.id), [frames[11].id], "the one match reaches the grid immediately")
+            try await Task.sleep(for: .milliseconds(250))
+            checkEqual(session.displayOrderFrames.map(\.id), [frames[11].id], "an obsolete multi-photo route cannot replace the singleton")
+            session.frameLimits.time.low = 12
+            check(session.displayOrderFrames.isEmpty, "zero matches clear the grid")
+            session.frameLimits.time.low = 11
+            checkEqual(session.displayOrderFrames.map(\.id), [frames[11].id], "returning from zero to one match stays visible")
+            session.settings.tagTopCount = 3
+            session.settings.taggerThreshold = 0.8
+            session.tagFilter = TagFilter(requiredTags: ["test"], scoreSortTag: "test")
+            let revision = session.tagControlsResetRevision
+            session.resetTagControls()
+            checkEqual(session.settings.tagTopCount, WaifuSettings.default.tagTopCount, "Clear resets the Top slider")
+            checkEqual(session.settings.taggerThreshold, WaifuSettings.default.taggerThreshold, "Clear resets the threshold")
+            checkEqual(session.tagFilter, TagFilter(), "Clear resets every tag filter control")
+            checkEqual(session.tagControlsResetRevision, revision + 1, "the quick-filter view receives a complete reset")
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "native route verification reuses shared edges without changing route quality", knownBug: nil) {
+        let seed = [0,1,2,3,4,5]
+        var calls = 0
+        let result = try MinimalVisualDistanceOrder.verifiedRoute(seed: seed, proposed: Array(seed.reversed()), count: seed.count) {
+            calls += 1
+            return Double(abs($0 - $1))
+        }
+        checkEqual(result, seed, "equal-cost routes retain deterministic orientation")
+        checkEqual(calls, seed.count - 1, "shared/reversed edges are measured only once")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "a scrambled line becomes a shortest open path", knownBug: nil) {
         let positions = [0.0, 10, 1, 9, 2, 8, 3, 7, 4, 6, 5]
         let route = try MinimalVisualDistanceOrder.path(count: positions.count) {

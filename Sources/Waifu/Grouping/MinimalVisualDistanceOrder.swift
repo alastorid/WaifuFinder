@@ -5,6 +5,8 @@ import Vision
 /// Vision distance as grouping. No time window applies to this global order.
 enum MinimalVisualDistanceOrder {
     static func sorted(_ frames: [AnalyzedFrame], reversed: Bool = false) throws -> [AnalyzedFrame] {
+        try Task.checkCancellation()
+        guard frames.count > 1 else { return frames }
         var observations: [FeaturePrintObservation] = []
         var eligible: [AnalyzedFrame] = []
         var missing: [AnalyzedFrame] = []
@@ -20,7 +22,9 @@ enum MinimalVisualDistanceOrder {
         let indices: [Int]
         if eligible.count > 1, eligible.count <= CuOptMetalTSP.vectorLimit,
            let vectors = VisualFeatureVectors(observations: observations) {
-            let seed = try path(count: eligible.count) { Double(vectors.distance($0, $1)) }
+            let seed = try vectors.withDistances { distance in
+                try path(count: eligible.count) { Double(distance($0, $1)) }
+            }
             let seeds = CuOptTSP.seeds(from: seed)
             let proposed: [Int]
             do {
@@ -41,11 +45,8 @@ enum MinimalVisualDistanceOrder {
             }
             // Check the full proposed objective with Vision itself. Float kernels
             // and metric sampling cannot cause a worse native-distance sequence.
-            var best = seed
-            var bestCost = try nativeCost(seed, observations: observations)
-            for route in [Array(0..<eligible.count), proposed] {
-                let cost = try nativeCost(route, observations: observations)
-                if cost < bestCost { best = route; bestCost = cost }
+            var best = try verifiedRoute(seed: seed, proposed: proposed, count: eligible.count) {
+                try? observations[$0].distance(to: observations[$1])
             }
             if best[0] > best[best.count - 1] { best.reverse() }
             indices = best
@@ -59,16 +60,31 @@ enum MinimalVisualDistanceOrder {
         return reversed ? Array(ordered.reversed()) : ordered
     }
 
-    private static func nativeCost(_ route: [Int], observations: [FeaturePrintObservation]) throws -> Double {
-        var cost = 0.0
-        for (left, right) in zip(route, route.dropFirst()) {
-            try Task.checkCancellation()
-            guard let distance = try? observations[left].distance(to: observations[right]), distance.isFinite else {
-                return .infinity
+    /// The three candidate routes share many edges. Validate each distinct
+    /// undirected edge once with Vision; storage grows linearly, never as n².
+    static func verifiedRoute(seed: [Int], proposed: [Int], count: Int,
+                              distance: (Int, Int) -> Double?) throws -> [Int] {
+        var edges: [UInt64: Double] = [:]
+        edges.reserveCapacity(3 * max(0, count - 1))
+        func cost(_ route: [Int]) throws -> Double {
+            var total = 0.0
+            for (left, right) in zip(route, route.dropFirst()) {
+                try Task.checkCancellation()
+                let key = UInt64(min(left, right)) * UInt64(count) + UInt64(max(left, right))
+                if let cached = edges[key] { total += cached; continue }
+                let value = distance(left, right).flatMap { $0.isFinite ? $0 : nil } ?? .infinity
+                edges[key] = value
+                total += value
             }
-            cost += distance
+            return total
         }
-        return cost
+        var best = seed
+        var bestCost = try cost(seed)
+        for route in [Array(0..<count), proposed] where route != seed {
+            let candidateCost = try cost(route)
+            if candidateCost < bestCost { best = route; bestCost = candidateCost }
+        }
+        return best
     }
 
     /// A metric seam lets route quality and scaling be checked without Vision.

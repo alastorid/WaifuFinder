@@ -3,6 +3,30 @@ import Foundation
 
 func registerPhotosIncrementalAnalysisTests() {
     let suite = "Photos incremental analysis"
+    Registry.shared.add(suite: suite, TestCase(name: "deletion layout replaces capped photos off the main thread", knownBug: nil) {
+        let group = FrameGroupID(raw: "delete-group")
+        let frames = (1...3).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0), groupID: group) }
+        var settings = WaifuSettings.default
+        settings.perGroupFrameCount = 1
+        settings.revealAllGroups = false
+        let input = PhotosDeletionLayout.Input(frames: frames,
+            source: URL(string: "waifu-photos://album/layout-test")!, pendingAssets: ["1"],
+            favoriteAssets: [], favoriteFilter: .all, rarity: [:], distance: [:],
+            order: .only([.time]), faceFilter: .all, limits: .none, settings: settings,
+            revealedGroups: [], groupingEnabled: true, tagFilter: TagFilter(), vocabulary: nil,
+            groups: [FrameGroup(id: group, memberIDs: frames.map(\.id.raw))], defersVisualOrder: false)
+        let threads = TickLog()
+        let output = try await Task.detached {
+            try PhotosDeletionLayout.compute(input) { _, seconds in
+                threads.record(Thread.isMainThread ? 1 : 0)
+                return String(Int(seconds))
+            }
+        }.value
+        checkEqual(output.displayed.map(\.id), [frames[1].id], "the next ranked group member fills the deleted slot")
+        checkEqual(output.displayOrder.map(\.id), [frames[1].id], "grid navigation follows the replacement")
+        checkEqual(output.beyond[group], 1, "the group cap counts the remaining hidden photo")
+        check(!threads.all.isEmpty && threads.all.allSatisfy { $0 == 0 }, "asset lookups and layout run away from the main thread")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "cloud-only first photo cannot block cached photos later in the album", knownBug: nil) {
         let tiny = try ImageFixture.cgImage(width: 64, height: 64)
         let log = PhotosAnalysisTestLog()

@@ -54,6 +54,10 @@ struct FrameGridView: View {
     /// The rung a pinch started from, so cumulative magnification scales one base.
     @State private var pinchBaseWidth: CGFloat?
     @State private var deletionRevision = 0
+    @State private var selectedCellBounds: [FrameID: CGRect] = [:]
+    @State private var heldDeletionBorder: CGRect?
+    @State private var heldDeletionIDs: Set<FrameID> = []
+    @State private var borderReleaseTask: Task<Void, Never>?
 
     private let spacing: CGFloat = 1
     private let padding: CGFloat = 1
@@ -75,6 +79,32 @@ struct FrameGridView: View {
         .overlay(alignment: .bottomTrailing) {
             PendingPhotoDeletionView(session: session).padding(12)
                 .animation(.easeInOut(duration: 0.33), value: session.pendingPhotoDeletions.isEmpty)
+        }
+        .overlay(alignment: .topLeading) {
+            if let rect = heldDeletionBorder {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .strokeBorder(Color.blue, lineWidth: 4)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .onPreferenceChange(GridSelectedCellBoundsKey.self) { selectedCellBounds = $0 }
+        .onReceive(session.$gridDeletionEvent.dropFirst().receive(on: DispatchQueue.main)) { event in
+            guard let event, session.previewFrame == nil else { return }
+            thumbnailStage.cancelPending()
+            thumbnailStage.freezeDeletionPreparation()
+            borderReleaseTask?.cancel()
+            if heldDeletionBorder == nil { heldDeletionBorder = selectedCellBounds[event.focusedFrameID] }
+            heldDeletionIDs.formUnion(event.removedFrameIDs)
+        }
+        .onReceive(session.$pendingPhotoDeletions.dropFirst().receive(on: DispatchQueue.main)) { pending in
+            if pending.isEmpty {
+                borderReleaseTask?.cancel()
+                heldDeletionBorder = nil
+                heldDeletionIDs.removeAll()
+            }
         }
         .onAppear { if !session.frames.isEmpty { isFocused = true } }
     }
@@ -110,20 +140,38 @@ struct FrameGridView: View {
         .onAppear {
             thumbnailStage.onCommit = { [weak session] snapshot in
                 session?.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+                if !heldDeletionIDs.isEmpty,
+                   heldDeletionIDs.allSatisfy({ snapshot.navigation.indexByID[$0] == nil }) {
+                    borderReleaseTask?.cancel()
+                    borderReleaseTask = Task { @MainActor in
+                        do { try await Task.sleep(for: .milliseconds(330)) } catch { return }
+                        heldDeletionBorder = nil
+                        heldDeletionIDs.removeAll()
+                    }
+                }
             }
             if let snapshot = thumbnailStage.current {
                 session.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
             }
             prepareStage(size: size)
+            prepareDeletionStage(size: size, selected: session.selectedFrameIDs)
             if let snapshot = thumbnailStage.current {
                 thumbnailPrefetcher.install(snapshot: snapshot, session: session)
             }
         }
-        .onDisappear { thumbnailStage.stop(); thumbnailPrefetcher.stop() }
+        .onDisappear {
+            thumbnailStage.stop(); thumbnailPrefetcher.stop()
+            borderReleaseTask?.cancel()
+            heldDeletionBorder = nil
+            heldDeletionIDs.removeAll()
+        }
         .onReceive(session.gridLayoutUpdates) { _ in
             let deleting = deletionRevision != session.deletionLayoutRevision
             deletionRevision = session.deletionLayoutRevision
-            prepareStage(size: size, animated: deleting)
+            prepareStage(size: size, animated: deleting, immediate: deleting)
+        }
+        .onReceive(session.$selectedFrameIDs.removeDuplicates().receive(on: DispatchQueue.main)) { selected in
+            prepareDeletionStage(size: size, selected: selected)
         }
         .onChange(of: size) { _, _ in
             prepareStage(size: size)
@@ -297,16 +345,10 @@ struct FrameGridView: View {
         max(1, Int((width - padding * 2) / (zoomTarget + spacing)))
     }
 
-    private func prepareStage(size: CGSize, animated: Bool = false) {
+    private func prepareStage(size: CGSize, animated: Bool = false, immediate: Bool = false) {
         let generation = session.thumbnailGeneration
-        let key = GridStageKey(revision: session.gridRevision, generation: generation, width: size.width,
-            columns: columnCount(in: size.width), groupColumns: rowColumnCount,
-            grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
-            square: usesSquareThumbnails, targetWidth: zoomTarget)
-        let input = GridStageInput(key: key, sourceURL: session.photosAlbumURL ?? session.video?.url,
-            rows: session.displayedRows, frames: session.displayOrderFrames,
-            beyondCap: session.beyondCapByGroup, revealed: session.revealedGroups)
-        thumbnailStage.submit(input, viewportSize: size, animated: animated) { [weak session] frame in
+        let input = stageInput(size: size)
+        thumbnailStage.submit(input, viewportSize: size, animated: animated, immediate: immediate) { [weak session] frame in
             await GridThumbnailWorkPriority.shared.withVisibleWork {
                 guard let session, session.thumbnailGeneration == generation,
                       let data = await session.thumbnailData(for: frame, retainRegeneratedThumbnail: false),
@@ -314,6 +356,22 @@ struct FrameGridView: View {
                 return await GridThumbnailLoader.shared.image(data: data, identity: generation.uuidString + ":" + frame.thumbnailKey)
             }
         }
+    }
+
+    private func prepareDeletionStage(size: CGSize, selected: Set<FrameID>) {
+        guard session.photosAlbumURL != nil, session.previewFrame == nil, selected.count == 1 else { return }
+        thumbnailStage.prepareDeletion(stageInput(size: size), removing: selected)
+    }
+
+    private func stageInput(size: CGSize) -> GridStageInput {
+        let generation = session.thumbnailGeneration
+        let key = GridStageKey(revision: session.gridRevision, generation: generation, width: size.width,
+            columns: columnCount(in: size.width), groupColumns: rowColumnCount,
+            grouped: session.usesGroupRows, photosSource: session.photosAlbumURL != nil,
+            square: usesSquareThumbnails, targetWidth: zoomTarget)
+        return GridStageInput(key: key, sourceURL: session.photosAlbumURL ?? session.video?.url,
+            rows: session.displayedRows, frames: session.displayOrderFrames,
+            beyondCap: session.beyondCapByGroup, revealed: session.revealedGroups)
     }
 
     // MARK: - Cells
@@ -330,6 +388,7 @@ struct FrameGridView: View {
             sourceURL: snapshot.sourceURL,
             isPhotosSource: snapshot.key.photosSource,
             squareThumbnail: snapshot.key.square,
+            suppressSelectionBorder: heldDeletionBorder != nil,
             topTags: session.topTagsByFrame[frame.id] ?? [],
             topTagFilterActive: session.settings.tagTopCount < 99
         )
@@ -496,10 +555,18 @@ struct FrameGridView: View {
             }
         }
         Divider()
-        Button("Copy Timecode") {
-            NSPasteboard.general.clearContents()
-            let sourceTime = session.video.map { VideoCollection.resolve($0.url, seconds: frame.timeSeconds).seconds } ?? frame.timeSeconds
-            NSPasteboard.general.setString(timecode(sourceTime), forType: .string)
+        if let photoURL {
+            Button("Copy File Name") {
+                guard let name = PhotoMetadataService.shared.filename(for: photoURL) else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(name, forType: .string)
+            }
+        } else {
+            Button("Copy Timecode") {
+                NSPasteboard.general.clearContents()
+                let sourceTime = session.video.map { VideoCollection.resolve($0.url, seconds: frame.timeSeconds).seconds } ?? frame.timeSeconds
+                NSPasteboard.general.setString(timecode(sourceTime), forType: .string)
+            }
         }
     }
 }
@@ -514,6 +581,13 @@ private struct GridRowViewportPreferenceKey: PreferenceKey {
 }
 
 /// A single frame cell: picture, source ordinal, and inward selection border.
+private struct GridSelectedCellBoundsKey: PreferenceKey {
+    static let defaultValue: [FrameID: CGRect] = [:]
+    static func reduce(value: inout [FrameID: CGRect], nextValue: () -> [FrameID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, newest in newest })
+    }
+}
+
 private struct FrameCell: View {
     let session: WaifuSession
     let frame: AnalyzedFrame
@@ -524,10 +598,12 @@ private struct FrameCell: View {
     let sourceURL: URL?
     let isPhotosSource: Bool
     let squareThumbnail: Bool
+    let suppressSelectionBorder: Bool
     let topTags: [String]
     let topTagFilterActive: Bool
     @StateObject private var thumbnail: GridThumbnailPresentation
     @State private var isSelected: Bool
+    @State private var isQueuedForDeletion: Bool
     @AppStorage("photosEffectiveDownloadFromICloud") private var cloudDownloads = false
     @State private var isThumbnailVisible = false
     @State private var isHovered = false
@@ -535,16 +611,20 @@ private struct FrameCell: View {
 
     init(session: WaifuSession, frame: AnalyzedFrame, thumbnailKey: String, generation: UUID, width: CGFloat,
          sourceAspect: CGFloat, sourceURL: URL?, isPhotosSource: Bool, squareThumbnail: Bool,
+         suppressSelectionBorder: Bool,
          topTags: [String], topTagFilterActive: Bool) {
         self.session = session; self.frame = frame; self.thumbnailKey = thumbnailKey
         self.generation = generation; self.width = width
         self.sourceAspect = sourceAspect; self.sourceURL = sourceURL
         self.isPhotosSource = isPhotosSource; self.squareThumbnail = squareThumbnail
+        self.suppressSelectionBorder = suppressSelectionBorder
         self.topTags = topTags
         self.topTagFilterActive = topTagFilterActive
         let identity = generation.uuidString + ":" + thumbnailKey
         _thumbnail = StateObject(wrappedValue: GridThumbnailPresentation(identity: identity))
         _isSelected = State(initialValue: session.selectedFrameIDs.contains(frame.id))
+        let asset = sourceURL.flatMap { PhotosMedia.shared.assetIdentifier(for: $0, seconds: frame.timeSeconds) }
+        _isQueuedForDeletion = State(initialValue: asset.map { session.pendingPhotoDeletions.contains($0) } ?? false)
     }
 
     private var thumbnailIdentity: String {
@@ -566,6 +646,14 @@ private struct FrameCell: View {
                 .padding(3)
                 .frame(maxWidth: width, maxHeight: height, alignment: .topLeading)
                 .clipped()
+            }
+        }
+        .background {
+            if isSelected {
+                GeometryReader { proxy in
+                    Color.clear.preference(key: GridSelectedCellBoundsKey.self,
+                        value: [frame.id: proxy.frame(in: .named("frame-grid-viewport"))])
+                }
             }
         }
         .overlay(alignment: .bottomLeading) {
@@ -591,23 +679,29 @@ private struct FrameCell: View {
         .overlay {
             if visibleThumbnail != nil {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .strokeBorder(isSelected ? Color.blue : Color.primary.opacity(0.12),
-                                  lineWidth: isSelected ? 4 : 1)
+                    .strokeBorder(isSelected && !suppressSelectionBorder ? Color.blue : Color.primary.opacity(0.12),
+                                  lineWidth: isSelected && !suppressSelectionBorder ? 4 : 1)
                     .allowsHitTesting(false)
             }
         }
+        .opacity(isQueuedForDeletion ? 0 : 1)
         // Keep the empty slot measurable so late arrivals can detect stage entry.
-        .allowsHitTesting(visibleThumbnail != nil)
+        .allowsHitTesting(visibleThumbnail != nil && !isQueuedForDeletion)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(isPhotosSource ? "Photo thumbnail" : "Frame thumbnail")
         .accessibilityIdentifier("frame-thumbnail-\(frame.id.sampleIndex)")
-        .accessibilityHidden(visibleThumbnail == nil)
+        .accessibilityHidden(visibleThumbnail == nil || isQueuedForDeletion)
         .onScrollVisibilityChange(threshold: 0.01) { isThumbnailVisible = $0 }
         // Progress, tagging, and player updates must not redraw every thumbnail.
         // Only cells whose selection membership changed need a new border.
         .onReceive(session.$selectedFrameIDs.map { $0.contains(frame.id) }.removeDuplicates()) {
             isSelected = $0
         }
+        .onReceive(session.$pendingPhotoDeletions.map { pending in
+            guard let sourceURL, isPhotosSource,
+                  let asset = PhotosMedia.shared.assetIdentifier(for: sourceURL, seconds: frame.timeSeconds) else { return false }
+            return pending.contains(asset)
+        }.removeDuplicates()) { isQueuedForDeletion = $0 }
         .task(id: isThumbnailVisible ? thumbnailIdentity : nil) {
             guard isThumbnailVisible else {
                 thumbnail.disappear(identity: thumbnailIdentity)

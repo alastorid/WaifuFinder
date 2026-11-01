@@ -13,4 +13,4 @@ SWIFTC="$(xcrun --find swiftc)"
     "$ROOT/tools/benchmark-visual-sort.swift" \
     -framework Foundation -framework Vision -framework Metal -framework Accelerate \
     -o "$BUILD/benchmark"
-"$BUILD/benchmark"
+"$BUILD/benchmark" "$@"
