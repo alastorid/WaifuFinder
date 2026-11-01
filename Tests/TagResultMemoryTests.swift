@@ -6,6 +6,24 @@ import Foundation
 /// even when no photo had been edited, and every cached tag was discarded.
 func registerTagResultMemoryTests() {
     let suite = "Tag result memory"
+    Registry.shared.add(suite: suite, TestCase(name: "a per-photo album cache batch sweeps expiry once and preserves every result", knownBug: nil) {
+        let directory = try Temporary.directory("tag-cache-batch-maintenance")
+        let disk = TagResultDiskCache(fileURL: directory.appendingPathComponent("tags.db"))
+        var groups: [TagResultCacheIdentity: [TagResultMemoryRecord]] = [:]
+        for index in 0..<256 {
+            let identity = TagResultCacheIdentity(sourcePath: "photo-\(index)", sourceSize: 1,
+                sourceModifiedMilliseconds: 1, analysisWidth: 512, vocabularyFingerprint: 1)
+            groups[identity] = [TagResultMemoryRecord(sampleIndex: 0, compressedSparseScores: Data([1,2,3]))]
+        }
+        let written = try await disk.rememberBatch(groups.map { ($0.key, $0.value) }, retentionDays: 30)
+        checkEqual(written.entryCount, 256, "all photo identities are persisted")
+        checkEqual(await disk.expirySweepCount, 1, "expiry is scanned once per album batch, not once per photo")
+        let repeated = try await disk.rememberBatch(groups.map { ($0.key, $0.value) }, retentionDays: 30)
+        checkEqual(repeated.fileSize, written.fileSize, "unchanged results never append duplicate bytes")
+        checkEqual(await disk.expirySweepCount, 2, "a repeated batch also uses only one sweep")
+        let result = try await disk.results(for: Array(groups.keys), retentionDays: 30)
+        checkEqual(result.probabilitiesByIdentity.count, 256, "batch results remain readable")
+    })
 
     Registry.shared.add(suite: suite, TestCase(name: "keyword writes preserve tags across ten cache restarts without accepting later edits", knownBug: nil) {
         let vocabulary = try tagVocabularyFixture()

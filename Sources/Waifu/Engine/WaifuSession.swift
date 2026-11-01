@@ -162,10 +162,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     // MARK: Video state
 
     @Published private(set) var video: VideoInfo?
+    @Published private(set) var photosLocalPassRunning = false
     @Published private(set) var progress: AnalysisProgress = .init() {
         didSet {
             guard oldValue.isRunning != progress.isRunning, photosAlbumURL != nil else { return }
             scheduleTagSummary()
+            // Derived scores use the completed source, not every growing prefix.
+            schedulePhotoDistance()
+            schedulePhotoRarity()
         }
     }
     @Published private(set) var isRegrouping = false
@@ -223,13 +227,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var photoDistanceScores: [FrameID: Float] = [:]
     private var photoDistanceInput: [VisualOrderInput]?
     private var photoDistanceTask: Task<Void, Never>?
+    private(set) var photoDistanceCalculationCount = 0
 
     private func schedulePhotoDistance() {
+        guard !defersVisualOrder, !isLoadingPhotosAlbum, frames.count > 1,
+              frameOrder.photoDistance.enabled || !frameLimits.photoDistance.isUnlimited else {
+            photoDistanceTask?.cancel()
+            photoDistanceTask = nil
+            photoDistanceInput = nil
+            return
+        }
         let input = frames.map { VisualOrderInput(id: $0.id, featurePrint: $0.featurePrint) }
         guard input != photoDistanceInput else { return }
         photoDistanceInput = input
         photoDistanceTask?.cancel()
         let source = frames
+        photoDistanceCalculationCount += 1
         photoDistanceTask = Task { [weak self] in
             let worker = Task.detached(priority: .utility) { try PhotoNearestDistance.scores(source) }
             let scores = await withTaskCancellationHandler {
@@ -250,8 +263,15 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var photoRarityScores: [FrameID: Float] = [:]
     private var photoRarityInput: String?
     private var photoRarityTask: Task<Void, Never>?
+    private(set) var photoRarityCalculationCount = 0
 
     private func schedulePhotoRarity() {
+        guard !defersVisualOrder, !isLoadingPhotosAlbum else {
+            photoRarityTask?.cancel()
+            photoRarityTask = nil
+            photoRarityInput = nil
+            return
+        }
         guard !taggingProgress.isRunning else { return }
         let key = "\(tagSummaryRevision)-\(settings.taggerThreshold)-\(tagVocabulary?.cacheFingerprint ?? 0)"
         guard key != photoRarityInput else { return }
@@ -259,6 +279,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         photoRarityReady = false
         photoRarityTask?.cancel()
         let source = frames, vocabulary = tagVocabulary, threshold = settings.taggerThreshold
+        photoRarityCalculationCount += 1
         photoRarityTask = Task { [weak self] in
             let worker = Task.detached(priority: .utility) {
                 try PhotoTagRarity.scores(source, vocabulary: vocabulary, threshold: threshold)
@@ -1581,6 +1602,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Cancels any running analysis.
     func cancel() {
         analysisTask?.cancel()
+        photosLocalPassRunning = false
         analysisGeneration = UUID()
         // Retain the handle until replacement: a later Photos retry must also
         // join a pass that the user already cancelled with the stop button.
@@ -2424,6 +2446,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             else { throw AnalysisError.noVideo }
 
             let album = PhotosMedia.shared.album(videoInfo.url)
+            await setPhotosLocalPassRunning(album != nil && !allowNetwork, token: token)
             let retained = await photosCheckpoint?.frames() ?? []
             try Task.checkCancellation()
             let analysisWidth = album == nil ? settings.analysisWidth : PhotosMedia.analysisPixelSize
@@ -2634,6 +2657,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         guard analysisGeneration == token, !self.progress.isTerminal else { return }
         self.progress = progress
     }
+
+    private func setPhotosLocalPassRunning(_ running: Bool, token: UUID) {
+        guard analysisGeneration == token else { return }
+        photosLocalPassRunning = running
+    }
     private func completeFocusedRangeAnalysis(frames incoming: [AnalyzedFrame], groups: [FrameGroup],
                                               progress: AnalysisProgress, token: UUID) async {
         guard analysisGeneration == token else { return }
@@ -2683,6 +2711,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         taggingVocabularyFingerprint = tagVocabulary?.cacheFingerprint
         self.groups = groups
         updateAnalyzedFrames(completedFrames)
+        photosLocalPassRunning = false
         self.progress = progress
         analysisTask = nil
         isRegrouping = false
@@ -2692,6 +2721,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
     private func failAnalysis(progress: AnalysisProgress, error: Error, token: UUID) {
         guard analysisGeneration == token else { return }
+        photosLocalPassRunning = false
         if !(error is CancellationError) { errorMessage = error.localizedDescription }
         self.progress = progress
         analysisTask = nil

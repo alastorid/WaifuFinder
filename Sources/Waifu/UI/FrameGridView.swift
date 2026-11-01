@@ -716,9 +716,9 @@ private struct FrameCell: View {
                 }
             }
         }
-        .task(id: "\(thumbnailIdentity)|\(isThumbnailVisible)|\(cloudDownloads)|\(session.previewFrame != nil)") {
+        .task(id: "\(thumbnailIdentity)|\(isThumbnailVisible)|\(cloudDownloads)|\(session.previewFrame != nil)|\(session.photosLocalPassRunning)") {
             guard isThumbnailVisible, cloudDownloads, isPhotosSource,
-                  session.previewFrame == nil, let sourceURL else { return }
+                  session.previewFrame == nil, !session.photosLocalPassRunning, let sourceURL else { return }
             let identity = thumbnailIdentity
             let (photoURL, _) = PhotosMedia.shared.resolve(sourceURL, seconds: frame.timeSeconds)
             do {

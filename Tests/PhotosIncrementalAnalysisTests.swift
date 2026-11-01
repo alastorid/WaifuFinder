@@ -3,6 +3,26 @@ import Foundation
 
 func registerPhotosIncrementalAnalysisTests() {
     let suite = "Photos incremental analysis"
+    Registry.shared.add(suite: suite, TestCase(name: "loading prefixes never launch unused all-pairs distance or rarity jobs", knownBug: nil) {
+        let directory = try Temporary.directory("photos-loading-derived-work")
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let frames = (0..<256).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0)) }
+            let rarityBefore = session.photoRarityCalculationCount
+            for count in stride(from: 64, through: 256, by: 64) {
+                session.updateAnalyzedFrames(Array(frames.prefix(count)), isProgressive: true)
+            }
+            checkEqual(session.photoDistanceCalculationCount, 0, "MVD-off loading must not start quadratic distance work")
+            checkEqual(session.photoRarityCalculationCount, rarityBefore, "rarity waits for the completed source")
+            session.updateAnalyzedFrames(frames)
+            checkEqual(session.photoDistanceCalculationCount, 0, "unused photo distance remains lazy after loading")
+            checkEqual(session.photoRarityCalculationCount, rarityBefore + 1, "rarity runs once on the complete source")
+            session.frameOrder = .only([.photoDistance])
+            checkEqual(session.photoDistanceCalculationCount, 1, "explicit photo distance still schedules its calculation")
+            session.updateAnalyzedFrames([])
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "deletion layout replaces capped photos off the main thread", knownBug: nil) {
         let group = FrameGroupID(raw: "delete-group")
         let frames = (1...3).map { FrameFixture.make(id: String(format: "f%06d", $0), time: Double($0), groupID: group) }

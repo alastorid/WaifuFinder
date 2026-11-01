@@ -257,12 +257,10 @@ final class TagResultMemory: ObservableObject {
         }.value
         guard rememberTaggingResults else { return }
         guard !records.isEmpty else { return }
-        for (identity, group) in records {
-            do {
-                apply(try await disk.remember(group, for: identity, retentionDays: retentionDays))
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+        do {
+            apply(try await disk.rememberBatch(records, retentionDays: retentionDays))
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -274,9 +272,7 @@ final class TagResultMemory: ObservableObject {
         let retentionDays = self.retentionDays
         let finished = DispatchSemaphore(value: 0)
         Task.detached(priority: .utility) {
-            for (identity, group) in Self.records(from: frames, keys: keys) {
-                _ = try? await disk.remember(group, for: identity, retentionDays: retentionDays)
-            }
+            _ = try? await disk.rememberBatch(Self.records(from: frames, keys: keys), retentionDays: retentionDays)
             finished.signal()
         }
         finished.wait()
@@ -496,11 +492,24 @@ actor TagResultDiskCache {
 
     func remember(_ records: [TagResultMemoryRecord], for identity: TagResultCacheIdentity,
                   retentionDays: Int) throws -> TagResultCacheStats {
+        try rememberBatch([(identity, records)], retentionDays: retentionDays)
+    }
+
+    /// Photos use one identity per asset. Sweep expiry once for the complete
+    /// batch instead of rescanning the entire cache for every photo.
+    func rememberBatch(_ groups: [(TagResultCacheIdentity, [TagResultMemoryRecord])],
+                  retentionDays: Int) throws -> TagResultCacheStats {
         try loadIndexIfNeeded()
         try pruneExpired(retentionDays: retentionDays)
-        guard !records.isEmpty else { return makeStats() }
+        for (identity, records) in groups { try appendRecords(records, for: identity) }
+        try compactIfNeeded()
+        return makeStats()
+    }
+
+    private func appendRecords(_ records: [TagResultMemoryRecord], for identity: TagResultCacheIdentity) throws {
+        guard !records.isEmpty else { return }
         guard let pathData = identity.sourcePath.data(using: .utf8),
-              !pathData.isEmpty, pathData.count <= 1_048_576 else { return makeStats() }
+              !pathData.isEmpty, pathData.count <= 1_048_576 else { return }
 
         try ensureFileExists()
         let existingData = try readMappedDataIfPresent()
@@ -553,8 +562,6 @@ actor TagResultDiskCache {
             mappedData = nil
         }
 
-        try compactIfNeeded()
-        return makeStats()
     }
 
     private static var nowMilliseconds: UInt64 {
@@ -662,7 +669,10 @@ actor TagResultDiskCache {
         return data
     }
 
+    private(set) var expirySweepCount = 0
+
     private func pruneExpired(retentionDays: Int) throws {
+        expirySweepCount += 1
         guard !latestRecordsByIdentity.isEmpty else { return }
         let validDays = min(max(retentionDays, 1), 36_500)
         let retentionMilliseconds = UInt64(validDays) * 86_400_000

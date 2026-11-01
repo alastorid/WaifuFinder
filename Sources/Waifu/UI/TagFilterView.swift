@@ -6,10 +6,14 @@ import UniformTypeIdentifiers
 struct TagFilterView: View {
     @ObservedObject var session: WaifuSession
     @State private var quickFilterText = ""
-    @State private var collapsedGroups: Set<String> = [TagRarity.normal.title]
+    @State private var collapsedGroups: Set<String> = defaultCollapsedGroups
     @AppStorage("tagFilterGroupByRarity") private var groupingEnabled = false
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
+
+    private static var defaultCollapsedGroups: Set<String> {
+        Set(TagRarity.allCases.filter { $0 != .legendary }.map(\.title))
+    }
 
     private var enabled: Bool {
         session.previewFrame == nil && session.uncover == nil && !session.progress.isRunning
@@ -207,7 +211,10 @@ struct TagFilterView: View {
             selectedTags.removeAll()
             selectionRect = nil
             groupingEnabled = false
-            collapsedGroups = [TagRarity.normal.title]
+            collapsedGroups = Self.defaultCollapsedGroups
+        }
+        .onChange(of: groupingEnabled) { _, enabled in
+            if enabled { collapsedGroups = Self.defaultCollapsedGroups }
         }
         .onChange(of: quickFilterText) { _, text in
             if !text.isEmpty { collapsedGroups.removeAll() }
