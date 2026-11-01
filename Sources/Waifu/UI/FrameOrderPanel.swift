@@ -60,7 +60,7 @@ struct FrameOrderPanel: View {
     @State private var orderExpanded = true
     @State private var groupingExpanded = true
     @State private var tagsExpanded = true
-    @AppStorage("tagFilterGroupByRarity") private var groupTagsByRarity = false
+    @AppStorage("tagFilterRarityGrouping") private var groupTagsByRarity = true
 
     var body: some View {
         ScrollView {
@@ -326,8 +326,9 @@ struct FrameOrderPanel: View {
     }
 
     private var tagsPanel: some View {
-        collapsiblePanel(title: "Tags", isExpanded: $tagsExpanded) {
-                Button("Clear", action: session.resetTagControls)
+        collapsiblePanel(title: "Tags", isExpanded: $tagsExpanded,
+                         leadingAccessory: AnyView(rarityGroupingTag)) {
+            Button("Clear", action: clearTagControls)
                 .buttonStyle(.borderless)
                 .font(.caption)
         } content: {
@@ -335,20 +336,54 @@ struct FrameOrderPanel: View {
         }
     }
 
+    /// A tag-shaped two-state control. Rarity is the default; one click shows the
+    /// ungrouped list, and the next returns to rarity bands.
+    private var rarityGroupingTag: some View {
+        Button {
+            groupTagsByRarity.toggle()
+        } label: {
+            Text(groupTagsByRarity ? "rarity" : "none")
+                .font(.system(size: 12))
+                .foregroundStyle(groupTagsByRarity ? Color.accentColor : Color.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    groupTagsByRarity ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule().strokeBorder(
+                        groupTagsByRarity ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.16)
+                    )
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Tag grouping: click to switch between rarity bands and none")
+        .accessibilityLabel("Tag grouping")
+        .accessibilityValue(groupTagsByRarity ? "Rarity" : "None")
+    }
+
+    /// Clear restores the default rarity bands even when the panel is collapsed
+    /// and its TagFilterView is not mounted to observe the reset.
+    private func clearTagControls() {
+        groupTagsByRarity = true
+        session.resetTagControls()
+    }
+
     /// Bordered panel with an independently controlled disclosure header.
     private func collapsiblePanel<Accessory: View, Content: View>(
         title: String,
         isExpanded: Binding<Bool>,
         titleAccessory: AnyView? = nil,
+        leadingAccessory: AnyView? = nil,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: isExpanded.wrappedValue ? 8 : 0) {
             HStack(spacing: 8) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        isExpanded.wrappedValue.toggle()
-                    }
+                    togglePanel(isExpanded)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.right")
@@ -359,18 +394,24 @@ struct FrameOrderPanel: View {
                         if let titleAccessory {
                             titleAccessory
                         }
-                        Spacer(minLength: 0)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .contextMenu {
-                    if title == "Tags" {
-                        Toggle("Group by rarity", isOn: $groupTagsByRarity)
-                    }
-                }
                 .accessibilityLabel("\(title) panel")
                 .accessibilityValue(isExpanded.wrappedValue ? "Expanded" : "Collapsed")
+
+                if let leadingAccessory {
+                    leadingAccessory
+                }
+
+                // Keep the empty part of the header clickable even though the
+                // disclosure button no longer stretches under the trailing controls.
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture { togglePanel(isExpanded) }
+                    .accessibilityHidden(true)
 
                 accessory()
             }
@@ -380,6 +421,12 @@ struct FrameOrderPanel: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func togglePanel(_ isExpanded: Binding<Bool>) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isExpanded.wrappedValue.toggle()
+        }
     }
 
     /// One step of the grouping knob, for the arrow keys. The stepping itself lives in

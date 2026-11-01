@@ -15,11 +15,17 @@ sort after numerically scored tags; equal means use alphabetical ordering.
 ## Tag controls and rarity
 
 Top and Threshold are always available and active; the legacy Basic/Advanced
-preference no longer changes filtering. Tags appear in a flat list by default.
-Right-click the Tags panel heading and enable **Group by rarity** to show four
-exclusive bands based on matching-photo count divided by candidate-photo count:
-orange below 1%, yellow from 1% to below 5%, blue from 5% to below 10%, and white
-for the rest. Rest starts collapsed. Exact boundary values enter the next band.
+preference no longer changes filtering. With rarity grouping on, tags present on
+every candidate frame appear first in a quiet **Common** group. Wanted and
+unwanted tags follow in their own sections, then OR groups, then four exclusive
+rarity bands for the remaining tags. Selected tags therefore leave the rarity
+bands as soon as the filter takes a position on them. The rarity bands use
+matching-photo count divided by candidate-photo count: orange below 1%, yellow
+from 1% to below 5%, blue from 5% to below 10%, and white for the rest. The
+under-1% band starts expanded and the other bands start collapsed. Use the
+two-stage **none / rarity** slider beside the Tags panel's **Clear** button to
+switch to a flat list. Clear restores rarity grouping. Exact boundary values
+enter the next band.
 
 Select multiple tags with Command-click or a selection rectangle, then press F
 to create a new OR group containing that selection. Each press creates a fresh

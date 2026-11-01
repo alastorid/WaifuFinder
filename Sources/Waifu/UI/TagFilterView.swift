@@ -7,7 +7,7 @@ struct TagFilterView: View {
     @ObservedObject var session: WaifuSession
     @State private var quickFilterText = ""
     @State private var collapsedGroups: Set<String> = defaultCollapsedGroups
-    @AppStorage("tagFilterGroupByRarity") private var groupingEnabled = false
+    @AppStorage("tagFilterRarityGrouping") private var groupingEnabled = true
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
 
@@ -80,14 +80,24 @@ struct TagFilterView: View {
     private func ordered(_ tags: [String]) -> [String] { tags }
 
     private func rarityTags(_ rarity: TagRarity) -> [String] {
-        ungroupedTags.filter {
+        unselectedTags.filter {
             TagRarity.classify(matches: session.tagMatchCounts[$0, default: 0], total: session.tagCandidateCount) == rarity
         }
     }
 
+    private var hasVisibleOrGroups: Bool {
+        session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
+    }
+
     private var hasVisibleTags: Bool {
-        !matching(ungroupedTags).isEmpty
-            || session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
+        if groupingEnabled {
+            return !matching(commonTags).isEmpty
+                || !wantedTags.isEmpty
+                || !unwantedTags.isEmpty
+                || !matching(unselectedTags).isEmpty
+                || hasVisibleOrGroups
+        }
+        return !matching(ungroupedTags).isEmpty || hasVisibleOrGroups
     }
 
     var body: some View {
@@ -150,18 +160,12 @@ struct TagFilterView: View {
                         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
                         VStack(alignment: .leading, spacing: 8) {
-                            ForEach(session.tagFilter.orGroups) { group in
-                                orGroup(group)
-                            }
                             if groupingEnabled {
-                                ForEach(TagRarity.allCases) { rarity in
-                                    let allTags = rarityTags(rarity)
-                                    let visible = matching(allTags)
-                                    if !visible.isEmpty {
-                                        rarityGroup(rarity, tags: visible, allTags: allTags)
-                                    }
-                                }
+                                groupedTagSections
                             } else {
+                                ForEach(session.tagFilter.orGroups) { group in
+                                    orGroup(group)
+                                }
                                 chipFlow(matching(ungroupedTags))
                             }
                         }
@@ -193,7 +197,7 @@ struct TagFilterView: View {
                                 .foregroundStyle(.tertiary)
                         }
 
-                        Text("Required tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups.")
+                        Text("Wanted tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -210,7 +214,7 @@ struct TagFilterView: View {
             quickFilterText = ""
             selectedTags.removeAll()
             selectionRect = nil
-            groupingEnabled = false
+            groupingEnabled = true
             collapsedGroups = Self.defaultCollapsedGroups
         }
         .onChange(of: groupingEnabled) { _, enabled in
@@ -221,9 +225,52 @@ struct TagFilterView: View {
         }
     }
 
+    @ViewBuilder
+    private var groupedTagSections: some View {
+        let visibleCommon = matching(commonTags)
+        if !visibleCommon.isEmpty {
+            tagSection("Common", tags: visibleCommon, color: .secondary, isLite: true)
+        }
+        if !wantedTags.isEmpty {
+            tagSection("Wanted", tags: wantedTags, color: .accentColor)
+        }
+        if !unwantedTags.isEmpty {
+            tagSection("Unwanted", tags: unwantedTags, color: .orange)
+        }
+        ForEach(session.tagFilter.orGroups) { group in
+            orGroup(group)
+        }
+        ForEach(TagRarity.allCases) { rarity in
+            let allTags = rarityTags(rarity)
+            let visible = matching(allTags)
+            if !visible.isEmpty {
+                rarityGroup(rarity, tags: visible, allTags: allTags)
+            }
+        }
+    }
+
     private func chipFlow(_ tags: [String]) -> some View {
         TagChipFlow(spacing: 5, groupTagCount: 0) {
             ForEach(tags, id: \.self) { tag in tagChip(for: tag) }
+        }
+    }
+
+    /// Common tags share one quiet container. Wanted and unwanted tags use the
+    /// same shape with enough tint to stay visible above the rarity bands.
+    private func tagSection(_ title: String, tags: [String], color: Color,
+                            isLite: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("\(title) (\(tags.count))")
+                .font(.caption.weight(isLite ? .regular : .semibold))
+                .foregroundStyle(color)
+            chipFlow(tags)
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color.opacity(isLite ? 0.04 : 0.08), in: RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(color.opacity(isLite ? 0.14 : 0.35))
         }
     }
 
