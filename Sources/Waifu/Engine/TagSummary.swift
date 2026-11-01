@@ -59,7 +59,7 @@ enum TagSummaryError: Error {
     case invalidInput, metalUnavailable, allocationFailed, commandFailed
 }
 
-/// Owns UInt8 general-tag vectors independently of display order and threshold.
+/// Owns sparse UInt8 general-tag vectors independently of display order and threshold.
 /// All decoding, matrix packing and reductions execute on this actor, away from UI.
 actor TagSummaryComputer {
     enum Backend: Sendable { case automatic, cpu, metal }
@@ -72,7 +72,7 @@ actor TagSummaryComputer {
         let populated: [Int]
     }
     private var rows: [FrameID: Row] = [:]
-    private var cachedBytes = 0
+    private(set) var cachedBytes = 0
     private var generalColumns: [Int: Int] = [:]
     private struct Slot { let chunk: Int; let row: Int }
     private struct Chunk {
@@ -139,6 +139,7 @@ actor TagSummaryComputer {
         // Sparse CPU reduction skips absent heads; a GPU matrix still scans them.
         // Small or sparse selections avoid dispatch and selection-mask overhead.
         let preferCPU = rowsWithTagData < 512 || retainedScores <= rowsWithTagData * columns / 8
+        if backend == .automatic && preferCPU { clearMetalCache() }
         let metal = backend == .cpu || (backend == .automatic && preferCPU) ? nil : metalProvider()
         if backend == .metal, metal == nil { throw TagSummaryError.metalUnavailable }
         if let metal {
@@ -160,8 +161,8 @@ actor TagSummaryComputer {
         for frame in frames where frame.tagProbabilities != nil || !(frame.topTags ?? []).isEmpty {
             try Task.checkCancellation()
             let row = row(for: frame, vocabulary: vocabulary)
-            for column in row.populated {
-                let code = row.values[column]
+            for (offset, column) in row.populated.enumerated() {
+                let code = row.values[offset]
                 if code == 2 {
                     totals.present[column] += 1 // legacy membership without a score
                 } else if Int(code) >= minimumCode || (code == 1 && includeEqual) {
@@ -244,8 +245,13 @@ actor TagSummaryComputer {
         var totals = Totals(columns: columns)
         for frame in frames where frame.tagProbabilities != nil || !(frame.topTags ?? []).isEmpty {
             try Task.checkCancellation()
-            let values = row(for: frame, vocabulary: vocabulary).values
-            if rows[frame.id] != nil {
+            let row = row(for: frame, vocabulary: vocabulary)
+            // Sparse CPU admission and dense GPU admission have different costs.
+            // Overflow is reduced in transient chunks instead of growing either cache.
+            let hasSpace = metalSlots[frame.id] != nil || !freeMetalSlots.isEmpty
+                || (metalChunks.last.map { $0.used < $0.capacity } ?? false)
+                || cacheByteLimit - metalBytes >= columns
+            if rows[frame.id] != nil && hasSpace {
                 let slot: Slot
                 if let existing = metalSlots[frame.id] {
                     slot = existing
@@ -268,16 +274,22 @@ actor TagSummaryComputer {
                     dirtyMetalRows.insert(frame.id)
                 }
                 if dirtyMetalRows.contains(frame.id) {
-                    values.withUnsafeBytes { bytes in
-                        metalChunks[slot.chunk].buffer.contents().advanced(by: slot.row * columns)
-                            .copyMemory(from: bytes.baseAddress!, byteCount: bytes.count)
+                    let destination = metalChunks[slot.chunk].buffer.contents()
+                        .advanced(by: slot.row * columns).assumingMemoryBound(to: UInt8.self)
+                    destination.update(repeating: 0, count: columns)
+                    for (offset, column) in row.populated.enumerated() {
+                        destination[column] = row.values[offset]
                     }
                     dirtyMetalRows.remove(frame.id)
                     uploadedVectorCount += 1
                 }
                 masks[slot.chunk, default: [UInt32](repeating: 0, count: metalChunks[slot.chunk].capacity)][slot.row] = 1
             } else {
-                transient.append(contentsOf: values)
+                let start = transient.count
+                transient.append(contentsOf: repeatElement(UInt8(0), count: columns))
+                for (offset, column) in row.populated.enumerated() {
+                    transient[start + column] = row.values[offset]
+                }
                 if transient.count / columns == rowsPerChunk {
                     totals.add(try metal.reduce(transient, rows: rowsPerChunk, columns: columns, threshold: threshold))
                     transient.removeAll(keepingCapacity: true)
@@ -300,7 +312,7 @@ actor TagSummaryComputer {
            cached.hasProbabilities || cached.savedTags == frame.topTags {
             return cached
         }
-        var values = [UInt8](repeating: 0, count: vocabulary.generalIndices.count)
+        var values: [UInt8] = []
         var populated: [Int] = []
         let hasProbabilities: Bool
         if let data = frame.tagProbabilities, let pairs = TagProbabilityCodec.sparseBytes(in: data) {
@@ -308,15 +320,15 @@ actor TagSummaryComputer {
             hasProbabilities = true
             for pair in pairs {
                 if let column = generalColumns[pair.index] {
-                    values[column] = pair.value
+                    values.append(pair.value)
                     populated.append(column)
                 }
             }
         } else {
             hasProbabilities = false
             for tag in frame.topTags ?? [] {
-                if let index = vocabulary.index(for: tag), let column = generalColumns[index], values[column] == 0 {
-                    values[column] = 2 // reserved membership-only sentinel
+                if let index = vocabulary.index(for: tag), let column = generalColumns[index], !populated.contains(column) {
+                    values.append(2) // reserved membership-only sentinel
                     populated.append(column)
                 }
             }

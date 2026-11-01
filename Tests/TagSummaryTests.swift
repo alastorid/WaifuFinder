@@ -479,6 +479,17 @@ func registerTagSummaryTests() {
         }
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "sparse summary cache scales with populated tags rather than vocabulary width", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let frames = (0..<512).map { summaryFrame($0, [4: 0.9, 5: 0.7]) }
+        let computer = TagSummaryComputer()
+        let summary = try await computer.summarize(frames, vocabulary: vocabulary, threshold: 0.35)
+        checkEqual(summary.tags.map(\.matchingFrames), [512, 512], "all sparse memberships are preserved")
+        check(await computer.cachedBytes < 32 * 1024, "512 two-tag rows retain less than 32 KiB instead of four MiB")
+        _ = try await computer.summarize(Array(frames.reversed()), vocabulary: vocabulary, threshold: 0.8)
+        checkEqual(await computer.decodedVectorCount, 512, "threshold and order changes reuse sparse rows")
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "integer reductions match decoded scores at every byte and cutoff boundary", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let codes = Array(89...255)

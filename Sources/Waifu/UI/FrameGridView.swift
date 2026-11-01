@@ -505,7 +505,7 @@ struct FrameGridView: View {
         let rect = scrollVisibility.horizontalViewports[row.id] ?? .zero
         let left = CGFloat(index) * (row.cellWidth + spacing)
         guard let offset = FrameGridScrollVisibility.revealOffset(lower: left, upper: left + row.cellWidth,
-            visibleLower: rect.minX, visibleUpper: rect.maxX) else { return }
+            visibleLower: rect.minX, visibleUpper: rect.maxX, margin: row.cellWidth + spacing) else { return }
         var position = horizontalScrollPositions[row.id] ?? ScrollPosition()
         position.scrollTo(x: offset)
         horizontalScrollPositions[row.id] = position
@@ -518,7 +518,7 @@ struct FrameGridView: View {
         let row = snapshot.rows[index]
         let rect = scrollVisibility.viewport
         guard let offset = FrameGridScrollVisibility.revealOffset(lower: row.originY, upper: row.originY + row.height,
-            visibleLower: rect.minY, visibleUpper: rect.maxY) else { return }
+            visibleLower: rect.minY, visibleUpper: rect.maxY, margin: row.height + spacing) else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {

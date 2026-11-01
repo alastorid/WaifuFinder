@@ -31,6 +31,16 @@ func registerPreviewFrameTests() {
         check(cache.cached("photo-revision-1")?.isOriginal == true, "late renditions cannot erase original provenance")
         checkNil(cache.cached("photo-revision-2"), "an edited revision never reuses old pixels")
     })
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "speculative native pixels fit the neighbour window and release after inspection", knownBug: nil) {
+        check(PreviewImageCache.canPreloadPixels(width: 1920, height: 1080), "ordinary images can stay decoded")
+        check(!PreviewImageCache.canPreloadPixels(width: 6000, height: 4000), "large originals preload encoded instead of churning decoded pixels")
+        check(!PreviewImageCache.canPreloadPixels(width: Int.max, height: Int.max), "oversized dimensions cannot overflow")
+        let cache = PreviewImageCache()
+        let pixels = try ImageFixture.cgImage(width: 32, height: 24)
+        cache.store(pixels, isOriginal: true, key: "photo")
+        cache.removeAll()
+        checkNil(cache.cached("photo"), "leaving inspection releases cached native pixels")
+    })
     Registry.shared.add(suite: "Frame preview", TestCase(name: "sharper preview upgrades leased thumbnails without retaining native pixels", knownBug: nil) {
         let identity = UUID().uuidString
         let small = try ImageFixture.cgImage(width: 32, height: 24)

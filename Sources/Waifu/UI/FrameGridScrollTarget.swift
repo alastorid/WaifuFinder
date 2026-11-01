@@ -18,19 +18,24 @@ final class FrameGridScrollVisibility {
     var horizontalViewports: [String: CGRect] = [:]
 
     nonisolated static func needsReveal(lower: CGFloat, upper: CGFloat,
-                            visibleLower: CGFloat, visibleUpper: CGFloat) -> Bool {
-        revealOffset(lower: lower, upper: upper, visibleLower: visibleLower, visibleUpper: visibleUpper) != nil
+                            visibleLower: CGFloat, visibleUpper: CGFloat,
+                            margin: CGFloat = 0) -> Bool {
+        revealOffset(lower: lower, upper: upper, visibleLower: visibleLower, visibleUpper: visibleUpper, margin: margin) != nil
     }
 
     /// Return the smallest offset that exposes both edges, independent of lazy cell mounting.
     nonisolated static func revealOffset(lower: CGFloat, upper: CGFloat,
-                                        visibleLower: CGFloat, visibleUpper: CGFloat) -> CGFloat? {
+                                        visibleLower: CGFloat, visibleUpper: CGFloat,
+                                        margin: CGFloat = 0) -> CGFloat? {
         let extent = visibleUpper - visibleLower
         guard extent > 0 else { return max(0, lower) }
         if upper - lower > extent, lower == visibleLower { return nil }
-        if lower < visibleLower { return max(0, lower) }
-        if upper > visibleUpper {
-            return max(0, upper - lower > extent ? lower : upper - extent)
+        // Keep a navigation buffer inside the viewport. Reduce it when the
+        // viewport cannot fit the item plus both margins to avoid oscillation.
+        let inset = min(max(0, margin), max(0, (extent - (upper - lower)) / 2))
+        if lower < visibleLower + inset { return max(0, lower - inset) }
+        if upper > visibleUpper - inset {
+            return max(0, upper - lower > extent ? lower : upper - extent + inset)
         }
         return nil
     }

@@ -71,7 +71,7 @@ These describe the current source; check release notes for the contents of a dow
 |---|---|---|
 | **Tag rarity** | Surface photos with uncommon combinations of general tags | Finish tagging, then use Tag rarity in Sort and Filter |
 | **Distance from visual center** | Find representative images or visual outliers | Use Distance; 0 is nearest and 1 is farthest in the source set |
-| **OR tag groups** | Match alternatives while retaining other filters | Select tags with Command-click or a rectangle, then press F |
+| **OR tag groups** | Match alternatives while retaining other filters | Select tags with Command-click or a rectangle, then press F1 |
 | **Visual sequencing** | Browse similar-looking photos beside one another | Choose Minimal Visual Distance; reverse retraces the route |
 | **Original-photo preview improvements** | Reuse previews and keep navigation available after deletion | Open a photo and navigate the current results |
 | **Cached JPEG remote tagging** | Send cached thumbnails without an extra image conversion | Connect a compatible inference server in Settings → Remote |

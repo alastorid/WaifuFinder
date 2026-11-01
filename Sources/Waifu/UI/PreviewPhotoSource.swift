@@ -95,11 +95,20 @@ final class PreviewImageCache: @unchecked Sendable {
             self.image = image; self.isOriginal = isOriginal
         }
     }
+    private static let byteLimit = 128 * 1024 * 1024
+    // Current photo plus three neighbours in either direction. Encoded originals
+    // remain preloaded when native pixels would not fit this window.
+    static func canPreloadPixels(width: Int, height: Int) -> Bool {
+        guard width > 0, height > 0 else { return false }
+        return width <= (byteLimit / 7 / 4) / height
+    }
+    func removeAll() { lock.withLock { cache.removeAllObjects() } }
+
     private let cache = NSCache<NSString, Entry>()
     private let lock = NSLock()
     init() {
         cache.countLimit = 9
-        cache.totalCostLimit = 128 * 1024 * 1024
+        cache.totalCostLimit = Self.byteLimit
     }
     func cached(_ key: String) -> Entry? { cache.object(forKey: key as NSString) }
     func store(_ image: CGImage, isOriginal: Bool, key: String) {

@@ -343,22 +343,9 @@ struct FrameOrderPanel: View {
             groupTagsByRarity.toggle()
         } label: {
             Text(groupTagsByRarity ? "rarity" : "none")
-                .font(.system(size: 12))
-                .foregroundStyle(groupTagsByRarity ? Color.accentColor : Color.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    groupTagsByRarity ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
-                    in: Capsule()
-                )
-                .overlay {
-                    Capsule().strokeBorder(
-                        groupTagsByRarity ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.16)
-                    )
-                }
-                .contentShape(Capsule())
+                .font(.caption)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .help("Tag grouping: click to switch between rarity bands and none")
         .accessibilityLabel("Tag grouping")
         .accessibilityValue(groupTagsByRarity ? "Rarity" : "None")

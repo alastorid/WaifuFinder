@@ -47,6 +47,13 @@ final class PhotosMedia: @unchecked Sendable {
     /// finer than the timestamps of supported photo/video sources.
     static func frameIndex(seconds: Double) -> Int { Int((max(0, seconds) * 1_000_000).rounded()) }
 
+    // CIContext is thread-safe and expensive to create. Reuse its renderer across
+    // original reads instead of retaining a separate context's resources per image.
+    private final class OriginalImageContext: @unchecked Sendable {
+        let value = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true])
+    }
+    private static let originalImageContext = OriginalImageContext()
+
     private let renditionManager = PHCachingImageManager()
     private let renditionCache: NSCache<NSString, RenditionBox> = {
         let cache = NSCache<NSString, RenditionBox>()
@@ -863,7 +870,15 @@ final class PhotosMedia: @unchecked Sendable {
     func preloadPreview(_ url: URL) async throws {
         try Task.checkCancellation()
         guard Self.downloadFromICloud else { return }
-        _ = try await previewContent(url, priority: .preload)
+        // All six neighbours warm their full-quality encoded originals. Decode
+        // only images small enough to coexist in the seven-photo pixel window;
+        // large originals otherwise thrash that cache and inflate peak memory.
+        if let item = item(url), PreviewImageCache.canPreloadPixels(
+            width: item.asset.pixelWidth, height: item.asset.pixelHeight) {
+            _ = try await previewContent(url, priority: .preload)
+        } else {
+            _ = try await originalPreviewData(url, priority: .preload)
+        }
         try Task.checkCancellation()
     }
 
@@ -882,7 +897,7 @@ final class PhotosMedia: @unchecked Sendable {
             return .animated(PhotosAnimatedImage(source: source, identity: "\(item.asset.localIdentifier):\(modified)", orientation: orientation))
         }
         guard let input = CIImage(data: imageData)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
+              let image = Self.originalImageContext.value.createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()
@@ -899,7 +914,7 @@ final class PhotosMedia: @unchecked Sendable {
         if !item.isStill { return try await PreviewFrameReader(asset: try await videoAsset(resolved).value).image(at: time) }
         let (data, orientation) = try await originalPreviewData(resolved, priority: .background)
         guard let input = CIImage(data: data)?.oriented(orientation),
-              let image = CIContext(options: [.cacheIntermediates: false, .useSoftwareRenderer: true]).createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
+              let image = Self.originalImageContext.value.createCGImage(input, from: input.extent, format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB(), deferred: false) else {
             throw Self.failure("Photos returned an unreadable image.")
         }
         try Task.checkCancellation()

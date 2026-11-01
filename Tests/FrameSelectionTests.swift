@@ -153,6 +153,19 @@ func registerFrameSelectionTests() {
             checkEqual(offset(271, 401), 101, "reveal the trailing edge with the smallest scroll")
             checkEqual(offset(9000, 9130), 8830, "far-off lazy rows use absolute offsets without cell IDs")
             checkEqual(offset(50, 450), 50, "oversized clipped thumbnails align their leading edge")
+            checkEqual(FrameGridScrollVisibility.revealOffset(lower: 150, upper: 200,
+                visibleLower: 100, visibleUpper: 400, margin: 60), 90,
+                "backward navigation scrolls before the leading edge")
+            checkEqual(FrameGridScrollVisibility.revealOffset(lower: 300, upper: 350,
+                visibleLower: 100, visibleUpper: 400, margin: 60), 110,
+                "forward navigation scrolls before the trailing edge")
+            checkNil(FrameGridScrollVisibility.revealOffset(lower: 160, upper: 210,
+                visibleLower: 100, visibleUpper: 400, margin: 60),
+                "the buffer boundary is stable after scrolling")
+            checkNil(FrameGridScrollVisibility.revealOffset(lower: 100, upper: 400,
+                visibleLower: 100, visibleUpper: 400, margin: 300),
+                "a viewport-sized row does not oscillate")
+
 
         }.value
     })

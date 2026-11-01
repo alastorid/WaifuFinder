@@ -13,6 +13,7 @@ struct TagFilterView: View {
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
 
+
     private static var defaultCollapsedGroups: Set<String> {
         Set(TagRarity.allCases.filter { $0 != .legendary }.map(\.title))
     }
@@ -196,8 +197,8 @@ struct TagFilterView: View {
                                 })
                                 TagRightClickMonitor(tagFrames: frames, selectionRect: $selectionRect,
                                                      onRightClick: rightClickTag, onSelect: { tags, extending in
-                                    if extending { selectedTags.formUnion(tags) } else { selectedTags = tags }
-                                }, onGroupShortcut: groupSelectedTags)
+                                                         if extending { selectedTags.formUnion(tags) } else { selectedTags = tags }
+                                                     }, onGroupShortcut: groupSelectedTags)
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .allowsHitTesting(false)
                                 if let rect = selectionRect {
@@ -216,7 +217,7 @@ struct TagFilterView: View {
                                 .foregroundStyle(.tertiary)
                         }
 
-                        Text("Wanted tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups.")
+                        Text("Wanted tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups. Select tags with Command-click or a rectangle, then press F1 to group them.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -363,11 +364,6 @@ struct TagFilterView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("OR (\(group.tags.count))")
                 .font(.caption.weight(.semibold))
-                .help("Drag this label onto another OR group to merge them")
-                .onDrag { TagGroupDragPayload.provider(for: group.id) } preview: {
-                    Text("OR (\(group.tags.count))")
-                        .tagChipBody(isSelected: true, isExcluded: false)
-                }
                 .contextMenu {
                     Button("Remove") {
                         var filter = session.tagFilter
@@ -376,7 +372,7 @@ struct TagFilterView: View {
                     }
                 }
             if group.tags.isEmpty {
-                Text("Drop tags here").font(.caption).foregroundStyle(.tertiary)
+                Text("Select tags and press F1").font(.caption).foregroundStyle(.tertiary)
             } else {
                 chipFlow(matching(ordered(alphabetical(group.tags))))
             }
@@ -386,32 +382,7 @@ struct TagFilterView: View {
         .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.accentColor.opacity(0.35)))
         .contentShape(Rectangle())
-        .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
-            guard let provider = providers.first(where: {
-                $0.hasItemConformingToTypeIdentifier(UTType.utf8PlainText.identifier)
-            }) else { return false }
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, _ in
-                guard let data else { return }
-                if let sourceID = TagGroupDragPayload.decode(data) {
-                    Task { @MainActor in
-                        var filter = session.tagFilter
-                        guard filter.mergeOrGroup(sourceID, into: group.id) else { return }
-                        session.tagFilter = filter
-                    }
-                } else if let tags = TagDragPayload.decode(data) {
-                    Task { @MainActor in
-                        guard session.tagFilter.orGroups.contains(where: { $0.id == group.id }) else { return }
-                        let validTags = tags.intersection(availableTags)
-                        guard !validTags.isEmpty else { return }
-                        var filter = session.tagFilter
-                        filter.addToOrGroup(validTags, id: group.id)
-                        session.tagFilter = filter
-                        selectedTags.subtract(validTags)
-                    }
-                }
-            }
-            return true
-        }
+
     }
 
     private var availableTags: Set<String> {
@@ -497,20 +468,6 @@ struct TagFilterView: View {
             return .handled
         }
         .accessibilityAction { activateTag(tag) }
-        .onDrag {
-            let tags = selectedTags.contains(tag) ? selectedTags : [tag]
-            return TagDragPayload.provider(for: tags)
-        } preview: {
-            Text(tag)
-                .tagChipBody(isSelected: true, isExcluded: false)
-                .overlay(alignment: .topTrailing) {
-                    if selectedTags.contains(tag) && selectedTags.count > 1 {
-                        Text("\(selectedTags.count)").font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white).padding(4)
-                            .background(Color.red, in: Circle()).offset(x: 8, y: -8)
-                    }
-                }
-        }
         .accessibilityAddTraits(.isButton)
         .anchorPreference(key: TagChipBoundsPreferenceKey.self, value: .bounds) {
             [tag: $0]
@@ -684,6 +641,7 @@ private struct TagRightClickMonitor: NSViewRepresentable {
     let onSelect: (Set<String>, Bool) -> Void
     let onGroupShortcut: () -> Bool
 
+
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
         view.tagFrames = tagFrames
@@ -712,6 +670,7 @@ private struct TagRightClickMonitor: NSViewRepresentable {
         var onSelectionRect: ((CGRect?) -> Void)?
         var onSelect: ((Set<String>, Bool) -> Void)?
         var onGroupShortcut: (() -> Bool)?
+
         private var selectionStart: CGPoint?
         private var extending = false
         private var monitor: Any?
@@ -742,8 +701,8 @@ private struct TagRightClickMonitor: NSViewRepresentable {
                         guard window.isKeyWindow, window.attachedSheet == nil, !event.isARepeat,
                               !(window.firstResponder is NSTextView),
                               (window.firstResponder as? NSTextField)?.isEditable != true,
-                              modifiers.intersection([.command, .control, .option]).isEmpty,
-                              event.charactersIgnoringModifiers?.lowercased() == "f" else { return false }
+                              modifiers.intersection([.command, .control, .option, .shift]).isEmpty,
+                              event.keyCode == 122 else { return false } // F1, independent of keyboard layout
                         return self.onGroupShortcut?() ?? false
                     }
                     let point = self.convert(locationInWindow, from: nil)

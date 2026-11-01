@@ -392,6 +392,7 @@ final class RemoteClient: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 if Date().timeIntervalSince(self.lastPong) > RemoteLimits.clientPongTimeout {
+                    await self.connectionEnded("The server stopped answering pings.")
                     await connection.stop()
                     return
                 }
@@ -415,6 +416,10 @@ final class RemoteClient: ObservableObject {
             }
             await loadVocabularyIfNeeded()
         case .close(let reason):
+            if reason == "serverStopped" {
+                await self.connectionEnded(reason)
+                return
+            }
             await MainActor.run {
                 self.status = reason == "kickedByServer"
                     ? .refused("Disconnected — kicked by this Mac's owner.")

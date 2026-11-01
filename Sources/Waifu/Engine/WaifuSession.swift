@@ -1007,6 +1007,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published var previewFrame: AnalyzedFrame? {
         didSet {
             if previewFrame == nil { previewNavigation = nil }
+            if oldValue != nil, previewFrame == nil {
+                PreviewImageCache.shared.removeAll()
+            }
             if oldValue != nil, previewFrame == nil, let id = focusedFrameID {
                 requestGridScroll(to: id)
             }
