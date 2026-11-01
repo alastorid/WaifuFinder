@@ -1,7 +1,7 @@
 # Tag summary computation
 
-The tag browser ranks general traits by conditional average confidence over the
-candidate photos admitted by required/unwanted tags and the other active filters.
+The tag browser starts by ranking general traits by conditional average confidence
+over the candidate photos admitted by required/unwanted tags and the other active filters.
 OR clauses are ignored for this summary; the thumbnail grid still applies them. For each tag, it sums probabilities **strictly greater
 than the active threshold** and divides by the number of those probabilities.
 Values at or below the threshold do not enter either the sum or the denominator.
@@ -22,10 +22,15 @@ rarity bands for the remaining tags. Selected tags therefore leave the rarity
 bands as soon as the filter takes a position on them. The rarity bands use
 matching-photo count divided by candidate-photo count: orange below 1%, yellow
 from 1% to below 5%, blue from 5% to below 10%, and white for the rest. The
-under-1% band starts expanded and the other bands start collapsed. Use the
-two-stage **none / rarity** slider beside the Tags panel's **Clear** button to
-switch to a flat list. Clear restores rarity grouping. Exact boundary values
-enter the next band.
+under-1% band starts expanded and the other bands start collapsed. Within each
+band, tags rank by matching-photo count, highest first, with the existing
+confidence rank breaking ties. Quick filtering still evaluates every tag in the
+band; the matches keep that order and the browser shows the first 33. A trailing
+ellipsis chip reveals all matches. Right-click a rarity band label and enable
+**Always show all tags in this group** to remove that group's limit. Click the
+tag-style **rarity / none** control beside the Tags panel title to switch to a
+flat list and back. Clear restores rarity grouping. Exact boundary values enter
+the next band.
 
 Select multiple tags with Command-click or a selection rectangle, then press F
 to create a new OR group containing that selection. Each press creates a fresh

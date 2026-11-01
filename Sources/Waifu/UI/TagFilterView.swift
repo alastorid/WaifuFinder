@@ -8,6 +8,8 @@ struct TagFilterView: View {
     @State private var quickFilterText = ""
     @State private var collapsedGroups: Set<String> = defaultCollapsedGroups
     @AppStorage("tagFilterRarityGrouping") private var groupingEnabled = true
+    @AppStorage("tagRarityAlwaysShowAllGroups") private var alwaysShowAllRarityGroups = ""
+    @State private var expandedRarityGroups: Set<Int> = []
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
 
@@ -79,10 +81,27 @@ struct TagFilterView: View {
 
     private func ordered(_ tags: [String]) -> [String] { tags }
 
-    private func rarityTags(_ rarity: TagRarity) -> [String] {
-        unselectedTags.filter {
+    /// Rarity bands lead with the strongest match count. `unselectedTags` is
+    /// already in the tagger's confidence order, retained for equal counts.
+    private var qualityOrderedUnselectedTags: [String] {
+        TagRarityDisplay.ordered(unselectedTags, matchCounts: session.tagMatchCounts)
+    }
+
+    private func rarityTags(_ rarity: TagRarity, from orderedTags: [String]) -> [String] {
+        orderedTags.filter {
             TagRarity.classify(matches: session.tagMatchCounts[$0, default: 0], total: session.tagCandidateCount) == rarity
         }
+    }
+
+    private func alwaysShowsAll(_ rarity: TagRarity) -> Bool {
+        alwaysShowAllRarityGroups.split(separator: ",").contains { Int($0) == rarity.rawValue }
+    }
+
+    private func setAlwaysShowsAll(_ show: Bool, for rarity: TagRarity) {
+        var values = Set(alwaysShowAllRarityGroups.split(separator: ",").compactMap { Int($0) })
+        if show { values.insert(rarity.rawValue) } else { values.remove(rarity.rawValue) }
+        alwaysShowAllRarityGroups = values.sorted().map(String.init).joined(separator: ",")
+        if !show { expandedRarityGroups.remove(rarity.rawValue) }
     }
 
     private var hasVisibleOrGroups: Bool {
@@ -240,8 +259,9 @@ struct TagFilterView: View {
         ForEach(session.tagFilter.orGroups) { group in
             orGroup(group)
         }
+        let orderedTags = qualityOrderedUnselectedTags
         ForEach(TagRarity.allCases) { rarity in
-            let allTags = rarityTags(rarity)
+            let allTags = rarityTags(rarity, from: orderedTags)
             let visible = matching(allTags)
             if !visible.isEmpty {
                 rarityGroup(rarity, tags: visible, allTags: allTags)
@@ -282,13 +302,22 @@ struct TagFilterView: View {
         case .magic: .blue
         case .normal: .white
         }
+        let showsAll = alwaysShowsAll(rarity) || expandedRarityGroups.contains(rarity.rawValue)
+        let displayedTags = TagRarityDisplay.limited(tags, showingAll: showsAll)
+        let hiddenCount = tags.count - displayedTags.count
         return DisclosureGroup(isExpanded: Binding(
             get: { !collapsedGroups.contains(title) },
             set: { expanded in
                 if expanded { collapsedGroups.remove(title) } else { collapsedGroups.insert(title) }
             }
         )) {
-            chipFlow(tags).padding(.top, 4)
+            TagChipFlow(spacing: 5, groupTagCount: 0) {
+                ForEach(displayedTags, id: \.self) { tag in tagChip(for: tag) }
+                if hiddenCount > 0 {
+                    showAllRarityTagsButton(rarity: rarity, total: tags.count)
+                }
+            }
+            .padding(.top, 4)
         } label: {
             Text("\(title) (\(tags.count))")
                 .font(.caption)
@@ -298,11 +327,36 @@ struct TagFilterView: View {
                         for tag in allTags { filter.setExcluded(true, tag: tag) }
                         session.tagFilter = filter
                     }
+                    Divider()
+                    Toggle("Always show all tags in this group", isOn: Binding(
+                        get: { alwaysShowsAll(rarity) },
+                        set: { setAlwaysShowsAll($0, for: rarity) }
+                    ))
                 }
         }
         .padding(7)
         .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.6)))
+    }
+
+    private func showAllRarityTagsButton(rarity: TagRarity, total: Int) -> some View {
+        Button {
+            expandedRarityGroups.insert(rarity.rawValue)
+        } label: {
+            Text("…")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Color.secondary.opacity(0.09), in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(Color.secondary.opacity(0.18))
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Show all \(total) tags")
+        .accessibilityLabel("Show all \(total) tags")
     }
 
     private func orGroup(_ group: TagOrGroup) -> some View {
