@@ -107,6 +107,79 @@ func registerGridThumbnailStageTests() {
             stage.stop()
         }.value
     })
+    Registry.shared.add(suite: suite, TestCase(name: "an immediate deletion shifts surviving cells into the committed rows", knownBug: nil) {
+        let frames = (0..<5).map(stageFrame)
+        let snapshot = GridStageSnapshot.make(stageInput(1, frames, generation: UUID()))
+        let projected = snapshot.removing([frames[1].id])
+        checkEqual(projected?.rows[0].items.map(\.id), [frames[0].id, frames[2].id],
+                   "the next cell slides into the deleted cell’s place")
+        checkEqual(projected?.rows[1].items.map(\.id), [frames[3].id, frames[4].id],
+                   "later chunks reflow without leaving a hole")
+        checkEqual(projected?.navigation.frames.map(\.id), frames.filter { $0.id != frames[1].id }.map(\.id),
+                   "arrow navigation immediately drops the deleted photo")
+        checkEqual(projected?.rows[1].originY, 132, "row origins contract after the removed content")
+        checkEqual(projected?.contentHeight, 263, "the scroll extent matches the projected rows")
+        checkNil(snapshot.removing([frames[1].id]).flatMap { $0.removing([FrameID(sampleIndex: 9999)]) },
+                 "a snapshot without a queued cell is left untouched")
+        checkEqual(snapshot.removing(Set(frames.map(\.id)))?.contentHeight, 2,
+                   "deleting every row leaves an empty grid")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "an immediate grouped deletion shrinks only the affected strip", knownBug: nil) {
+        let frames = (0..<5).map(stageFrame)
+        let group = FrameGroupID(raw: "group")
+        let rows = [FrameRow(group: group, frames: Array(frames.prefix(3))),
+                    FrameRow(group: nil, frames: Array(frames.suffix(2)))]
+        let snapshot = GridStageSnapshot.make(stageInput(1, frames, generation: UUID(), grouped: true, rows: rows))
+        let projected = snapshot.removing([frames[1].id])
+        checkEqual(projected?.rows.map(\.strip), [true, false], "empty strips are dropped and later rows remain")
+        checkEqual(projected?.rows[0].items.map(\.id), [frames[0].id, frames[2].id],
+                   "the group’s surviving cells close the hole")
+        checkEqual(projected?.rows[1].originY, 159, "the following section moves up with the strip")
+        checkEqual(projected?.navigation.neighbour(of: frames[2].id, by: 1), nil,
+                   "navigation still stops at the group strip boundary")
+        checkEqual(projected?.navigation.neighbour(of: frames[3].id, by: -1), nil,
+                   "the ungrouped run retains its own line boundary")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "the stage paints an immediate deletion before the authoritative layout", knownBug: nil) {
+        await Task { @MainActor in
+            let generation = UUID()
+            let stage = GridThumbnailStage(preparationLimit: .seconds(5))
+            let frames = (0..<4).map(stageFrame)
+            stage.submit(stageInput(1, frames, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), immediate: true) { _ in nil }
+            await stageWait { stage.current?.key.revision == 1 }
+            stage.applyImmediateDeletion(removing: [frames[0].id])
+            checkEqual(stage.current?.navigation.frames.map(\.id), Array(frames.dropFirst()).map(\.id),
+                       "the deleted photo leaves the committed grid synchronously")
+            stage.stop()
+        }.value
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "a second delete cannot be undone by a newer layout that was already preparing", knownBug: nil) {
+        let pixels = try ImageFixture.cgImage(width: 16, height: 16)
+        await Task { @MainActor in
+            let generation = UUID()
+            let stage = GridThumbnailStage(preparationLimit: .seconds(5))
+            let frames = (0..<4).map(stageFrame)
+            stage.submit(stageInput(1, frames, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), immediate: true) { _ in nil }
+            await stageWait { stage.current?.key.revision == 1 }
+            let reads = StageReads()
+            let remaining = Array(frames.dropFirst())
+            stage.submit(stageInput(2, remaining, generation: generation),
+                         viewportSize: CGSize(width: 263, height: 300), immediate: false) { frame in
+                await reads.read(frame)
+            }
+            await stageWait { !reads.waiting.isEmpty }
+            stage.applyImmediateDeletion(removing: [frames[1].id])
+            checkEqual(stage.current?.navigation.frames.map(\.id), [frames[0].id, frames[2].id, frames[3].id],
+                       "the second deleted photo leaves the visible grid immediately")
+            for id in reads.waiting { reads.finish(id, pixels) }
+            await stageWait { stage.current?.key.revision == 2 }
+            checkEqual(stage.current?.navigation.frames.map(\.id), [frames[2].id, frames[3].id],
+                       "the preparing layout is projected too and cannot restore the deleted photo")
+            stage.stop()
+        }.value
+    })
     Registry.shared.add(suite: suite, TestCase(name: "visible thumbnails preempt bounded offscreen prefetching which resumes at the new viewport in both modes", knownBug: nil) {
         let directory = try Temporary.directory("thumbnail-prefetch-priority")
         await Task { @MainActor in

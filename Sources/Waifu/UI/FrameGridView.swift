@@ -90,14 +90,26 @@ struct FrameGridView: View {
                     .accessibilityHidden(true)
             }
         }
-        .onPreferenceChange(GridSelectedCellBoundsKey.self) { selectedCellBounds = $0 }
+        .onPreferenceChange(GridSelectedCellBoundsKey.self) { bounds in
+            if session.pendingPhotoDeletions.isEmpty {
+                selectedCellBounds = bounds
+            } else {
+                // Keep the deleted cell’s last-known rect so its border can hold
+                // position while the replacement slides in.
+                selectedCellBounds.merge(bounds) { _, newest in newest }
+            }
+        }
         .onReceive(session.$gridDeletionEvent.dropFirst().receive(on: DispatchQueue.main)) { event in
             guard let event, session.previewFrame == nil else { return }
-            thumbnailStage.cancelPending()
             thumbnailStage.freezeDeletionPreparation()
             borderReleaseTask?.cancel()
-            if heldDeletionBorder == nil { heldDeletionBorder = selectedCellBounds[event.focusedFrameID] }
+            if heldDeletionBorder == nil, let focused = event.focusedFrameID {
+                heldDeletionBorder = selectedCellBounds[focused]
+            }
             heldDeletionIDs.formUnion(event.removedFrameIDs)
+            // Move the surviving cells now. The authoritative layout arrives
+            // later without leaving the deleted photo on screen in the meantime.
+            thumbnailStage.applyImmediateDeletion(removing: event.removedFrameIDs)
         }
         .onReceive(session.$pendingPhotoDeletions.dropFirst().receive(on: DispatchQueue.main)) { pending in
             if pending.isEmpty {
@@ -140,6 +152,7 @@ struct FrameGridView: View {
         .onAppear {
             thumbnailStage.onCommit = { [weak session] snapshot in
                 session?.commitGridNavigation(snapshot.navigation, generation: snapshot.key.generation)
+                selectedCellBounds = selectedCellBounds.filter { snapshot.navigation.indexByID[$0.key] != nil }
                 if !heldDeletionIDs.isEmpty,
                    heldDeletionIDs.allSatisfy({ snapshot.navigation.indexByID[$0] == nil }) {
                     borderReleaseTask?.cancel()

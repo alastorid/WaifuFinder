@@ -718,7 +718,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     @Published private(set) var pendingPhotoDeletions: Set<String> = []
     struct GridDeletionEvent: Equatable {
         let id = UUID()
-        let focusedFrameID: FrameID
+        /// The focused cell when it was the deleted one; `nil` for other
+        /// selections, which have no border position to hold.
+        let focusedFrameID: FrameID?
         let removedFrameIDs: Set<FrameID>
     }
     @Published private(set) var gridDeletionEvent: GridDeletionEvent?
@@ -756,8 +758,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let replacement = previewFrame.flatMap { previewOrder?.replacement(afterRemoving: allRemoved, current: $0.id) }
         let replacingFocus = previewFrame == nil && (focusedFrameID.map { removed.contains($0) } ?? false)
         let focusReplacement = focusedFrameID.flatMap { currentOrder.replacement(afterRemoving: allRemoved, current: $0) }
-        if replacingFocus, let focusedFrameID {
-            gridDeletionEvent = GridDeletionEvent(focusedFrameID: focusedFrameID, removedFrameIDs: removed)
+        if !removed.isEmpty {
+            gridDeletionEvent = GridDeletionEvent(
+                focusedFrameID: replacingFocus ? focusedFrameID : nil,
+                removedFrameIDs: removed)
         }
         deletionCallbacks.append((added, onSuccess))
         pendingPhotoDeletions.formUnion(added)

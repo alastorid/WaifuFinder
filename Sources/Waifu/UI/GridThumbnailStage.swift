@@ -176,6 +176,95 @@ struct GridStageSnapshot: Sendable {
                     rowIndexByFrameID: frameIndices)
     }
 
+    /// Remove frames from the committed rows immediately. This is a projection
+    /// of the current geometry, not a new arrangement: it exists so a deletion
+    /// can shift surviving cells left in the same transaction instead of waiting
+    /// for the background ranking and group-cap pass.
+    func removing(_ ids: Set<FrameID>) -> Self? {
+        guard !ids.isEmpty,
+              rows.contains(where: { row in row.items.contains { ids.contains($0.id) } }) else { return nil }
+        var result: [GridStageRow] = []
+        var top: CGFloat = 1
+
+        func append(_ id: String, _ items: [GridStageItem], strip: Bool, group: FrameGroupID?,
+                    beyond: Int, revealed: Bool, cellWidth: CGFloat, spacing: CGFloat) {
+            guard !items.isEmpty else { return }
+            var height = items.map {
+                GridThumbnailLayout.size(width: cellWidth, sourceAspect: $0.aspect, square: key.square).height
+            }.max() ?? 0
+            if strip && beyond > 0 && !revealed {
+                height = max(height, cellWidth * (key.square ? 1 : 9.0 / 16))
+            }
+            result.append(GridStageRow(id: id, items: items, strip: strip, groupID: group,
+                beyond: beyond, revealed: revealed, cellWidth: cellWidth, contentHeight: height,
+                originY: top, spacing: spacing))
+            top += height + (strip ? 16 : 0) + spacing
+        }
+
+        var chunkWidth = rows.first?.cellWidth ?? 0
+        func appendChunks(_ items: [GridStageItem], prefix: String) {
+            let count = max(1, key.columns)
+            var start = 0
+            while start < items.count {
+                let end = min(start + count, items.count)
+                append(prefix + String(start / count), Array(items[start..<end]),
+                       strip: false, group: nil, beyond: 0, revealed: true,
+                       cellWidth: chunkWidth, spacing: 1)
+                start = end
+            }
+        }
+
+        if key.grouped {
+            var buffered: [GridStageItem] = []
+            var bufferedPrefix: String?
+            func flush() {
+                guard let prefix = bufferedPrefix, !buffered.isEmpty else { return }
+                appendChunks(buffered, prefix: prefix)
+                buffered.removeAll(keepingCapacity: true)
+                bufferedPrefix = nil
+            }
+            for row in rows {
+                let items = row.items.filter { !ids.contains($0.id) }
+                if row.strip {
+                    flush()
+                    append(row.id, items, strip: true, group: row.groupID,
+                           beyond: row.beyond, revealed: row.revealed,
+                           cellWidth: row.cellWidth, spacing: row.spacing)
+                    continue
+                }
+                let prefix = row.id.lastIndex(of: ":").map { String(row.id[...$0]) } ?? row.id + ":"
+                if bufferedPrefix != prefix {
+                    flush()
+                    bufferedPrefix = prefix
+                }
+                chunkWidth = row.cellWidth
+                buffered.append(contentsOf: items)
+            }
+            flush()
+        } else {
+            appendChunks(rows.flatMap { $0.items }.filter { !ids.contains($0.id) }, prefix: "flat:")
+        }
+
+        let frames = result.flatMap { $0.items.map(\.frame) }
+        let navigationRows = result.map { FrameRow(group: $0.groupID, frames: $0.items.map(\.frame)) }
+        var lineRanges: [Range<Int>] = []
+        var lineStart = 0
+        for row in result {
+            lineRanges.append(lineStart..<lineStart + row.items.count)
+            lineStart += row.items.count
+        }
+        let navigation = FrameNavigationOrder(frames: frames, rows: navigationRows,
+                                              groupRows: key.grouped, lineRanges: lineRanges)
+        let tokenPrefix = key.tokenPrefix
+        let indices = Dictionary(uniqueKeysWithValues: result.enumerated().map { (tokenPrefix + $0.element.id, $0.offset) })
+        let frameIndices = Dictionary(uniqueKeysWithValues: result.enumerated().flatMap { index, row in
+            row.items.map { ($0.id, index) }
+        })
+        return Self(key: key, navigation: navigation, sourceURL: sourceURL, rows: result,
+                    contentHeight: result.isEmpty ? 2 : top - (result.last?.spacing ?? 1) + 1,
+                    rowIndexByToken: indices, rowIndexByFrameID: frameIndices)
+    }
+
     /// Project the NEW order into the OLD viewport, including scroll clamping
     /// after filtering and each horizontal group's current scroll position.
     func visibleItems(in viewport: CGRect, horizontalOffsets: [String: CGFloat]) -> [GridStageItem] {
@@ -257,6 +346,11 @@ final class GridThumbnailStage: ObservableObject {
         let immediate: Bool
         let load: @MainActor (AnalyzedFrame) async -> CGImage?
         let pixels = GridPreparedImages()
+        /// Deletions queued while this newer layout is still preparing. They are
+        /// projected away both from the visible grid now and from the incoming
+        /// snapshot when it commits, so a fast second Delete cannot resurrect a
+        /// cell that the pre-deletion layout still contains.
+        var removals: Set<FrameID> = []
         var snapshot: GridStageSnapshot?
         var wanted: [String: AnalyzedFrame] = [:]
         var attempted: Set<String> = []
@@ -337,9 +431,29 @@ final class GridThumbnailStage: ObservableObject {
             && candidate.beyondCap == input.beyondCap && candidate.revealed == input.revealed
     }
 
-    func cancelPending() {
-        request?.cancel()
-        request = nil
+    /// Paint the deletion now: the committed rows lose the deleted cells and
+    /// surviving cells shift into their places in one animated transaction. The
+    /// session's authoritative arrangement replaces this projection when its
+    /// background ranking and group-cap calculation finishes.
+    func applyImmediateDeletion(removing ids: Set<FrameID>) {
+        guard let snapshot = current, let projected = snapshot.removing(ids) else { return }
+        if let request, request.key.generation == snapshot.key.generation {
+            // Any request submitted after the displayed layout is newer than it.
+            // Keep it from restoring frames this deletion removes when it commits;
+            // geometry-only resizes and zooms take this path too.
+            request.removals.formUnion(ids)
+            if let staged = request.snapshot {
+                request.snapshot = staged.removing(ids) ?? staged
+            }
+        }
+        previous = current
+        Diag.trace(.grid, message: "immediate deletion removed=\(ids.count) rows=\(projected.rows.count)")
+        var transaction = Transaction(animation: .easeInOut(duration: 0.33))
+        transaction[GridZoomTransactionKey.self] = true
+        withTransaction(transaction) {
+            onCommit?(projected)
+            current = projected
+        }
     }
 
     func submit(_ input: GridStageInput, viewportSize: CGSize, animated: Bool = false, immediate: Bool = false,
@@ -373,7 +487,8 @@ final class GridThumbnailStage: ObservableObject {
             self.request?.build = work
             let snapshot = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
             guard !Task.isCancelled, self.request?.ticket == ticket else { return }
-            self.request?.snapshot = snapshot
+            let removals = self.request?.removals ?? []
+            self.request?.snapshot = removals.isEmpty ? snapshot : (snapshot.removing(removals) ?? snapshot)
             self.refresh()
         }
         let deadline = next.deadline
