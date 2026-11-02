@@ -17,6 +17,7 @@ struct PanelPreset: Codable, Equatable, Identifiable, Sendable {
     var tagAdvancedMode: Bool? = nil
     var tagTopCount: Int? = nil
     var tagThreshold: Float? = nil
+    var favorites: FrameFavoriteFilter? = nil
 
     static func defaultSlot(_ number: Int) -> PanelPreset {
         PanelPreset(name: "Preset \(number)", order: .defaultOrder, limits: .none,

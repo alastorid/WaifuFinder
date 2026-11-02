@@ -16,6 +16,7 @@ func registerPanelPresetTests() {
                                           threshold: 0.62, selectionOrder: ["smile", "blue_hair"],
                                           scoreSortTag: "smile", scoreSortDescending: false)
             session.faceFilter = .withFaces
+            session.favoriteFilter = .notFavorite
             session.groupingEnabled = true
             session.groupingThreshold = 0.58
             session.groupRows = false
@@ -46,6 +47,7 @@ func registerPanelPresetTests() {
             checkEqual(reopened.frameLimits, expected.limits, "numeric ranges restored")
             checkEqual(reopened.tagFilter, expected.tags, "tag sets, order, threshold and score sorting restored")
             checkEqual(reopened.faceFilter, expected.faces, "face filter restored")
+            checkEqual(reopened.favoriteFilter, .notFavorite, "favorite filter restored")
             checkEqual(reopened.groupingEnabled, true, "grouping restored")
             checkEqual(reopened.groupingThreshold, 0.58, "grouping threshold restored")
             checkEqual(reopened.settings.similarityThreshold, 0.58, "threshold persists with no media loaded")
@@ -57,8 +59,9 @@ func registerPanelPresetTests() {
             checkEqual(reopened.settings.taggerThreshold, 0.65, "preset restores dynamic threshold")
             checkEqual(reopened.settings.exportJPEGQuality, 0.5, "unrelated preferences retained")
             checkEqual(reopened.regroupPending, false, "no stale pending indicator")
-            reopened.clearPanelSettings(selectedSlot: nil)
+            reopened.clearPanelSettings()
             checkEqual(reopened.settings.revealAllGroups, false, "clear returns to limited mode")
+            checkEqual(reopened.favoriteFilter, .all, "clear resets favorite filter")
             checkEqual(reopened.settings.tagAdvancedMode, true, "clear returns to Advanced")
             checkEqual(reopened.settings.tagTopCount, 99, "clear resets Top to all")
             checkEqual(reopened.settings.taggerThreshold, 0.35, "clear resets threshold")
@@ -102,6 +105,58 @@ func registerPanelPresetTests() {
             reopened.loadPanelPreset(initial[0].id)
             checkEqual(reopened.settings.perGroupFrameCount, WaifuSettings.default.perGroupFrameCount, "untouched slots load defaults")
             check(!session.savePanelPreset(at: 3), "out-of-range slot rejected")
+        }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "clear preserves recalled memory until Memory is pressed", knownBug: nil) {
+        let directory = try Temporary.directory("panel-presets-clear")
+        try await MainActor.run {
+            let url = directory.appendingPathComponent("settings.json")
+            let session = WaifuSession(settingsURL: url)
+            session.settings.perGroupFrameCount = 23
+            session.tagFilter = TagFilter(requiredTags: ["smile"])
+            check(session.savePanelPreset(at: 1), "save customized memory")
+            let saved = session.panelPresets
+            let file = directory.appendingPathComponent("settings.presets.json")
+            let savedData = try Data(contentsOf: file)
+            session.loadPanelPreset(saved[1].id)
+            session.clearPanelSettings()
+            checkEqual(session.settings.perGroupFrameCount, WaifuSettings.default.perGroupFrameCount, "clear resets live cap")
+            checkEqual(session.tagFilter, TagFilter(), "clear resets live tags")
+            checkEqual(session.panelPresets, saved, "clear preserves all memories")
+            checkEqual(try Data(contentsOf: file), savedData, "clear leaves saved memory file unchanged")
+            let reopened = WaifuSession(settingsURL: url)
+            reopened.loadPanelPreset(saved[1].id)
+            checkEqual(reopened.settings.perGroupFrameCount, 23, "memory survives clear and restart")
+            checkEqual(reopened.tagFilter, saved[1].tags, "saved tags can be recalled")
+            check(session.savePanelPreset(at: 1), "Memory explicitly saves cleared preferences")
+            let updated = WaifuSession(settingsURL: url)
+            updated.loadPanelPreset(saved[1].id)
+            checkEqual(updated.tagFilter, TagFilter(), "Memory persists cleared tags")
+            checkEqual(updated.panelPresets[0], saved[0], "other slot retained")
+            checkEqual(updated.panelPresets[2], saved[2], "other slot retained")
+        }
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "favorite choices round trip and older presets default to all", knownBug: nil) {
+        let directory = try Temporary.directory("panel-presets-favorites")
+        try await MainActor.run {
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            for choice in FrameFavoriteFilter.allCases {
+                session.favoriteFilter = choice
+                check(session.savePanelPreset(at: 0), "save favorite choice")
+                let data = try JSONEncoder().encode(session.panelPresets[0])
+                let preset = try JSONDecoder().decode(PanelPreset.self, from: data)
+                checkEqual(preset.favorites, choice, "choice survives encoding")
+                session.favoriteFilter = .all
+                session.loadPanelPreset(preset.id)
+                checkEqual(session.favoriteFilter, choice, "choice recalled")
+            }
+            var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session.panelPresets)) as! [[String: Any]]
+            legacy[0].removeValue(forKey: "favorites")
+            try JSONSerialization.data(withJSONObject: legacy).write(to: directory.appendingPathComponent("settings.presets.json"))
+            let reopened = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            reopened.favoriteFilter = .favorite
+            reopened.loadPanelPreset(session.panelPresets[0].id)
+            checkEqual(reopened.favoriteFilter, .all, "older preset defaults to all favorites")
         }
     })
     Registry.shared.add(suite: suite, TestCase(name: "failed overwrite preserves the slot and reports an error", knownBug: nil) {

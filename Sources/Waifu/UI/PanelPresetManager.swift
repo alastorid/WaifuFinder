@@ -4,6 +4,7 @@ import SwiftUI
 struct PanelPresetManager: View {
     @ObservedObject var session: WaifuSession
     @State private var selectedSlot: Int?
+    @State private var memoryArmed = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -17,8 +18,15 @@ struct PanelPresetManager: View {
                             .frame(width: 1, height: 12)
                     }
                     Button {
-                        session.loadPanelPreset(session.panelPresets[slot].id)
-                        selectedSlot = slot
+                        if memoryArmed {
+                            if session.savePanelPreset(at: slot) {
+                                memoryArmed = false
+                                selectedSlot = slot
+                            }
+                        } else {
+                            session.loadPanelPreset(session.panelPresets[slot].id)
+                            selectedSlot = slot
+                        }
                     } label: {
                         Text("\(slot + 1)")
                             .monospacedDigit()
@@ -27,7 +35,7 @@ struct PanelPresetManager: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Load preset \(slot + 1)")
+                    .accessibilityLabel("\(memoryArmed ? "Save" : "Load") preset \(slot + 1)")
                     .accessibilityAddTraits(selectedSlot == slot ? .isSelected : [])
                 }
             }
@@ -39,14 +47,24 @@ struct PanelPresetManager: View {
             }
             .disabled(!session.canLoadPanelPreset)
 
-            Button("Memory") {
-                if let selectedSlot { session.savePanelPreset(at: selectedSlot) }
+            Button {
+                memoryArmed.toggle()
+            } label: {
+                Text("Memory")
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 21)
+                    .foregroundStyle(memoryArmed ? Color.white : Color.primary)
+                    .background(memoryArmed ? Color.red : Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             }
-            .disabled(selectedSlot == nil)
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(memoryArmed ? .isSelected : [])
+            .help(memoryArmed ? "Click a slot to save the current preferences. Click Memory again to cancel." : "Click Memory, then a slot to save the current preferences.")
+            .disabled(!session.canLoadPanelPreset)
             .fixedSize()
 
             Button("Clear") {
-                session.clearPanelSettings(selectedSlot: selectedSlot)
+                session.clearPanelSettings()
             }
             .disabled(!session.canLoadPanelPreset)
             .fixedSize()

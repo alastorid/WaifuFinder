@@ -521,7 +521,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                  revealAllGroups: settings.revealAllGroups,
                                  tagAdvancedMode: settings.tagAdvancedMode,
                                  tagTopCount: settings.tagTopCount,
-                                 tagThreshold: settings.taggerThreshold)
+                                 tagThreshold: settings.taggerThreshold,
+                                 favorites: favoriteFilter)
         var updated = panelPresets
         updated[slot] = preset
         guard persistPanelPresets(updated) else { return false }
@@ -546,23 +547,10 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         applyPanelPreset(preset)
     }
 
-    /// Clears the live panel, and resets the selected slot to defaults when one exists.
-    func clearPanelSettings(selectedSlot: Int?) {
+    /// Clears only the live panel; saved slots change only through Memory.
+    func clearPanelSettings() {
         guard canLoadPanelPreset else { return }
-        let preset: PanelPreset
-        if let selectedSlot, panelPresets.indices.contains(selectedSlot) {
-            let previous = panelPresets[selectedSlot]
-            preset = PanelPreset(id: previous.id, name: previous.name,
-                                 order: .defaultOrder, limits: .none, tags: TagFilter(), faces: .all,
-                                 groupingEnabled: false, groupingThreshold: WaifuSettings.default.similarityThreshold,
-                                 groupRows: true, perGroupCount: WaifuSettings.default.perGroupFrameCount)
-            var updated = panelPresets
-            updated[selectedSlot] = preset
-            if persistPanelPresets(updated) { panelPresets = updated }
-        } else {
-            preset = PanelPreset.defaultSlot(1)
-        }
-        applyPanelPreset(preset)
+        applyPanelPreset(PanelPreset.defaultSlot(1))
     }
 
     private func applyPanelPreset(_ preset: PanelPreset) {
@@ -575,6 +563,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         frameLimits = photosAlbumURL == nil ? preset.limits.withoutForensic : preset.limits
         tagFilter = preset.tags
         faceFilter = preset.faces
+        favoriteFilter = preset.favorites ?? .all
         groupingEnabled = preset.groupingEnabled
         groupRows = preset.groupRows
         groupingThreshold = threshold
