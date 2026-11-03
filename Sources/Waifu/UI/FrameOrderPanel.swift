@@ -93,6 +93,7 @@ struct FrameOrderPanel: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .monospacedDigit()
+            .fixedSize(horizontal: true, vertical: false)
         } content: {
             orderSection
         }
@@ -378,6 +379,7 @@ struct FrameOrderPanel: View {
                             .font(.system(size: 10, weight: .semibold))
                         Text(title)
                             .font(.headline)
+                            .fixedSize(horizontal: true, vertical: false)
                         if let titleAccessory {
                             titleAccessory
                         }
@@ -395,7 +397,8 @@ struct FrameOrderPanel: View {
                 // Keep the empty part of the header clickable even though the
                 // disclosure button no longer stretches under the trailing controls.
                 Color.clear
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .layoutPriority(-1)
                     .contentShape(Rectangle())
                     .onTapGesture { togglePanel(isExpanded) }
                     .accessibilityHidden(true)

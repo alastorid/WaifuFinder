@@ -306,35 +306,46 @@ struct TagFilterView: View {
         let showsAll = alwaysShowsAll(rarity) || expandedRarityGroups.contains(rarity.rawValue)
         let displayedTags = TagRarityDisplay.limited(tags, showingAll: showsAll)
         let hiddenCount = tags.count - displayedTags.count
-        return DisclosureGroup(isExpanded: Binding(
-            get: { !collapsedGroups.contains(title) },
-            set: { expanded in
-                if expanded { collapsedGroups.remove(title) } else { collapsedGroups.insert(title) }
-            }
-        )) {
-            TagChipFlow(spacing: 5, groupTagCount: 0) {
-                ForEach(displayedTags, id: \.self) { tag in tagChip(for: tag) }
-                if hiddenCount > 0 {
-                    showAllRarityTagsButton(rarity: rarity, total: tags.count)
+        let isExpanded = !collapsedGroups.contains(title)
+        return VStack(alignment: .leading, spacing: 4) {
+            Button {
+                if isExpanded { collapsedGroups.insert(title) } else { collapsedGroups.remove(title) }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                    Text("\(title) (\(tags.count))")
+                        .font(.caption)
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
-            .padding(.top, 4)
-        } label: {
-            Text("\(title) (\(tags.count))")
-                .font(.caption)
-                .contextMenu {
-                    Button("Exclude \(title) tags") {
-                        var filter = session.tagFilter
-                        for tag in allTags { filter.setExcluded(true, tag: tag) }
-                        session.tagFilter = filter
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title), \(tags.count) tags")
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .contextMenu {
+                Button("Exclude \(title) tags") {
+                    var filter = session.tagFilter
+                    for tag in allTags { filter.setExcluded(true, tag: tag) }
+                    session.tagFilter = filter
+                }
+                Divider()
+                Toggle("Always show all tags in this group", isOn: Binding(
+                    get: { alwaysShowsAll(rarity) },
+                    set: { setAlwaysShowsAll($0, for: rarity) }
+                ))
+            }
+            if isExpanded {
+                TagChipFlow(spacing: 5, groupTagCount: 0) {
+                    ForEach(displayedTags, id: \.self) { tag in tagChip(for: tag) }
+                    if hiddenCount > 0 {
+                        showAllRarityTagsButton(rarity: rarity, total: tags.count)
                     }
-                    Divider()
-                    Toggle("Always show all tags in this group", isOn: Binding(
-                        get: { alwaysShowsAll(rarity) },
-                        set: { setAlwaysShowsAll($0, for: rarity) }
-                    ))
                 }
+                .padding(.leading, 15)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(7)
         .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.6)))
