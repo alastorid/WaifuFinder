@@ -10,6 +10,9 @@ struct TagFilterView: View {
     @AppStorage("tagFilterRarityGrouping") private var groupingEnabled = true
     @AppStorage("tagRarityAlwaysShowAllGroups") private var alwaysShowAllRarityGroups = ""
     @State private var expandedRarityGroups: Set<Int> = []
+    @State private var expandedTagGroups: Set<String> = []
+    @AppStorage("tagAlwaysShowAllGroups") private var alwaysShowAllTagGroups = ""
+    @AppStorage("tagShowAllGroups") private var showAllGroups = false
     @State private var selectedTags: Set<String> = []
     @State private var selectionRect: CGRect?
 
@@ -30,69 +33,18 @@ struct TagFilterView: View {
         session.taggingProgress.isRunning || session.taggedFrameCount == 0
     }
 
-    private func alphabetical(_ tags: Set<String>) -> [String] {
-        tags.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
-
-    /// Tags carried by enough frames to be worth offering, minus those the filter
-    /// has classified. A common tag that is also wanted or unwanted leads that
-    /// group instead of appearing here.
-    private var commonTags: [String] {
-        alphabetical(Set(session.tagCommonTags)
-            .subtracting(session.tagFilter.requiredTags)
-            .subtracting(session.tagFilter.excludedTags)
-            .subtracting(session.tagFilter.orTags))
-    }
-
-    private var wantedTags: [String] {
-        alphabetical(session.tagFilter.requiredTags)
-    }
-
-    private var unwantedTags: [String] {
-        alphabetical(session.tagFilter.excludedTags)
-    }
-
-    /// Tags offered by the frames shown that are neither common nor classified.
-    private var unselectedTags: [String] {
-        let common = Set(session.tagCommonTags)
-        let grouped = session.tagFilter.orTags
-        return session.tagFacetTags.filter {
-            !session.tagFilter.requiredTags.contains($0)
-                && !session.tagFilter.excludedTags.contains($0)
-                && !common.contains($0)
-                && !grouped.contains($0)
-        }
-    }
-
-    private var tags: [String] {
-        commonTags + standaloneTags + Array(session.tagFilter.orTags)
-    }
-
-    /// Everything the Common group does not hold, in the same lead order.
-    private var standaloneTags: [String] {
-        wantedTags + unwantedTags + unselectedTags
-    }
+    private var commonTags: [String] { session.tagBrowserSnapshot.common }
+    private var wantedTags: [String] { session.tagBrowserSnapshot.wanted }
+    private var unwantedTags: [String] { session.tagBrowserSnapshot.unwanted }
+    private var unselectedTags: [String] { session.tagBrowserSnapshot.unselected }
+    private var tags: [String] { session.tagBrowserSnapshot.all }
 
     private func matching(_ tags: [String]) -> [String] {
         guard !quickFilterText.isEmpty else { return tags }
         return tags.filter { $0.localizedCaseInsensitiveContains(quickFilterText) }
     }
 
-    private var ungroupedTags: [String] { commonTags + standaloneTags }
-
-    private func ordered(_ tags: [String]) -> [String] { tags }
-
-    /// Rarity bands lead with the strongest match count. `unselectedTags` is
-    /// already in the tagger's confidence order, retained for equal counts.
-    private var qualityOrderedUnselectedTags: [String] {
-        TagRarityDisplay.ordered(unselectedTags, matchCounts: session.tagMatchCounts)
-    }
-
-    private func rarityTags(_ rarity: TagRarity, from orderedTags: [String]) -> [String] {
-        orderedTags.filter {
-            TagRarity.classify(matches: session.tagMatchCounts[$0, default: 0], total: session.tagCandidateCount) == rarity
-        }
-    }
+    private var ungroupedTags: [String] { session.tagBrowserSnapshot.ungrouped }
 
     private func alwaysShowsAll(_ rarity: TagRarity) -> Bool {
         alwaysShowAllRarityGroups.split(separator: ",").contains { Int($0) == rarity.rawValue }
@@ -105,8 +57,31 @@ struct TagFilterView: View {
         if !show { expandedRarityGroups.remove(rarity.rawValue) }
     }
 
+    private func alwaysShowsAllGroup(_ key: String) -> Bool {
+        alwaysShowAllTagGroups.split(separator: ",").contains { $0 == key }
+    }
+
+    private func showsAllGroup(_ key: String) -> Bool {
+        showAllGroups || expandedTagGroups.contains(key) || alwaysShowsAllGroup(key)
+    }
+
+    private func setAlwaysShowsAllGroup(_ show: Bool, key: String) {
+        var values = Set(alwaysShowAllTagGroups.split(separator: ",").map(String.init))
+        if show { values.insert(key) } else { values.remove(key) }
+        alwaysShowAllTagGroups = values.sorted().joined(separator: ",")
+        if !show { expandedTagGroups.remove(key) }
+    }
+
+    private func alwaysShowAllGroupToggle(_ key: String) -> some View {
+        Toggle("Always show all tags in this group", isOn: Binding(
+            get: { alwaysShowsAllGroup(key) },
+            set: { setAlwaysShowsAllGroup($0, key: key) }
+        ))
+    }
+
     private var hasVisibleOrGroups: Bool {
-        session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
+        !session.tagFilter.unwantedGroups.isEmpty
+            || session.tagFilter.orGroups.contains { !matching(Array($0.tags)).isEmpty }
     }
 
     private var hasVisibleTags: Bool {
@@ -132,7 +107,7 @@ struct TagFilterView: View {
                 if showsTaggingStatus {
                     TaggingPanelStatus(session: session, panel: .tags)
                 }
-                if hasActiveTags || !session.tagFilter.orGroups.isEmpty || !showsTaggingStatus {
+                if hasActiveTags || !session.tagFilter.orGroups.isEmpty || !session.tagFilter.unwantedGroups.isEmpty || !showsTaggingStatus {
                     if session.isSummarizingTags, !tags.isEmpty {
                         HStack(spacing: 5) {
                             ProgressView()
@@ -142,12 +117,12 @@ struct TagFilterView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if session.tagVocabulary == nil && !hasActiveTags && session.tagFilter.orGroups.isEmpty {
+                    if session.tagVocabulary == nil && !hasActiveTags && session.tagFilter.orGroups.isEmpty && session.tagFilter.unwantedGroups.isEmpty {
                         Text("Install WD Tagger in Settings to filter by tags.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
-                    } else if tags.isEmpty && session.tagFilter.orGroups.isEmpty {
+                    } else if tags.isEmpty && session.tagFilter.orGroups.isEmpty && session.tagFilter.unwantedGroups.isEmpty {
                         Text(session.isSummarizingTags ? "Updating tags…" : session.frames.isEmpty
                              ? "Tags will appear after a video is analyzed."
                              : "No tags among the frames currently shown.")
@@ -183,10 +158,13 @@ struct TagFilterView: View {
                             if groupingEnabled {
                                 groupedTagSections
                             } else {
+                                ForEach(session.tagFilter.unwantedGroups) { group in
+                                    unwantedGroup(group)
+                                }
                                 ForEach(session.tagFilter.orGroups) { group in
                                     orGroup(group)
                                 }
-                                chipFlow(matching(ungroupedTags))
+                                chipFlow(matching(ungroupedTags), groupKey: "ungrouped")
                             }
                         }
                         .overlayPreferenceValue(TagChipBoundsPreferenceKey.self) { anchors in
@@ -233,6 +211,9 @@ struct TagFilterView: View {
         .onChange(of: session.tagControlsResetRevision) { _, _ in
             quickFilterText = ""
             selectedTags.removeAll()
+            expandedTagGroups.removeAll()
+            expandedRarityGroups.removeAll()
+            showAllGroups = false
             selectionRect = nil
             groupingEnabled = true
             collapsedGroups = Self.defaultCollapsedGroups
@@ -251,18 +232,19 @@ struct TagFilterView: View {
         if !visibleCommon.isEmpty {
             tagSection("Common", tags: visibleCommon, color: .secondary, isLite: true)
         }
-        if !wantedTags.isEmpty {
-            tagSection("Wanted", tags: wantedTags, color: .accentColor)
+        let wantedGroups = session.tagFilter.unwantedGroups.filter(\.isWanted)
+        let unwantedGroups = session.tagFilter.unwantedGroups.filter { !$0.isWanted }
+        if !wantedTags.isEmpty || !wantedGroups.isEmpty {
+            tagSection("Wanted", tags: wantedTags, color: .accentColor, inverseGroups: wantedGroups)
         }
-        if !unwantedTags.isEmpty {
-            tagSection("Unwanted", tags: unwantedTags, color: .orange)
+        if !unwantedTags.isEmpty || !unwantedGroups.isEmpty {
+            tagSection("Unwanted", tags: unwantedTags, color: .orange, inverseGroups: unwantedGroups)
         }
         ForEach(session.tagFilter.orGroups) { group in
             orGroup(group)
         }
-        let orderedTags = qualityOrderedUnselectedTags
         ForEach(TagRarity.allCases) { rarity in
-            let allTags = rarityTags(rarity, from: orderedTags)
+            let allTags = session.tagBrowserSnapshot.rarityBands[rarity.rawValue]
             let visible = matching(allTags)
             if !visible.isEmpty {
                 rarityGroup(rarity, tags: visible, allTags: allTags)
@@ -270,21 +252,43 @@ struct TagFilterView: View {
         }
     }
 
-    private func chipFlow(_ tags: [String]) -> some View {
-        TagChipFlow(spacing: 5, groupTagCount: 0) {
-            ForEach(tags, id: \.self) { tag in tagChip(for: tag) }
+    private func chipFlow(_ tags: [String], groupKey: String) -> some View {
+        let displayed = TagRarityDisplay.limited(tags, showingAll: showsAllGroup(groupKey))
+        return TagChipFlow(spacing: 5) {
+            ForEach(displayed, id: \.self) { tag in tagChip(for: tag) }
+            if displayed.count < tags.count {
+                showAllTagsButton(total: tags.count) { expandedTagGroups.insert(groupKey) }
+            }
         }
     }
 
     /// Common tags share one quiet container. Wanted and unwanted tags use the
     /// same shape with enough tint to stay visible above the rarity bands.
     private func tagSection(_ title: String, tags: [String], color: Color,
-                            isLite: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("\(title) (\(tags.count))")
+                            isLite: Bool = false, inverseGroups: [TagInverseGroup] = []) -> some View {
+        let key = "section:\(title)"
+        let showsAll = showsAllGroup(key)
+        let total = tags.count + inverseGroups.count
+        let displayedGroups = showsAll ? inverseGroups : Array(inverseGroups.prefix(TagRarityDisplay.tagLimit))
+        let displayedTags = TagRarityDisplay.limited(tags, showingAll: showsAll,
+            limit: max(0, TagRarityDisplay.tagLimit - displayedGroups.count))
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("\(title) (\(tags.count + inverseGroups.count))")
                 .font(.caption.weight(isLite ? .regular : .semibold))
                 .foregroundStyle(color)
-            chipFlow(tags)
+                .contextMenu {
+                    groupActions(title, tags: Set(tags))
+                        .disabled(tags.isEmpty)
+                    Divider()
+                    alwaysShowAllGroupToggle(key)
+                }
+            TagChipFlow(spacing: 5) {
+                ForEach(displayedGroups) { group in unwantedGroup(group) }
+                ForEach(displayedTags, id: \.self) { tag in tagChip(for: tag) }
+                if displayedGroups.count + displayedTags.count < total {
+                    showAllTagsButton(total: total) { expandedTagGroups.insert(key) }
+                }
+            }
         }
         .padding(7)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -292,6 +296,20 @@ struct TagFilterView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 7)
                 .strokeBorder(color.opacity(isLite ? 0.14 : 0.35))
+        }
+    }
+
+    @ViewBuilder
+    private func groupActions(_ title: String, tags: Set<String>) -> some View {
+        Button("Include \(title) tags") {
+            var filter = session.tagFilter
+            filter.includeTags(tags)
+            session.tagFilter = filter
+        }
+        Button("Exclude \(title) tags") {
+            var filter = session.tagFilter
+            for tag in tags { filter.setExcluded(true, tag: tag) }
+            session.tagFilter = filter
         }
     }
 
@@ -303,7 +321,7 @@ struct TagFilterView: View {
         case .magic: .blue
         case .normal: .white
         }
-        let showsAll = alwaysShowsAll(rarity) || expandedRarityGroups.contains(rarity.rawValue)
+        let showsAll = showAllGroups || alwaysShowsAll(rarity) || expandedRarityGroups.contains(rarity.rawValue)
         let displayedTags = TagRarityDisplay.limited(tags, showingAll: showsAll)
         let hiddenCount = tags.count - displayedTags.count
         let isExpanded = !collapsedGroups.contains(title)
@@ -324,11 +342,7 @@ struct TagFilterView: View {
             .accessibilityLabel("\(title), \(tags.count) tags")
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .contextMenu {
-                Button("Exclude \(title) tags") {
-                    var filter = session.tagFilter
-                    for tag in allTags { filter.setExcluded(true, tag: tag) }
-                    session.tagFilter = filter
-                }
+                groupActions(title, tags: Set(allTags))
                 Divider()
                 Toggle("Always show all tags in this group", isOn: Binding(
                     get: { alwaysShowsAll(rarity) },
@@ -336,10 +350,10 @@ struct TagFilterView: View {
                 ))
             }
             if isExpanded {
-                TagChipFlow(spacing: 5, groupTagCount: 0) {
+                TagChipFlow(spacing: 5) {
                     ForEach(displayedTags, id: \.self) { tag in tagChip(for: tag) }
                     if hiddenCount > 0 {
-                        showAllRarityTagsButton(rarity: rarity, total: tags.count)
+                        showAllTagsButton(total: tags.count) { expandedRarityGroups.insert(rarity.rawValue) }
                     }
                 }
                 .padding(.leading, 15)
@@ -351,10 +365,8 @@ struct TagFilterView: View {
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.6)))
     }
 
-    private func showAllRarityTagsButton(rarity: TagRarity, total: Int) -> some View {
-        Button {
-            expandedRarityGroups.insert(rarity.rawValue)
-        } label: {
+    private func showAllTagsButton(total: Int, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Text("…")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -372,10 +384,15 @@ struct TagFilterView: View {
     }
 
     private func orGroup(_ group: TagOrGroup) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let key = "or:\(group.id.uuidString)"
+        return VStack(alignment: .leading, spacing: 5) {
             Text("OR (\(group.tags.count))")
                 .font(.caption.weight(.semibold))
                 .contextMenu {
+                    groupActions("OR", tags: group.tags)
+                    Divider()
+                    alwaysShowAllGroupToggle(key)
+                    Divider()
                     Button("Remove") {
                         var filter = session.tagFilter
                         filter.orGroups.removeAll { $0.id == group.id }
@@ -385,7 +402,7 @@ struct TagFilterView: View {
             if group.tags.isEmpty {
                 Text("Select tags and press F1").font(.caption).foregroundStyle(.tertiary)
             } else {
-                chipFlow(matching(ordered(alphabetical(group.tags))))
+                chipFlow(matching(session.tagBrowserSnapshot.orGroupTags[group.id, default: []]), groupKey: key)
             }
         }
         .padding(7)
@@ -396,11 +413,49 @@ struct TagFilterView: View {
 
     }
 
-    private var availableTags: Set<String> {
-        Set(session.tagFacetTags).union(session.tagCommonTags)
-            .union(session.tagFilter.requiredTags).union(session.tagFilter.excludedTags)
-            .union(session.tagFilter.orTags)
+    private func unwantedGroup(_ group: TagInverseGroup) -> some View {
+        let color: Color = group.isWanted ? .teal : .purple
+        return Text("\(group.tags.count) tags")
+            .font(.system(size: 14))
+            .strikethrough(!group.isWanted)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.16), in: Capsule())
+            .overlay(Capsule().strokeBorder(color.opacity(0.55)))
+            .contentShape(Capsule())
+            .onTapGesture { setInverseGroupWanted(true, id: group.id) }
+            .focusable()
+            .onKeyPress(keys: [.space, .return]) { _ in
+                setInverseGroupWanted(true, id: group.id)
+                return .handled
+            }
+            .accessibilityAction { setInverseGroupWanted(true, id: group.id) }
+            .accessibilityAddTraits(.isButton)
+            .contextMenu {
+                Button("Unwant") { setInverseGroupWanted(false, id: group.id) }
+                    .disabled(!group.isWanted)
+                Button("Want") { setInverseGroupWanted(true, id: group.id) }
+                    .disabled(group.isWanted)
+                Divider()
+                Button("Remove") {
+                    var filter = session.tagFilter
+                    filter.unwantedGroups.removeAll { $0.id == group.id }
+                    session.tagFilter = filter
+                }
+            }
+            .help("Inverse tag group. Right-click to choose Unwant, Want, or Remove.")
+            .accessibilityLabel("\(group.isWanted ? "Wanted" : "Unwanted") group, \(group.tags.count) tags")
     }
+
+    private func setInverseGroupWanted(_ wanted: Bool, id: UUID) {
+        var filter = session.tagFilter
+        guard let index = filter.unwantedGroups.firstIndex(where: { $0.id == id }) else { return }
+        filter.unwantedGroups[index].isWanted = wanted
+        session.tagFilter = filter
+    }
+
+    private var availableTags: Set<String> { session.tagBrowserSnapshot.available }
 
     private func groupSelectedTags() -> Bool {
         guard enabled, !session.crystalOrbIsOpen, !session.showExportSheet,
@@ -750,168 +805,42 @@ private struct TagRightClickMonitor: NSViewRepresentable {
     }
 }
 
-/// Places tags at their natural width and starts a new line when the next chip
-/// would exceed the filter panel's available width. An expanded Common group is
-/// laid out in place: its background is sized to the block holding the group chip
-/// and the tags that chip discloses, and the tags after the group carry on below
-/// that block as if it were the chips it stands for.
+/// Intrinsic chip sizes and wrapping are cached independently of scroll position.
+/// SwiftUI can ask for layout repeatedly without measuring every label again.
 private struct TagChipFlow: Layout {
-    /// Gap between chips, and between wrapped lines.
     var spacing: CGFloat
-    /// How many tags the group discloses. Zero leaves the group chip collapsed and
-    /// nothing else in the flow knows the group exists.
-    var groupTagCount: Int
-    /// Padding between the group's border and the chips inside it.
-    var groupInset: CGFloat = 7
 
-    private struct Placement {
-        let x: CGFloat
-        let y: CGFloat
-        let size: CGSize
+    struct Cache {
+        var sizes: [CGSize]
+        var arrangements: [CGFloat: TagFlowGeometry] = [:]
     }
 
-    private struct Arrangement {
-        var placements: [Placement]
-        var width: CGFloat
-        var height: CGFloat
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) })
     }
 
-    /// The block an expanded group occupies: its background, the chip that stands
-    /// for it, and the tags inside it.
-    private struct Group {
-        var placements: [Placement]
-        var width: CGFloat
-        var height: CGFloat
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        cache = makeCache(subviews: subviews)
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let availableWidth = proposal.width ?? .infinity
-        let arrangement = arrange(subviews, width: availableWidth)
-        return CGSize(width: proposal.width ?? arrangement.width, height: arrangement.height)
+    private func arrangement(width: CGFloat, cache: inout Cache) -> TagFlowGeometry {
+        if let existing = cache.arrangements[width] { return existing }
+        let result = TagFlowGeometry(sizes: cache.sizes, width: width, spacing: spacing)
+        if cache.arrangements.count >= 4 { cache.arrangements.removeAll(keepingCapacity: true) }
+        cache.arrangements[width] = result
+        return result
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let arrangement = arrange(subviews, width: bounds.width)
-        for (subview, placement) in zip(subviews, arrangement.placements) {
-            subview.place(
-                at: CGPoint(x: bounds.minX + placement.x, y: bounds.minY + placement.y),
-                proposal: ProposedViewSize(width: placement.size.width, height: placement.size.height)
-            )
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let result = arrangement(width: proposal.width ?? .infinity, cache: &cache)
+        return CGSize(width: proposal.width ?? result.size.width, height: result.size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let result = arrangement(width: bounds.width, cache: &cache)
+        for (subview, placement) in zip(subviews, result.placements) {
+            subview.place(at: CGPoint(x: bounds.minX + placement.origin.x, y: bounds.minY + placement.origin.y),
+                          proposal: ProposedViewSize(placement.size))
         }
     }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> Arrangement {
-        let group = groupRange(in: subviews)
-        var placements: [Placement] = []
-        var usedWidth: CGFloat = 0
-        var y: CGFloat = 0
-
-        if !group.isEmpty {
-            let block = arrangeGroup(subviews, indices: group, width: width)
-            placements.append(contentsOf: block.placements)
-            usedWidth = max(usedWidth, block.width)
-            y = block.height + spacing
-        }
-
-        // The tags the group does not stand for, wrapping as they did before it
-        // existed — only their starting line has moved.
-        var trailing = Band(spacing: spacing, width: width)
-        for index in group.upperBound..<subviews.endIndex {
-            trailing.add(subviews[index].sizeThatFits(.unspecified))
-        }
-        placements.append(contentsOf: trailing.placements.map {
-            Placement(x: $0.x, y: $0.y + y, size: $0.size)
-        })
-        usedWidth = max(usedWidth, trailing.usedWidth)
-
-        // The gap that opened the line below the group is not part of the flow's
-        // height unless a chip actually moved onto that line.
-        return Arrangement(
-            placements: placements,
-            width: width.isFinite ? min(width, usedWidth) : usedWidth,
-            height: trailing.isEmpty ? y - spacing : y + trailing.height
-        )
-    }
-
-    /// The leading subviews an expanded group occupies. The group's chip is the
-    /// first tag of the flow by construction — the filter puts it there — so the
-    /// group is taken from the front, and the background the caller drew in front
-    /// of the chip is part of it.
-    private func groupRange(in subviews: Subviews) -> Range<Int> {
-        guard groupTagCount > 0, subviews.count >= 1 + groupTagCount else { return 0..<0 }
-        let hasBackground = subviews.first?[TagChipGroupBackgroundKey.self] == true
-        return 0..<(1 + groupTagCount + (hasBackground ? 1 : 0))
-    }
-
-    /// The group leads the flow, so it is always measured against the top of it.
-    private func arrangeGroup(_ subviews: Subviews, indices: Range<Int>, width: CGFloat) -> Group {
-        let hasBackground = subviews[indices.lowerBound][TagChipGroupBackgroundKey.self]
-        let chipIndex = indices.lowerBound + (hasBackground ? 1 : 0)
-        let chipSize = subviews[chipIndex].sizeThatFits(.unspecified)
-
-        // The tags wrap inside the border, so they are laid out against the width
-        // the border leaves rather than the panel's own.
-        var content = Band(spacing: spacing, width: width.isFinite ? max(0, width - groupInset * 2) : .infinity)
-        for index in (chipIndex + 1)..<indices.upperBound {
-            content.add(subviews[index].sizeThatFits(.unspecified))
-        }
-
-        // The tags start under the chip, which the group chip is itself the label
-        // of, so the group's height is its top inset, the chip, the tags, and its
-        // bottom inset.
-        let tagsTop = groupInset + chipSize.height + spacing
-        let height = (content.isEmpty ? groupInset + chipSize.height : tagsTop + content.height) + groupInset
-        let groupWidth = width.isFinite ? width : groupInset * 2 + content.usedWidth
-
-        var placements: [Placement] = []
-        if hasBackground {
-            placements.append(Placement(x: 0, y: 0, size: CGSize(width: groupWidth, height: height)))
-        }
-        placements.append(Placement(x: groupInset, y: groupInset, size: chipSize))
-        for placement in content.placements {
-            placements.append(Placement(
-                x: groupInset + placement.x,
-                y: tagsTop + placement.y,
-                size: placement.size
-            ))
-        }
-        return Group(placements: placements, width: groupWidth, height: height)
-    }
-
-    /// Fills lines with chips at their natural width, breaking before the first
-    /// chip that would not fit on the line being filled.
-    private struct Band {
-        let spacing: CGFloat
-        let width: CGFloat
-        private(set) var placements: [Placement] = []
-        private var x: CGFloat = 0
-        private var y: CGFloat = 0
-        private var lineHeight: CGFloat = 0
-
-        init(spacing: CGFloat, width: CGFloat) {
-            self.spacing = spacing
-            self.width = width
-        }
-
-        var isEmpty: Bool { placements.isEmpty }
-        /// The widest line, and so the width the band asks for when nothing
-        /// proposes one.
-        var usedWidth: CGFloat { placements.map { $0.x + $0.size.width }.max() ?? 0 }
-        var height: CGFloat { placements.map { $0.y + $0.size.height }.max() ?? 0 }
-
-        mutating func add(_ size: CGSize) {
-            if x > 0 && x + size.width > width {
-                y += lineHeight + spacing
-                x = 0
-                lineHeight = 0
-            }
-            placements.append(Placement(x: x, y: y, size: size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
-
-private struct TagChipGroupBackgroundKey: LayoutValueKey {
-    static var defaultValue: Bool { false }
 }

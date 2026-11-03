@@ -13,6 +13,7 @@ private struct DisplayFilterCacheKey: Hashable {
     let requiredTags: Set<String>
     let excludedTags: Set<String>
     let orGroups: [Set<String>]
+    let unwantedGroups: [TagInverseGroup]
     let thresholdBits: UInt32
     let faceFilter: FrameFaceFilter
     let limits: FrameLimits
@@ -611,8 +612,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
     private var favoriteAssetIdentifiers = Set<String>()
 
+    private var isInstallingInverseSnapshot = false
     @Published var tagFilter = TagFilter() {
-        didSet { recomputeDisplayedFrames() }
+        didSet {
+            refreshTagBrowserSnapshot()
+            if !isInstallingInverseSnapshot { recomputeDisplayedFrames() }
+        }
     }
     @Published private(set) var tagControlsResetRevision = 0
 
@@ -1039,6 +1044,14 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
     // Publish both lists together; SwiftUI still reconciles chips by tag identity.
     @Published private var tagSummaryPresentation = TagSummaryPresentation()
+    private(set) var tagBrowserSnapshot = TagBrowserSnapshot()
+
+    private func refreshTagBrowserSnapshot() {
+        tagBrowserSnapshot = TagBrowserSnapshot(common: tagSummaryPresentation.common,
+            facets: tagSummaryPresentation.available, counts: tagSummaryPresentation.counts,
+            total: tagSummaryPresentation.frameCount, filter: tagFilter)
+    }
+
     var tagFacetTags: [String] { tagSummaryPresentation.available }
     /// Tags present on every frame currently shown in the grid.
     var tagCommonTags: [String] { tagSummaryPresentation.common }
@@ -1982,11 +1995,36 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         return TaggingCandidateSelection(key: key, frames: candidates, untaggedCount: untaggedCount)
     }
 
+    var canGenerateUnwantedTagGroup: Bool {
+        tagVocabulary != nil && !displayedFrames.isEmpty && !progress.isRunning
+            && previewFrame == nil && uncover == nil && !isLoadingPhotosAlbum
+            && completedTagSummaryInput != nil && pendingTagSummaryInput == nil
+    }
+
+    func generateUnwantedTagGroup() {
+        guard canGenerateUnwantedTagGroup, let vocabulary = tagVocabulary else { return }
+        // The published summary is the source of truth for this action. It may
+        // cover broader AND-only candidates, which still include every shown
+        // photo. No score decoding or per-photo work belongs on this path.
+        let shownTags = Set(tagMatchCounts.lazy.filter { $0.value > 0 }.map(\.key))
+        let inverse = Set(vocabulary.generalTags).subtracting(shownTags)
+        guard !inverse.isEmpty else { return }
+        var filter = tagFilter
+        filter.unwantedGroups.append(TagInverseGroup(tags: inverse))
+        // Every shown photo is already known not to match this new clause.
+        // Keep its ordering, geometry, summary and caps instead of rebuilding
+        // them. The query key includes the snapshot for subsequent changes.
+        isInstallingInverseSnapshot = true
+        defer { isInstallingInverseSnapshot = false }
+        tagFilter = filter
+    }
+
     private func filteredDisplayCandidates(grouping: GroupingSettings, filter requestedFilter: TagFilter) -> [AnalyzedFrame] {
         let key = DisplayFilterCacheKey(
             requiredTags: Set(requestedFilter.requiredTags.map(TagVocabulary.normalized)),
             excludedTags: Set(requestedFilter.excludedTags.map(TagVocabulary.normalized)),
             orGroups: requestedFilter.orGroups.map { Set($0.tags.map(TagVocabulary.normalized)) }.filter { !$0.isEmpty },
+            unwantedGroups: requestedFilter.unwantedGroups,
             thresholdBits: settings.taggerThreshold.bitPattern,
             faceFilter: faceFilter,
             limits: frameLimits,
@@ -1999,6 +2037,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
         let reusable = displayFilterResults.compatible { cached in
             cached.orGroups == key.orGroups
+                && cached.unwantedGroups == key.unwantedGroups
                 && cached.thresholdBits == key.thresholdBits
                 && cached.minimumFaceAreaBits == key.minimumFaceAreaBits
                 && cached.vocabularyFingerprint == key.vocabularyFingerprint
@@ -2019,11 +2058,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let source = reusable.map { frames(forCachedIndices: $0.entry.indices) } ?? frames.map(withPhotoRarity)
         let filter = TagFilter(requiredTags: key.requiredTags, excludedTags: key.excludedTags,
                                threshold: Float(bitPattern: key.thresholdBits),
-                               orGroups: key.orGroups.map { TagOrGroup(tags: $0) })
+                               orGroups: key.orGroups.map { TagOrGroup(tags: $0) },
+                               unwantedGroups: key.unwantedGroups)
+        let matcher = filter.prepared(vocabulary: tagVocabulary)
         let candidates = source.filter { frame in
             key.faceFilter.admits(frame, grouping: grouping)
                 && key.limits.admits(frame, grouping: grouping)
-                && filter.admits(frame, vocabulary: tagVocabulary)
+                && matcher.admits(frame)
         }
         displayFilterResults.store(candidates.map(\.id.sampleIndex), for: key)
         return candidates
@@ -2961,7 +3002,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                  exclusionOrder: tagFilter.exclusionOrder,
                                  scoreSortTag: tagFilter.scoreSortTag,
                                  scoreSortDescending: tagFilter.scoreSortDescending,
-                                 orGroups: tagFilter.orGroups),
+                                 orGroups: tagFilter.orGroups,
+                                 unwantedGroups: tagFilter.unwantedGroups),
             vocabulary: tagVocabulary,
             filteredCandidates: displayCandidates,
             applyingVisualOrder: false,
@@ -3170,35 +3212,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     private func clearPublishedTagSummary() {
         let empty = TagSummaryPresentation()
-        if tagSummaryPresentation != empty { tagSummaryPresentation = empty }
-    }
-
-    /// Apply individual tag changes to a private draft. Publish only the complete
-    /// draft, so intermediate removals and insertions never reach the layout.
-    private func reconcileTagList(_ current: inout [String], with target: [String]) {
-        let difference = target.difference(from: current)
-        guard !difference.isEmpty else { return }
-
-        for change in difference.removals.sorted(by: {
-            tagChangeOffset($0) > tagChangeOffset($1)
-        }) {
-            if case let .remove(offset, _, _) = change {
-                current.remove(at: offset)
-            }
-        }
-        for change in difference.insertions.sorted(by: {
-            tagChangeOffset($0) < tagChangeOffset($1)
-        }) {
-            if case let .insert(offset, element, _) = change {
-                current.insert(element, at: offset)
-            }
-        }
-    }
-
-    private func tagChangeOffset(_ change: CollectionDifference<String>.Change) -> Int {
-        switch change {
-        case let .insert(offset, _, _), let .remove(offset, _, _):
-            return offset
+        if tagSummaryPresentation != empty {
+            tagSummaryPresentation = empty
+            refreshTagBrowserSnapshot()
         }
     }
 
@@ -3276,11 +3292,16 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let common = Set(labels.common)
         let available = labels.ranked.filter { !common.contains($0) && !tagFilter.requiredTags.contains($0) }
         var next = tagSummaryPresentation
-        reconcileTagList(&next.common, with: labels.common)
-        reconcileTagList(&next.available, with: available)
+        // SwiftUI reconciles tags by ID. Computing and replaying a collection
+        // difference here was quadratic for large reordered vocabularies.
+        next.common = labels.common
+        next.available = available
         next.counts = labels.counts
         next.frameCount = labels.frameCount
-        if next != tagSummaryPresentation { tagSummaryPresentation = next }
+        if next != tagSummaryPresentation {
+            tagSummaryPresentation = next
+            refreshTagBrowserSnapshot()
+        }
     }
 
     // MARK: - Grouping

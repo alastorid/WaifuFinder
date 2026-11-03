@@ -242,6 +242,147 @@ func registerTagSummaryTests() {
         check(TagDragPayload.decode(TagDragPayload.encode([])) == nil, "empty drags are rejected")
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "tag browser snapshots and cached geometry need no filtering during scroll", knownBug: nil) {
+        let inverse = TagInverseGroup(tags: ["hidden"])
+        let filter = TagFilter(requiredTags: ["wanted"], excludedTags: ["unwanted"],
+            orGroups: [TagOrGroup(tags: ["grouped", "hidden"])], unwantedGroups: [inverse])
+        let snapshot = TagBrowserSnapshot(common: ["common"],
+            facets: ["common", "wanted", "unwanted", "grouped", "hidden", "rare", "frequent"],
+            counts: ["rare": 1, "frequent": 20], total: 1_000, filter: filter)
+        checkEqual(snapshot.common, ["common"], "common prepared once")
+        checkEqual(snapshot.wanted, ["wanted"], "wanted prepared once")
+        checkEqual(snapshot.unwanted, ["unwanted"], "unwanted prepared once")
+        checkEqual(snapshot.unselected, ["rare", "frequent"], "snapshot hides classified and inverse-referenced tags")
+        checkEqual(snapshot.rarityBands[TagRarity.legendary.rawValue], ["rare"], "rarity classified before rendering")
+        checkEqual(snapshot.orGroupTags[filter.orGroups[0].id], ["grouped"], "OR chip list hides inverse references")
+        var changed = filter
+        changed.unwantedGroups[0].isWanted = true
+        let switched = TagBrowserSnapshot(common: ["common"], facets: ["hidden"], counts: [:], total: 1, filter: changed)
+        check(!switched.available.contains("hidden"), "wanted inverse references remain hidden")
+        checkEqual(changed.unwantedGroups[0].tags, inverse.tags, "switching mode retains the frozen tag set")
+        let geometry = TagFlowGeometry(sizes: [CGSize(width: 30, height: 20), CGSize(width: 40, height: 20),
+                                             CGSize(width: 35, height: 24)], width: 80, spacing: 5)
+        checkEqual(geometry.placements.map(\.origin), [CGPoint(x: 0, y: 0), CGPoint(x: 35, y: 0), CGPoint(x: 0, y: 25)], "wrapping geometry is independent of scroll origin")
+        checkEqual(geometry.size.height, 49, "wrapping height includes the last row")
+        checkEqual(TagFlowGeometry(sizes: [], width: 80, spacing: 5).size.height, 0, "empty flows have zero height")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "prepared sparse tag filters preserve dense matching and fallback semantics", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        var frames = [summaryFrame(0, [4: 0.9, 5: 0.4]), summaryFrame(1, [5: 0.8, 6: 0.5]),
+                      summaryFrame(2, [4: 0.35, 6: 1])]
+        frames[0].topTags = ["tag_0", "unknown"]
+        var saved = frames[1]
+        saved.tagProbabilities = nil
+        saved.topTags = ["tag_1", "unknown"]
+        frames.append(saved)
+        var invalid = frames[2]
+        invalid.tagProbabilities = Data("invalid".utf8)
+        invalid.topTags = ["tag_2", "unknown"]
+        frames.append(invalid)
+        // Reference the original selective dense matching semantics, including
+        // unknown-head exclusions and malformed-payload saved-tag fallback.
+        func reference(_ filter: TagFilter, _ frame: AnalyzedFrame, _ vocabulary: TagVocabulary?) -> Bool {
+            let required = Set(filter.requiredTags.map(TagVocabulary.normalized))
+            let excluded = Set(filter.excludedTags.union(filter.unwantedGroupTags).map(TagVocabulary.normalized))
+            let alternatives = (filter.orGroups.map(\.tags) + filter.unwantedGroups.filter(\.isWanted).map(\.tags))
+                .map { Set($0.map(TagVocabulary.normalized)) }.filter { !$0.isEmpty }
+            let relevant = required.union(excluded).union(alternatives.reduce(into: Set<String>()) { $0.formUnion($1) })
+            if relevant.isEmpty { return true }
+            let saved = Set((frame.topTags ?? []).map(TagVocabulary.normalized))
+            var matching = saved
+            if let vocabulary, let data = frame.tagProbabilities {
+                let entries = relevant.compactMap { tag in vocabulary.index(for: tag).map { (tag, $0) } }
+                if let scores = TagProbabilityCodec.values(in: data, at: entries.map(\.1)) {
+                    matching = Set(zip(entries, scores).compactMap { $1 > filter.threshold ? $0.0 : nil })
+                    matching.formUnion(excluded.filter { vocabulary.index(for: $0) == nil && saved.contains($0) })
+                }
+                matching.subtract(relevant.filter { vocabulary.index(for: $0) == nil && !excluded.contains($0) })
+            }
+            return excluded.isDisjoint(with: matching) && required.isSubset(of: matching)
+                && alternatives.allSatisfy { !$0.isDisjoint(with: matching) }
+        }
+        for threshold: Float in [0.35, 0.5, 1] {
+            for required: Set<String> in [[], ["tag_0"], ["unknown"]] {
+                for excluded: Set<String> in [[], ["tag_1"], ["unknown"]] {
+                    for wanted in [false, true] {
+                        let filter = TagFilter(requiredTags: required, excludedTags: excluded, threshold: threshold,
+                            orGroups: [TagOrGroup(tags: ["tag_0", "tag_2", "unknown"])],
+                            unwantedGroups: [TagInverseGroup(tags: ["tag_2", "unknown"], isWanted: wanted)])
+                        for vocab: TagVocabulary? in [nil, vocabulary] {
+                            let matcher = filter.prepared(vocabulary: vocab)
+                            for frame in frames {
+                                checkEqual(matcher.admits(frame), reference(filter, frame, vocab), "sparse matcher preserves filter decisions")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "group includes use OR and inverse unwanted groups persist and filter", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let a = summaryFrame(0, [4: 0.9])
+        let b = summaryFrame(1, [5: 0.9])
+        let c = summaryFrame(2, [6: 0.9])
+        var filter = TagFilter(excludedTags: ["tag_0"])
+        filter.includeTags(["tag_0", "tag_1"])
+        check(filter.excludedTags.isEmpty, "including clears old exclusions")
+        check(filter.admits(a, vocabulary: vocabulary) && filter.admits(b, vocabulary: vocabulary), "include group matches either tag")
+        check(!filter.admits(c, vocabulary: vocabulary), "include group requires a match")
+        filter.generateUnwantedGroup(knownTags: ["tag_0", "tag_1", "tag_2"], shownTags: ["tag_0", "tag_1"])
+        checkEqual(filter.unwantedGroups.first?.tags, ["tag 2"], "snapshot contains the inverse of shown tags")
+        filter.orGroups = []
+        check(filter.hasActiveTags, "unwanted group activates filtering by itself")
+        check(filter.admits(a, vocabulary: vocabulary) && filter.admits(b, vocabulary: vocabulary), "shown tags remain admitted")
+        check(!filter.admits(c, vocabulary: vocabulary), "inverse tag removes a photo")
+        var savedOnly = c
+        savedOnly.tagProbabilities = nil
+        savedOnly.topTags = ["tag_2"]
+        check(!filter.admits(savedOnly), "saved tags also respect inverse groups")
+        let restored = try JSONDecoder().decode(TagFilter.self, from: JSONEncoder().encode(filter))
+        checkEqual(restored, filter, "inverse snapshot survives preset serialization")
+        filter.unwantedGroups[0].isWanted = true
+        check(filter.admits(c, vocabulary: vocabulary), "wanted inverse group accepts a represented tag")
+        check(!filter.admits(a, vocabulary: vocabulary), "wanted inverse group requires a represented tag")
+        filter.unwantedGroups[0].isWanted = false
+        check(!filter.admits(c, vocabulary: vocabulary), "switching back to unwanted restores exclusion")
+        filter.unwantedGroups = []
+        check(filter.admits(c, vocabulary: vocabulary), "removing the chip restores matching photos")
+        filter.includeTags(["tag_0"])
+        checkEqual(filter.orGroups.first?.tags, ["tag_0"], "single tag display groups can be included")
+        let legacy = try JSONDecoder().decode(TagFilter.self, from: Data("{}".utf8))
+        check(legacy.unwantedGroups.isEmpty, "older presets decode without inverse groups")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(name: "inverse pseudo tag leaves shown photos unchanged and invalidates cached candidates", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let directory = try Temporary.directory("tag-inverse")
+        let frames = [summaryFrame(0, [4: 0.9, 5: 0.9]), summaryFrame(1, [6: 0.9])]
+        await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
+            session.frameOrder = .chronological
+            session.updateAnalyzedFrames(frames)
+            session.tagFilter = TagFilter(requiredTags: ["tag_0"])
+            let original = session.displayedFrames.map(\.id)
+            for _ in 0..<500 {
+                if session.canGenerateUnwantedTagGroup { break }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            check(session.canGenerateUnwantedTagGroup, "summary is ready for snapshot creation")
+            let revision = session.gridRevision
+            session.generateUnwantedTagGroup()
+            checkEqual(session.gridRevision, revision, "snapshot creation does not rebuild grid geometry")
+            checkEqual(session.displayedFrames.map(\.id), original, "applying inverse group preserves the original shown photos")
+            checkEqual(session.tagFilter.unwantedGroupTags.count, TagVocabulary.generalCount - 2, "chip represents thousands of inverse tags")
+            session.tagFilter.requiredTags = []
+            checkEqual(session.displayedFrames.map(\.id), original, "inverse group excludes new photos after relaxing the filter")
+            session.tagFilter.unwantedGroups = []
+            checkEqual(session.displayedFrames.count, 2, "removal invalidates candidates and restores photos")
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "multi-selected tags always create a new OR group", knownBug: nil) {
         var filter = TagFilter(requiredTags: ["a"], excludedTags: ["b"])
         checkNil(filter.groupSelectedTags(["a"]), "a single tag does not create a group")

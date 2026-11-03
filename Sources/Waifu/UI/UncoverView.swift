@@ -9,172 +9,68 @@ struct UncoverView: View {
     @State private var keyMonitor: Any?
     @State private var modelsChangedWhileBusy = false
     @State private var arrows = PreviewArrowNavigation()
+    @State private var showsBusyProgress = false
+    @State private var showsFrameProgress = false
     /// Observed so the Reconstruct button's ᴿ mark follows the selected
     /// algorithm and the connection live.
     @ObservedObject private var remote = RemoteClient.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Text("Uncover Waifu").font(.headline)
-                Text(session.geometry).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                Spacer()
-                Button("−") { session.zoom = max(0.25, session.zoom / 1.5) }
-                Text(String(format: "%.0f%%", session.zoom * 100)).font(.caption.monospacedDigit())
-                Button("+") { session.zoom = min(16, session.zoom * 1.5) }
-                HStack(spacing: 2) {
-                    Button { session.setViewScaleMode(.original) } label: { Text("Orig") }
-                        .accessibilityLabel("Original pixel size")
-                        .padding(.horizontal, 6).padding(.vertical, 4)
-                        .background(session.viewScaleMode == .original ? Color.accentColor.opacity(0.2) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 4))
-                    Button { session.setViewScaleMode(.fitWidth) } label: { Image(systemName: "arrow.left.and.right") }
-                        .accessibilityLabel("Fit video to width")
-                        .padding(.horizontal, 6).padding(.vertical, 4)
-                        .background(session.viewScaleMode == .fitWidth ? Color.accentColor.opacity(0.2) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 4))
-                    Button { session.setViewScaleMode(.fitHeight) } label: { Image(systemName: "arrow.up.and.down") }
-                        .accessibilityLabel("Fit video to height")
-                        .padding(.horizontal, 6).padding(.vertical, 4)
-                        .background(session.viewScaleMode == .fitHeight ? Color.accentColor.opacity(0.2) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 4))
-                }.buttonStyle(.borderless).padding(3).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                Button("Close", action: close)
-            }.buttonStyle(.borderless).padding(12)
-            Divider()
-            if session.busy {
-                VStack(spacing: 16) {
-                    ProgressView()
-                    Text(session.status).font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                UncoverCanvas(session: session)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                header
+                Divider()
+                if session.busy && showsBusyProgress {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text(session.status)
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .bottomTrailing) {
-                        if session.readingSource {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(8)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                                .padding(10)
-                                .accessibilityLabel("Loading source frame")
-                                .allowsHitTesting(false)
+                } else {
+                    UncoverCanvas(session: session)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .bottomTrailing) {
+                            if !session.busy && session.navigatingFrame && showsFrameProgress {
+                                ProgressView().controlSize(.small)
+                                    .padding(8)
+                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                    .padding(10)
+                                    .accessibilityLabel(session.readingSource ? "Loading source frame" : "Loading result frame")
+                                    .allowsHitTesting(false)
+                            }
                         }
-                    }
+                }
+                Divider()
+                ScrollView(.vertical) {
+                    controls(width: geometry.size.width)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: min(geometry.size.height * 0.5, geometry.size.width < 760 ? 390 : 320))
+                Divider()
+                actions
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
             }
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                if session.editing || !session.hasCurrentResult {
-                    HStack(spacing: 10) {
-                        Text("Source").font(.caption).foregroundStyle(.secondary)
-                        Button { session.step(-1) } label: { Image(systemName: "backward.end.fill") }
-                        Slider(value: Binding(get: { Double(session.sourceRequestedIndex) },
-                                              set: { session.seekSource(index: Int($0.rounded())) }),
-                               in: 0...Double(max(1, session.sourceFrameCount - 1)))
-                            .accessibilityLabel("Source frame")
-                        Button { session.step(1) } label: { Image(systemName: "forward.end.fill") }
-                        Text("\(timecode(session.sourceTime)) · \(session.sourceDisplayedIndex + 1)/\(session.sourceFrameCount)")
-                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    }.disabled(session.busy || session.sourceFrameCount == 0)
-                }
-                if session.hasCurrentResult {
-                    if !session.editing {
-                        HStack {
-                            Button { session.togglePlayback() } label: { Image(systemName: session.playing ? "pause.fill" : "play.fill") }
-                            Button { session.step(-1) } label: { Image(systemName: "backward.end.fill") }
-                            Slider(value: Binding(get: { Double(session.displayedIndex) }, set: { session.seek(index: Int($0.rounded())) }),
-                                   in: 0...Double(max(1, session.frameCount - 1)))
-                            Button { session.step(1) } label: { Image(systemName: "forward.end.fill") }
-                            Text("\(timecode(session.displayedTime)) · \(session.displayedIndex + 1)/\(session.frameCount)")
-                                .font(.system(size: 11, design: .monospaced))
-                            Toggle("Loop", isOn: $session.loop).toggleStyle(.checkbox)
-                        }.disabled(session.busy)
-                    }
-                    HStack {
-                        Picker("Compare", selection: $session.comparison) {
-                            ForEach(UncoverComparison.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }.pickerStyle(.segmented).frame(maxWidth: 360)
-                        Button(session.showB ? "Show Original" : "Show AI") { session.comparison = .toggle; session.showB.toggle() }
-                        Button(session.editing ? "Compare" : "Edit Region") { session.toggleEditing() }
-                        Spacer()
-                    }.disabled(session.busy)
-                }
-                HStack(spacing: 12) {
-                    Text("Algorithm").font(.caption)
-                    Picker("Algorithm", selection: $session.algorithm) {
-                        // The list stays as the licences and local setup decide it.
-                        // Narrowing it to a server's models would make an algorithm
-                        // unreachable the moment the server went away, and the
-                        // Reconstruct mark already says which choice runs where.
-                        ForEach(session.availableAlgorithms, id: \.self) { Text($0.label).tag($0) }
-                    }.labelsHidden().pickerStyle(.segmented).controlSize(.small).frame(width: 390)
-                    if session.capabilities?.available != true {
-                        Button("Manage Models…") {
-                            UserDefaults.standard.set("models", forKey: "settingsTab")
-                            openSettings()
-                        }
-                    }
-                    Spacer()
-                }.disabled(session.busy)
-                HStack(spacing: 16) {
-                    Text("Downsample").font(.caption)
-                    Picker("Downsample", selection: $session.scale) {
-                        ForEach(UncoverScale.allCases, id: \.self) { scale in
-                            Text(scale == .one ? "1× Original" : scale.label).tag(scale).disabled(session.capabilities?.scales.contains(scale) != true)
-                        }
-                    }.labelsHidden().pickerStyle(.segmented).frame(width: 380)
-                    Text("Start").font(.caption)
-                    TextField("Seconds", value: $session.start, format: .number.precision(.fractionLength(3)))
-                        .frame(width: 85).textFieldStyle(.roundedBorder)
-                    Text("Duration").font(.caption)
-                    Picker("Duration", selection: $session.duration) {
-                        Text("1s").tag(1.0); Text("2s").tag(2.0); Text("5s").tag(5.0)
-                    }.labelsHidden().frame(width: 90)
-                    TextField("Custom seconds", value: $session.duration, format: .number.precision(.fractionLength(3)))
-                        .frame(width: 65).textFieldStyle(.roundedBorder)
-                    Text("to \(timecode(session.end))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    Spacer()
-                }.disabled(session.busy)
-                HStack(spacing: 12) {
-                    Text("Edge Feather").font(.caption)
-                    Slider(value: $session.feather, in: 0...32, step: 1).frame(width: 130)
-                    Text("\(Int(session.feather)) px").font(.caption.monospacedDigit()).frame(width: 40)
-                    Text("Blend Strength").font(.caption)
-                    Slider(value: $session.strength, in: 0...1).frame(width: 130)
-                    Text("\(Int((session.strength * 100).rounded()))%").font(.caption.monospacedDigit()).frame(width: 40)
-                    Spacer()
-                    if session.busy {
-                        ProgressView().controlSize(.small)
-                        Button("Cancel") { session.cancel() }
-                    } else {
-                        // Marked per algorithm, not per connection: switching to
-                        // one the server does not have makes the mark vanish and
-                        // the button run locally, which is the correct behaviour
-                        // and needs no second label.
-                        Button { session.reconstruct() } label: {
-                            Text("Reconstruct")
-                                .remoteMark(remote.offersRemote(session.algorithm, scale: session.scale))
-                        }
-                        .disabled(!session.canReconstruct)
-                        Button("Export…") { save() }.disabled(!session.hasCurrentResult)
-                    }
-                }
-                HStack {
-                    Text(session.status).font(.caption).foregroundStyle(.secondary)
-                    if let limitation = session.limitation { Text(limitation).font(.caption).foregroundStyle(.secondary) }
-                    if session.algorithm == .flashVSR11 {
-                        Text("FlashVSR outputs 4× source size and is tuned for 4× super-resolution; other input reductions change the effective ratio.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("Scroll to pan · Pinch to zoom · Option-drag to pan").font(.caption).foregroundStyle(.tertiary)
-                }
-                if let error = session.error {
-                    Text(error).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
-                }
-            }.padding(12)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .task(id: session.busy) {
+            showsBusyProgress = false
+            guard session.busy else { return }
+            do { try await Task.sleep(for: .milliseconds(330)) } catch { return }
+            guard !Task.isCancelled, session.busy else { return }
+            showsBusyProgress = true
+        }
+        .task(id: session.navigatingFrame) {
+            showsFrameProgress = false
+            guard session.navigatingFrame else { return }
+            do { try await Task.sleep(for: .milliseconds(330)) } catch { return }
+            guard !Task.isCancelled, session.navigatingFrame else { return }
+            showsFrameProgress = true
+        }
         .onAppear { installKeys() }
         .onDisappear { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil; arrows.reset() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in arrows.reset() }
@@ -188,6 +84,256 @@ struct UncoverView: View {
         .onChange(of: session.busy) { _, busy in
             if busy { arrows.reset() }
             else if modelsChangedWhileBusy { modelsChangedWhileBusy = false; session.refreshBackend() }
+        }
+    }
+
+    private var header: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                title
+                Text(session.geometry).font(.caption.monospaced()).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                zoomControls
+                Button("Close", action: close)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    title
+                    Spacer(minLength: 0)
+                    Button("Close", action: close)
+                }
+                HStack(spacing: 8) {
+                    Text(session.geometry)
+                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    zoomControls
+                }
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(12)
+    }
+
+    private var title: some View {
+        Text("Uncover Waifu").font(.headline).fixedSize()
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 8) {
+            Button("−") { session.zoom = max(0.25, session.zoom / 1.5) }
+            Text(String(format: "%.0f%%", session.zoom * 100))
+                .font(.caption.monospacedDigit()).frame(minWidth: 40)
+            Button("+") { session.zoom = min(16, session.zoom * 1.5) }
+            HStack(spacing: 2) {
+                scaleModeButton(.original, symbol: nil, label: "Original pixel size")
+                scaleModeButton(.fitWidth, symbol: "arrow.left.and.right", label: "Fit video to width")
+                scaleModeButton(.fitHeight, symbol: "arrow.up.and.down", label: "Fit video to height")
+            }
+            .padding(3)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+        }
+        .fixedSize()
+    }
+
+    private func scaleModeButton(_ mode: UncoverViewScaleMode, symbol: String?, label: String) -> some View {
+        Button { session.setViewScaleMode(mode) } label: {
+            Group {
+                if let symbol { Image(systemName: symbol) } else { Text("Orig") }
+            }
+            .padding(.horizontal, 6).padding(.vertical, 4)
+            .background(session.viewScaleMode == mode ? Color.accentColor.opacity(0.2) : .clear,
+                        in: RoundedRectangle(cornerRadius: 4))
+        }
+        .accessibilityLabel(label)
+        .help(label)
+    }
+
+    private func controls(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if session.editing || !session.hasCurrentResult { sourceTimeline }
+            if session.hasCurrentResult {
+                if !session.editing { resultTimeline }
+                controlRow("Compare") {
+                    UncoverControlFlow(spacing: 6) {
+                        ForEach(UncoverComparison.allCases, id: \.self) { comparison in
+                            choice(comparison.rawValue, selected: session.comparison == comparison) { session.comparison = comparison }
+                        }
+                        Button(session.showB ? "Show Original" : "Show AI") {
+                            session.comparison = .toggle
+                            session.showB.toggle()
+                        }
+                        Button(session.editing ? "Compare" : "Edit Region") { session.toggleEditing() }
+                    }
+                }
+                .disabled(session.busy)
+            }
+            controlRow("Algorithm") {
+                UncoverControlFlow(spacing: 6) {
+                    // Keep all licensed choices visible independently of the remote connection.
+                    ForEach(session.availableAlgorithms, id: \.self) { algorithm in
+                        choice(algorithm.label, selected: session.algorithm == algorithm) { session.algorithm = algorithm }
+                    }
+                    if session.capabilities?.available != true {
+                        Button("Manage Models…") {
+                            UserDefaults.standard.set("models", forKey: "settingsTab")
+                            openSettings()
+                        }
+                    }
+                }
+            }
+            .disabled(session.busy)
+            controlRow("Downsample") {
+                UncoverControlFlow(spacing: 6) {
+                    ForEach(UncoverScale.allCases, id: \.self) { scale in
+                        choice(scale == .one ? "1× Original" : scale.label, selected: session.scale == scale) { session.scale = scale }
+                            .disabled(session.capabilities?.scales.contains(scale) != true)
+                    }
+                }
+            }
+            .disabled(session.busy)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16, alignment: .topLeading),
+                                     count: width >= 560 ? 2 : 1),
+                      alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    fieldLabel("Start")
+                    HStack(spacing: 6) {
+                        TextField("Seconds", value: $session.start, format: .number.precision(.fractionLength(3)))
+                            .frame(width: 90).textFieldStyle(.roundedBorder)
+                            .accessibilityLabel("Start seconds")
+                        Text("seconds").foregroundStyle(.secondary)
+                        Text("to \(timecode(session.end))")
+                            .monospacedDigit().foregroundStyle(.secondary)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    fieldLabel("Duration")
+                    UncoverControlFlow(spacing: 6) {
+                        ForEach([1.0, 2.0, 5.0], id: \.self) { duration in
+                            choice("\(Int(duration))s", selected: session.duration == duration) { session.duration = duration }
+                        }
+                        HStack(spacing: 5) {
+                            TextField("Seconds", value: $session.duration, format: .number.precision(.fractionLength(3)))
+                                .frame(width: 80).textFieldStyle(.roundedBorder)
+                                .accessibilityLabel("Duration seconds")
+                            Text("s").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        fieldLabel("Edge Feather")
+                        Spacer(minLength: 8)
+                        Text("\(Int(session.feather)) px").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    Slider(value: $session.feather, in: 0...32, step: 1)
+                        .accessibilityLabel("Edge Feather")
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        fieldLabel("Blend Strength")
+                        Spacer(minLength: 8)
+                        Text("\(Int((session.strength * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    Slider(value: $session.strength, in: 0...1)
+                        .accessibilityLabel("Blend Strength")
+                }
+            }
+            .disabled(session.busy)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(session.status).foregroundStyle(.secondary)
+                if let limitation = session.limitation { Text(limitation).foregroundStyle(.secondary) }
+                if session.algorithm == .flashVSR11 {
+                    Text("FlashVSR outputs 4× source size and is tuned for 4× super-resolution; other input reductions change the effective ratio.")
+                        .foregroundStyle(.secondary)
+                }
+                if let error = session.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+                Text("Scroll to pan · Pinch to zoom · Option-drag to pan").foregroundStyle(.tertiary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption)
+        .controlSize(.small)
+    }
+
+    private func fieldLabel(_ title: String) -> some View {
+        Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+    }
+
+    private func controlRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            fieldLabel(title).frame(width: 84, alignment: .leading).padding(.top, 5)
+            content().frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).fixedSize()
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .foregroundStyle(selected ? Color.accentColor : Color.primary)
+                .background(selected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.07),
+                            in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(selected ? Color.accentColor.opacity(0.65) : Color.secondary.opacity(0.22)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
+    }
+
+    private var sourceTimeline: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                fieldLabel("Source")
+                Spacer(minLength: 8)
+                Text("\(timecode(session.sourceTime)) · \(session.sourceDisplayedIndex + 1)/\(session.sourceFrameCount)")
+                    .monospacedDigit().foregroundStyle(.secondary)
+            }
+            HStack(spacing: 10) {
+                Button { session.step(-1) } label: { Image(systemName: "backward.end.fill") }
+                Slider(value: Binding(get: { Double(session.sourceRequestedIndex) },
+                                      set: { session.seekSource(index: Int($0.rounded())) }),
+                       in: 0...Double(max(1, session.sourceFrameCount - 1)))
+                    .accessibilityLabel("Source frame")
+                Button { session.step(1) } label: { Image(systemName: "forward.end.fill") }
+            }
+        }
+        .disabled(session.busy || session.sourceFrameCount == 0)
+    }
+
+    private var resultTimeline: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                fieldLabel("Result")
+                Spacer(minLength: 8)
+                Text("\(timecode(session.displayedTime)) · \(session.displayedIndex + 1)/\(session.frameCount)").monospacedDigit()
+            }
+            HStack(spacing: 10) {
+                Button { session.togglePlayback() } label: { Image(systemName: session.playing ? "pause.fill" : "play.fill") }
+                Button { session.step(-1) } label: { Image(systemName: "backward.end.fill") }
+                Slider(value: Binding(get: { Double(session.displayedIndex) }, set: { session.seek(index: Int($0.rounded())) }),
+                       in: 0...Double(max(1, session.frameCount - 1)))
+                    .accessibilityLabel("Result frame")
+                Button { session.step(1) } label: { Image(systemName: "forward.end.fill") }
+                Toggle("Loop", isOn: $session.loop).toggleStyle(.checkbox).fixedSize()
+            }
+        }
+        .disabled(session.busy)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
+            if session.busy {
+                if showsBusyProgress { ProgressView().controlSize(.small) }
+                Button("Cancel") { session.cancel() }
+            } else {
+                Button { session.reconstruct() } label: {
+                    Text("Reconstruct").remoteMark(remote.offersRemote(session.algorithm, scale: session.scale))
+                }
+                .disabled(!session.canReconstruct)
+                Button("Export…") { save() }.disabled(!session.hasCurrentResult)
+            }
         }
     }
 
@@ -228,5 +374,38 @@ struct UncoverView: View {
                     }
                 }
             })
+    }
+}
+
+/// Wrap whole controls rather than compressing their labels into neighbouring
+/// fields. Width and content changes invalidate cached measurements; scrolling
+/// does not change the arrangement.
+private struct UncoverControlFlow: Layout {
+    var spacing: CGFloat = 6
+    struct Cache {
+        var sizes: [CGSize]
+        var arrangements: [CGFloat: TagFlowGeometry] = [:]
+    }
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) })
+    }
+    func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = makeCache(subviews: subviews) }
+    private func arrangement(width: CGFloat, cache: inout Cache) -> TagFlowGeometry {
+        if let existing = cache.arrangements[width] { return existing }
+        let result = TagFlowGeometry(sizes: cache.sizes, width: width, spacing: spacing)
+        if cache.arrangements.count >= 4 { cache.arrangements.removeAll(keepingCapacity: true) }
+        cache.arrangements[width] = result
+        return result
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let result = arrangement(width: proposal.width ?? .infinity, cache: &cache)
+        return CGSize(width: proposal.width ?? result.size.width, height: result.size.height)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let result = arrangement(width: bounds.width, cache: &cache)
+        for (subview, frame) in zip(subviews, result.placements) {
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                          proposal: ProposedViewSize(frame.size))
+        }
     }
 }

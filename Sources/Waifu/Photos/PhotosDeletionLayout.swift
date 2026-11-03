@@ -60,7 +60,7 @@ enum PhotosDeletionLayout {
             excludedTags: input.tagFilter.excludedTags, threshold: input.settings.taggerThreshold,
             selectionOrder: input.tagFilter.selectionOrder, exclusionOrder: input.tagFilter.exclusionOrder,
             scoreSortTag: input.tagFilter.scoreSortTag, scoreSortDescending: input.tagFilter.scoreSortDescending,
-            orGroups: input.tagFilter.orGroups)
+            orGroups: input.tagFilter.orGroups, unwantedGroups: input.tagFilter.unwantedGroups)
         var seen = Set<FrameID>()
         var enriched: [AnalyzedFrame] = []
         enriched.reserveCapacity(input.frames.count)
@@ -73,12 +73,13 @@ enum PhotosDeletionLayout {
             enriched.append(frame)
         }
         func candidates(_ filter: TagFilter) throws -> [AnalyzedFrame] {
+            let matcher = filter.prepared(vocabulary: input.vocabulary)
             var result: [AnalyzedFrame] = []
             for (index, frame) in enriched.enumerated() {
                 if index % 256 == 0 { try Task.checkCancellation() }
                 guard input.faceFilter.admits(frame, grouping: grouping),
                       input.limits.admits(frame, grouping: grouping),
-                      filter.admits(frame, vocabulary: input.vocabulary) else { continue }
+                      matcher.admits(frame) else { continue }
                 if !input.pendingAssets.isEmpty || input.favoriteFilter != .all {
                     guard let identifier = identifier(for: frame.timeSeconds),
                           !input.pendingAssets.contains(identifier),

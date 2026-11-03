@@ -61,6 +61,7 @@ struct FrameOrderPanel: View {
     @State private var groupingExpanded = true
     @State private var tagsExpanded = true
     @AppStorage("tagFilterRarityGrouping") private var groupTagsByRarity = true
+    @AppStorage("tagShowAllGroups") private var showAllTagGroups = false
 
     var body: some View {
         ScrollView {
@@ -356,6 +357,7 @@ struct FrameOrderPanel: View {
     /// and its TagFilterView is not mounted to observe the reset.
     private func clearTagControls() {
         groupTagsByRarity = true
+        showAllTagGroups = false
         session.resetTagControls()
     }
 
@@ -387,6 +389,16 @@ struct FrameOrderPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    if title == "Tags" {
+                        Button("Generate unwanted group based on current tags") {
+                            session.generateUnwantedTagGroup()
+                        }
+                        .disabled(!session.canGenerateUnwantedTagGroup)
+                        Divider()
+                        Toggle("Show all tags in all groups", isOn: $showAllTagGroups)
+                    }
+                }
                 .accessibilityLabel("\(title) panel")
                 .accessibilityValue(isExpanded.wrappedValue ? "Expanded" : "Collapsed")
 

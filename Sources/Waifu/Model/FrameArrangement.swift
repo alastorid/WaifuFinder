@@ -65,10 +65,18 @@ struct TagOrGroup: Equatable, Hashable, Sendable, Codable, Identifiable {
     var tags: Set<String> = []
 }
 
+/// A frozen inverse-tag snapshot displayed as one chip.
+struct TagInverseGroup: Equatable, Hashable, Sendable, Codable, Identifiable {
+    var id: UUID = UUID()
+    var tags: Set<String>
+    var isWanted = false
+}
+
 struct TagFilter: Equatable, Sendable, Codable {
     var requiredTags: Set<String> = []
     var excludedTags: Set<String> = []
     var orGroups: [TagOrGroup] = []
+    var unwantedGroups: [TagInverseGroup] = []
     var threshold: Float = 0.35
     /// The order in which tags were selected. The set remains the source of truth
     /// for matching; this order lets the filter panel keep active tags at the front.
@@ -82,11 +90,12 @@ struct TagFilter: Equatable, Sendable, Codable {
 
     init(requiredTags: Set<String> = [], excludedTags: Set<String> = [], threshold: Float = 0.35,
          selectionOrder: [String]? = nil, exclusionOrder: [String]? = nil,
-         scoreSortTag: String? = nil, scoreSortDescending: Bool = true, orGroups: [TagOrGroup] = []) {
+         scoreSortTag: String? = nil, scoreSortDescending: Bool = true, orGroups: [TagOrGroup] = [], unwantedGroups: [TagInverseGroup] = []) {
         let effectiveRequiredTags = requiredTags.subtracting(excludedTags)
         self.requiredTags = effectiveRequiredTags
         self.excludedTags = excludedTags
         self.orGroups = orGroups
+        self.unwantedGroups = unwantedGroups
         self.threshold = threshold
         let requestedOrder = selectionOrder ?? requiredTags.sorted()
         var seen = Set<String>()
@@ -101,7 +110,7 @@ struct TagFilter: Equatable, Sendable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case requiredTags, excludedTags, orGroups, threshold, selectionOrder, exclusionOrder, scoreSortTag, scoreSortDescending
+        case requiredTags, excludedTags, orGroups, unwantedGroups, threshold, selectionOrder, exclusionOrder, scoreSortTag, scoreSortDescending
     }
 
     init(from decoder: Decoder) throws {
@@ -113,14 +122,31 @@ struct TagFilter: Equatable, Sendable, Codable {
                   exclusionOrder: try values.decodeIfPresent([String].self, forKey: .exclusionOrder),
                   scoreSortTag: try values.decodeIfPresent(String.self, forKey: .scoreSortTag),
                   scoreSortDescending: try values.decodeIfPresent(Bool.self, forKey: .scoreSortDescending) ?? true,
-                  orGroups: try values.decodeIfPresent([TagOrGroup].self, forKey: .orGroups) ?? [])
+                  orGroups: try values.decodeIfPresent([TagOrGroup].self, forKey: .orGroups) ?? [],
+                  unwantedGroups: try values.decodeIfPresent([TagInverseGroup].self, forKey: .unwantedGroups) ?? [])
     }
 
     var hasActiveTags: Bool {
-        !requiredTags.isEmpty || !excludedTags.isEmpty || orGroups.contains { !$0.tags.isEmpty }
+        !requiredTags.isEmpty || !excludedTags.isEmpty || orGroups.contains { !$0.tags.isEmpty } || unwantedGroups.contains { !$0.tags.isEmpty }
     }
 
     var orTags: Set<String> { orGroups.reduce(into: Set<String>()) { $0.formUnion($1.tags) } }
+
+    var unwantedGroupTags: Set<String> {
+        unwantedGroups.filter { !$0.isWanted }.reduce(into: Set<String>()) { $0.formUnion($1.tags) }
+    }
+
+    var inverseGroupTags: Set<String> {
+        unwantedGroups.reduce(into: Set<String>()) { $0.formUnion($1.tags) }
+    }
+
+    /// Freeze the complement so subsequent photo/filter changes cannot alter it.
+    mutating func generateUnwantedGroup(knownTags: Set<String>, shownTags: Set<String>) {
+        let inverse = Set(knownTags.map(TagVocabulary.normalized))
+            .subtracting(shownTags.map(TagVocabulary.normalized))
+        guard !inverse.isEmpty else { return }
+        unwantedGroups.append(TagInverseGroup(tags: inverse))
+    }
 
     mutating func addToOrGroup(_ tags: Set<String>, id: UUID) {
         guard let index = orGroups.firstIndex(where: { $0.id == id }) else { return }
@@ -129,6 +155,15 @@ struct TagFilter: Equatable, Sendable, Codable {
             for groupIndex in orGroups.indices { orGroups[groupIndex].tags.remove(tag) }
         }
         orGroups[index].tags.formUnion(tags)
+    }
+
+    /// Include a whole display group as one alternative clause, even for one tag.
+    mutating func includeTags(_ tags: Set<String>) {
+        guard !tags.isEmpty else { return }
+        let group = TagOrGroup()
+        orGroups.append(group)
+        addToOrGroup(tags, id: group.id)
+        orGroups.removeAll { $0.tags.isEmpty }
     }
 
     /// Every multi-selection shortcut creates its own OR clause.
@@ -270,33 +305,73 @@ struct TagFilter: Equatable, Sendable, Codable {
                             tagsByFrame: Dictionary(uniqueKeysWithValues: visible.map { ($0.id, tags) }))
     }
 
-    func admits(_ frame: AnalyzedFrame, vocabulary: TagVocabulary? = nil) -> Bool {
-        let required = Set(requiredTags.map(TagVocabulary.normalized))
-        let excluded = Set(excludedTags.map(TagVocabulary.normalized))
-        let alternatives = orGroups.map { Set($0.tags.map(TagVocabulary.normalized)) }.filter { !$0.isEmpty }
-        let relevant = required.union(excluded).union(alternatives.reduce(into: Set<String>()) { $0.formUnion($1) })
-        guard !relevant.isEmpty else { return true }
-        let saved = Set((frame.topTags ?? []).map(TagVocabulary.normalized))
-        var matching = saved
-        if let vocabulary, let data = frame.tagProbabilities {
-            let entries = relevant.compactMap { tag -> (String, Int)? in
-                vocabulary.index(for: tag).map { (tag, $0) }
-            }
-            if let scores = TagProbabilityCodec.values(in: data, at: entries.map(\.1)) {
-                matching = Set(zip(entries, scores).compactMap { entry, score in
-                    score > threshold ? entry.0 : nil
-                })
-                // Exclusions historically fall back to saved tags for unknown heads.
-                matching.formUnion(excluded.filter { vocabulary.index(for: $0) == nil && saved.contains($0) })
-            }
-            // Unknown required or alternative heads cannot match a known vocabulary.
-            matching.subtract(relevant.filter { vocabulary.index(for: $0) == nil && !excluded.contains($0) })
-        }
-        return excluded.isDisjoint(with: matching)
-            && required.isSubset(of: matching)
-            && alternatives.allSatisfy { !$0.isDisjoint(with: matching) }
+    func prepared(vocabulary: TagVocabulary?) -> TagFilterMatcher {
+        TagFilterMatcher(self, vocabulary: vocabulary)
     }
 
+    func admits(_ frame: AnalyzedFrame, vocabulary: TagVocabulary? = nil) -> Bool {
+        prepared(vocabulary: vocabulary).admits(frame)
+    }
+
+}
+
+/// Resolves tag names once per query. Each photo then visits only its retained
+/// score pairs, independent of how many absent tags an inverse chip represents.
+struct TagFilterMatcher {
+    private let required: Set<String>
+    private let excluded: Set<String>
+    private let alternatives: [Set<String>]
+    private let requiredIndices: Set<Int>
+    private let excludedIndices: Set<Int>
+    private let alternativeIndices: [Set<Int>]
+    private let unknownRequired: Bool
+    private let unknownExcluded: Set<String>
+    private let unknownPositive: Set<String>
+    private let hasVocabulary: Bool
+    private let threshold: Float
+    private let isEmpty: Bool
+
+    init(_ filter: TagFilter, vocabulary: TagVocabulary?) {
+        let required = Set(filter.requiredTags.map(TagVocabulary.normalized))
+        let excluded = Set(filter.excludedTags.union(filter.unwantedGroupTags).map(TagVocabulary.normalized))
+        let alternatives = (filter.orGroups.map(\.tags) + filter.unwantedGroups.filter(\.isWanted).map(\.tags))
+            .map { Set($0.map(TagVocabulary.normalized)) }.filter { !$0.isEmpty }
+        self.required = required
+        self.excluded = excluded
+        self.alternatives = alternatives
+        threshold = filter.threshold
+        hasVocabulary = vocabulary != nil
+        isEmpty = required.isEmpty && excluded.isEmpty && alternatives.isEmpty
+        // Labels are already normalized. Avoid normalizing each head again while
+        // compiling thousands of inverse-tag references.
+        let lookup = vocabulary.map { vocabulary in
+            Dictionary(uniqueKeysWithValues: vocabulary.generalIndices.map { (vocabulary.labels[$0].name, $0) })
+        } ?? [:]
+        requiredIndices = Set(required.compactMap { lookup[$0] })
+        excludedIndices = Set(excluded.compactMap { lookup[$0] })
+        alternativeIndices = alternatives.map { Set($0.compactMap { lookup[$0] }) }
+        unknownRequired = requiredIndices.count != required.count
+        unknownExcluded = excluded.filter { lookup[$0] == nil }
+        unknownPositive = required.union(alternatives.reduce(into: Set<String>()) { $0.formUnion($1) })
+            .filter { lookup[$0] == nil && !excluded.contains($0) }
+    }
+
+    func admits(_ frame: AnalyzedFrame) -> Bool {
+        guard !isEmpty else { return true }
+        if hasVocabulary, let data = frame.tagProbabilities,
+           let pairs = TagProbabilityCodec.sparseValues(in: data) {
+            guard !unknownRequired else { return false }
+            let matching = Set(pairs.lazy.filter { $0.value > threshold }.map(\.index))
+            guard excludedIndices.isDisjoint(with: matching), requiredIndices.isSubset(of: matching),
+                  alternativeIndices.allSatisfy({ !$0.isDisjoint(with: matching) }) else { return false }
+            return unknownExcluded.isEmpty || unknownExcluded.isDisjoint(
+                with: (frame.topTags ?? []).map(TagVocabulary.normalized))
+        }
+        var saved = Set((frame.topTags ?? []).map(TagVocabulary.normalized))
+        if hasVocabulary, frame.tagProbabilities != nil { saved.subtract(unknownPositive) }
+        return excluded.isDisjoint(with: saved) && required.isSubset(of: saved)
+            && alternatives.allSatisfy { !$0.isDisjoint(with: saved) }
+    }
 }
 
 /// A signal the grid can order by. Visual distance has no filtering range.
@@ -888,10 +963,11 @@ enum FrameArrangement {
         applyingVisualOrder: Bool = true,
         tagTopCount: Int = 99
     ) -> Result {
+        let matcher = filteredCandidates == nil ? tagFilter.prepared(vocabulary: vocabulary) : nil
         let candidates = filteredCandidates ?? frames.filter { frame in
             faceFilter.admits(frame, grouping: grouping)
                 && limits.admits(frame, grouping: grouping)
-                && tagFilter.admits(frame, vocabulary: vocabulary)
+                && matcher!.admits(frame)
         }
         let scoreSortIndex = tagFilter.scoreSortTag.flatMap { vocabulary?.index(for: $0) }
         let topSelection = tagFilter.topFrameSelection(candidates, count: tagTopCount, vocabulary: vocabulary)
