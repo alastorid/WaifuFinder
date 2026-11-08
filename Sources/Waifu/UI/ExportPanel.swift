@@ -39,6 +39,13 @@ struct ExportPanel: View {
     private func presentFolderPicker() {
         selectedDirectory = nil
 
+        if let directory = DefaultExportFolder.shared.url {
+            isPresented = false
+            selectedDirectory = directory
+            startExport(to: directory)
+            return
+        }
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -116,6 +123,12 @@ struct PreviewExportPanel: View {
 
     private func presentFolderPicker() {
         selectedDirectory = nil
+        if let directory = DefaultExportFolder.shared.url {
+            isPresented = false
+            selectedDirectory = directory
+            startExport(to: directory)
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false

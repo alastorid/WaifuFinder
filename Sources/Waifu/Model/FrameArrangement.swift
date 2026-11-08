@@ -157,24 +157,34 @@ struct TagFilter: Equatable, Sendable, Codable {
         orGroups[index].tags.formUnion(tags)
     }
 
-    /// Include a whole display group as one alternative clause, even for one tag.
+    /// Include tags in the first existing clause, creating the initial clause if needed.
     mutating func includeTags(_ tags: Set<String>) {
         guard !tags.isEmpty else { return }
+        let id: UUID
+        if let existing = orGroups.first {
+            id = existing.id
+        } else {
+            let group = TagOrGroup()
+            orGroups.append(group)
+            id = group.id
+        }
+        addToOrGroup(tags, id: id)
+        orGroups.removeAll { $0.tags.isEmpty }
+    }
+
+    /// Outside a clause F1 reuses it; selecting clause members explicitly splits them.
+    @discardableResult
+    mutating func groupSelectedTags(_ tags: Set<String>) -> UUID? {
+        guard !tags.isEmpty else { return nil }
+        if tags.isDisjoint(with: orTags) {
+            includeTags(tags)
+            return orGroups.first?.id
+        }
         let group = TagOrGroup()
         orGroups.append(group)
         addToOrGroup(tags, id: group.id)
         orGroups.removeAll { $0.tags.isEmpty }
-    }
-
-    /// Every multi-selection shortcut creates its own OR clause.
-    @discardableResult
-    mutating func groupSelectedTags(_ tags: Set<String>) -> UUID? {
-        guard tags.count > 1 else { return nil }
-        let group = TagOrGroup()
-        orGroups.append(group)
-        let id = group.id
-        addToOrGroup(tags, id: id)
-        return id
+        return group.id
     }
 
     /// Replace two OR clauses with their union, keeping the destination's identity.

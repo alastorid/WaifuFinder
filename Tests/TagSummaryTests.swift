@@ -383,21 +383,30 @@ func registerTagSummaryTests() {
         }.value
     })
 
-    Registry.shared.add(suite: suite, TestCase(name: "multi-selected tags always create a new OR group", knownBug: nil) {
+    Registry.shared.add(suite: suite, TestCase(name: "F1 reuses OR groups and splits selected members", knownBug: nil) {
         var filter = TagFilter(requiredTags: ["a"], excludedTags: ["b"])
-        checkNil(filter.groupSelectedTags(["a"]), "a single tag does not create a group")
-        let created = filter.groupSelectedTags(["a", "b"])
-        check(created != nil && filter.orGroups.count == 1, "multiple tags create a group")
-        checkEqual(filter.orGroups[0].tags, ["a", "b"], "created group contains the selection")
-        check(filter.requiredTags.isEmpty && filter.excludedTags.isEmpty, "old tag states are cleared")
-        let empty = TagOrGroup()
-        filter.orGroups.append(empty)
-        let second = filter.groupSelectedTags(["c", "d"])
-        check(second != nil && second != empty.id, "the existing empty group is never reused")
-        checkEqual(filter.orGroups.count, 3, "every shortcut creates a group")
-        check(filter.orGroups[1].tags.isEmpty, "existing empty group remains unchanged")
-        checkEqual(filter.orGroups[2].tags, ["c", "d"], "selection enters its new group")
-
+        checkNil(filter.groupSelectedTags([]), "empty selection does nothing")
+        let first = filter.groupSelectedTags(["a"])
+        check(first != nil, "single selection creates the initial group")
+        checkEqual(filter.groupSelectedTags(["b", "c"]), first, "multiple selections reuse the existing group")
+        checkEqual(filter.orGroups.count, 1, "adding ungrouped tags creates no additional clause")
+        checkEqual(filter.orGroups[0].tags, ["a", "b", "c"], "all added tags stay together")
+        check(filter.requiredTags.isEmpty && filter.excludedTags.isEmpty, "old states are cleared")
+        let split = filter.groupSelectedTags(["b"])
+        check(split != first, "one selected clause member splits into a new group")
+        checkEqual(filter.orGroups.map(\.tags), [["a", "c"], ["b"]], "unselected members remain in the source")
+        checkEqual(filter.groupSelectedTags(["d"]), first, "later additions reuse the first clause")
+        let multiSplit = filter.groupSelectedTags(["a", "d"])
+        check(multiSplit != first && multiSplit != split, "multiple members can split too")
+        checkEqual(filter.orGroups.map(\.tags), [["c"], ["b"], ["a", "d"]], "split preserves independent clauses")
+        filter.includeTags(["e", "f"])
+        checkEqual(filter.orGroups.count, 3, "include actions reuse a clause")
+        checkEqual(filter.orGroups[0].tags, ["c", "e", "f"], "include uses the first clause")
+        _ = filter.groupSelectedTags(["b"])
+        checkEqual(filter.orGroups.count, 3, "splitting an entire clause leaves no empty group")
+        var empty = TagFilter(orGroups: [TagOrGroup()])
+        let emptyID = empty.orGroups[0].id
+        checkEqual(empty.groupSelectedTags(["a"]), emptyID, "an existing empty clause is reused")
     })
 
     Registry.shared.add(suite: suite, TestCase(name: "per-photo rarity normalizes frequencies and supports sorting and filtering", knownBug: nil) {

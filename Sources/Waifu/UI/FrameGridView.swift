@@ -46,6 +46,7 @@ struct FrameGridView: View {
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
+    @StateObject private var clipExport = ClipExportController()
     @State private var committedNavigation: FrameID?
     @State private var verticalScrollPosition = ScrollPosition()
     @State private var horizontalScrollPositions: [String: ScrollPosition] = [:]
@@ -70,6 +71,28 @@ struct FrameGridView: View {
         GeometryReader { geometry in
             Group {
                 gridWithNavigation(size: geometry.size)
+            }
+        }
+        .alert("Clip Export Failed", isPresented: Binding(
+            get: { clipExport.error != nil }, set: { if !$0 { clipExport.error = nil } }
+        )) {
+            Button("OK", role: .cancel) { clipExport.error = nil }
+        } message: {
+            Text(clipExport.error ?? "")
+        }
+        .overlay(alignment: .topTrailing) {
+            if !clipExport.status.isEmpty {
+                HStack(spacing: 8) {
+                    if clipExport.isExporting { ProgressView().controlSize(.small) }
+                    Text(clipExport.status).font(.caption)
+                    if !clipExport.isExporting, !clipExport.exportedURLs.isEmpty {
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting(clipExport.exportedURLs)
+                        }.controlSize(.small)
+                    }
+                }
+                .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding(8)
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -547,6 +570,15 @@ struct FrameGridView: View {
         if session.offersFocusedRangeAnalysis {
             Button("Analyze ±3 Seconds Range") { session.analyzeFocusedRange(around: frame) }
                 .disabled(!session.canAnalyzeFocusedRange)
+        }
+
+        if session.photosAlbumURL == nil, let video = session.video {
+            Button("Export +-3 seconds clips") {
+                let targets = FocusedAnalysisRanges.targets(clicked: frame,
+                    selected: session.selectedFrameIDs, frames: session.frames)
+                clipExport.begin(video: video, frames: targets)
+            }
+            .disabled(clipExport.isExporting)
         }
 
         if photoURL == nil, !isSelected {

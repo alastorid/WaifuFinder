@@ -195,7 +195,7 @@ struct TagFilterView: View {
                                 .foregroundStyle(.tertiary)
                         }
 
-                        Text("Wanted tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups. Select tags with Command-click or a rectangle, then press F1 to group them.")
+                        Text("Wanted tags must match; each OR group matches any of its tags. Unwanted tags remove matching frames. Candidate tags ignore OR groups. Select tags with Command-click or a rectangle, then press F1 to add them to the first OR group. Select tags inside an OR group and press F1 to split them into a new group.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -461,7 +461,7 @@ struct TagFilterView: View {
         guard enabled, !session.crystalOrbIsOpen, !session.showExportSheet,
               !session.showPreviewExportSheet, session.errorMessage == nil else { return false }
         let validTags = selectedTags.intersection(availableTags)
-        guard validTags.count > 1 else { return false }
+        guard !validTags.isEmpty else { return false }
         var filter = session.tagFilter
         guard filter.groupSelectedTags(validTags) != nil else { return false }
         session.tagFilter = filter
@@ -547,7 +547,9 @@ struct TagFilterView: View {
             if selectedTags.contains(tag) { selectedTags.remove(tag) } else { selectedTags.insert(tag) }
             return
         }
-        selectedTags.removeAll()
+        selectedTags = [tag]
+        // Selecting a clause member must preserve its membership until F1 splits it.
+        if session.tagFilter.orTags.contains(tag) { return }
         var filter = session.tagFilter
         let isExcluded = filter.excludedTags.contains(tag)
         let isSelected = filter.requiredTags.contains(tag)

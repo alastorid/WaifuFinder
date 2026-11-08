@@ -71,9 +71,10 @@ These describe the current source; check release notes for the contents of a dow
 |---|---|---|
 | **Tag rarity** | Surface photos with uncommon combinations of general tags | Finish tagging, then use Tag rarity in Sort and Filter |
 | **Distance from visual center** | Find representative images or visual outliers | Use Distance; 0 is nearest and 1 is farthest in the source set |
-| **OR tag groups** | Match alternatives while retaining other filters | Select tags with Command-click or a rectangle, then press F1 |
+| **OR tag groups** | Match alternatives while retaining other filters | F1 adds selected tags to the first OR group; select members inside a group and press F1 to split them |
 | **Visual sequencing** | Browse similar-looking photos beside one another | Choose Minimal Visual Distance; reverse retraces the route |
 | **Original-photo preview improvements** | Reuse previews and keep navigation available after deletion | Open a photo and navigate the current results |
+| **Selected video clips** | Export separate clips around selected frames | Right-click → Export +-3 seconds clips; overlapping windows merge, with three seconds of padding |
 | **Cached JPEG remote tagging** | Send cached thumbnails without an extra image conversion | Connect a compatible inference server in Settings → Remote |
 | **RealESRGAN x2 / x4 preview** | Compare reconstructed still photos in the existing preview | Install each model, then choose Off, x2 or x4 |
 
@@ -157,6 +158,10 @@ Use **Kick** to disconnect it, or **Rotate…** to replace its access key.
 
 See [the protocol and implementation design](docs/Remote-inference.md) for limits,
 key storage and the client/server boundary.
+
+Exports can use a saved destination: in **Settings → General → Export**, choose a
+**Default export folder**. Frames, preview images and selected video clips then
+save there without a destination prompt. Clear it to choose a folder each time.
 
 ## Open media from a URL and Firefox
 

@@ -28,6 +28,7 @@ import ImageIO
 // `VideoFixture`; the naming and suffix cases are pure and run everywhere.
 
 func registerFrameExporterTests() {
+    registerVideoClipExporterTests()
     let suite = "frame export"
     Registry.shared.add(suite: suite, TestCase(name: "a selection spanning multiple videos exports each original with its local frame name", knownBug: nil) {
         let directory = try Temporary.directory("export-multiple-videos")

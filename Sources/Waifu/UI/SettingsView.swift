@@ -17,6 +17,8 @@ struct WaifuSettingsView: View {
 
 private struct GeneralSettingsView: View {
     @ObservedObject private var tagMemory = TagResultMemory.shared
+    @ObservedObject private var exportFolder = DefaultExportFolder.shared
+    @State private var exportFolderError: String?
     @State private var showingDeleteTagResults = false
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
 
@@ -26,6 +28,24 @@ private struct GeneralSettingsView: View {
                 Text("Find and restore the best frames in your videos.")
                 Text("Analysis, grouping, and export controls are available in the main window. Manage restoration models in the Models tab.")
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Export") {
+                Text("Default export folder").font(.headline)
+                Text(exportFolder.url?.path ?? "Ask where to save each export")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                HStack {
+                    Button("Choose Folder…") { chooseExportFolder() }
+                    if exportFolder.url != nil {
+                        Button("Clear") { exportFolder.clear() }
+                    }
+                }
+                Text("When a default folder is set, frames, preview images and clips save there without a destination prompt.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let exportFolderError {
+                    Text(exportFolderError).font(.caption).foregroundStyle(.red)
+                }
             }
 
             Section("Online Visual Search") {
@@ -95,6 +115,26 @@ private struct GeneralSettingsView: View {
             } message: {
                 Text("This removes the saved cache file. Results can be created again as videos are processed.")
             }
+    }
+
+    private func chooseExportFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = exportFolder.url
+        panel.title = "Choose Default Export Folder"
+        panel.prompt = "Use Folder"
+        panel.begin { response in
+            guard response == .OK, let directory = panel.url else { return }
+            do {
+                try exportFolder.set(directory)
+                exportFolderError = nil
+            } catch {
+                exportFolderError = error.localizedDescription
+            }
+        }
     }
 }
 

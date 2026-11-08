@@ -32,10 +32,13 @@ tag-style **rarity / none** control beside the Tags panel title to switch to a
 flat list and back. Clear restores rarity grouping. Exact boundary values enter
 the next band.
 
-Select multiple tags with Command-click or a selection rectangle, then press F1
-to create a new OR group containing that selection. Each press creates a fresh
-group, including when an empty group exists. To regroup tags, select members of
-existing groups and press F1; selected tags move into the new group.
+Select one tag with a click, or multiple tags with Command-click or a selection
+rectangle, then press F1 to add them to the first existing OR group. If no group
+exists, F1 creates the initial group. Include actions also reuse the first group.
+Clicking a tag inside an OR group selects it without removing it from that group.
+Select one or more group members and press F1 to split them into a new OR group;
+unselected members stay in their original groups. Only this split creates an
+additional OR group. Empty source groups are removed.
 
 ## Per-photo rarity
 
