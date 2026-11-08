@@ -766,9 +766,11 @@ private struct TagRightClickMonitor: NSViewRepresentable {
                           eventWindowNumber == window.windowNumber else { return false }
                     if event.type == .keyDown {
                         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                        // Tag highlighting owns this selection command even if the
+                        // quick-filter field retained its text-editor focus during
+                        // Command-click or rectangle selection. The callback only
+                        // handles F1 when there are selected, available tags.
                         guard window.isKeyWindow, window.attachedSheet == nil, !event.isARepeat,
-                              !(window.firstResponder is NSTextView),
-                              (window.firstResponder as? NSTextField)?.isEditable != true,
                               modifiers.intersection([.command, .control, .option, .shift]).isEmpty,
                               event.keyCode == 122 else { return false } // F1, independent of keyboard layout
                         return self.onGroupShortcut?() ?? false

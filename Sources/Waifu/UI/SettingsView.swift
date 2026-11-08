@@ -38,7 +38,10 @@ private struct GeneralSettingsView: View {
                 HStack {
                     Button("Choose Folder…") { chooseExportFolder() }
                     if exportFolder.url != nil {
-                        Button("Clear") { exportFolder.clear() }
+                        Button("Clear") {
+                            exportFolder.clear()
+                            exportFolderError = nil
+                        }
                     }
                 }
                 Text("When a default folder is set, frames, preview images and clips save there without a destination prompt.")

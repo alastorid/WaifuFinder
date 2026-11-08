@@ -7,34 +7,51 @@ final class DefaultExportFolder: ObservableObject {
     static let shared = DefaultExportFolder()
     private static let bookmarkKey = "defaultExportFolderBookmark"
     private static let pathKey = "defaultExportFolderPath"
+    private let defaults: UserDefaults
+    private let makeBookmark: (URL) throws -> Data
     @Published private(set) var url: URL?
 
-    private init() {
-        if let data = UserDefaults.standard.data(forKey: Self.bookmarkKey) {
+    init(defaults: UserDefaults = .standard,
+         makeBookmark: @escaping (URL) throws -> Data = {
+             try $0.bookmarkData(options: [.minimalBookmark],
+                                 includingResourceValuesForKeys: nil, relativeTo: nil)
+         }) {
+        self.defaults = defaults
+        self.makeBookmark = makeBookmark
+        if let data = defaults.data(forKey: Self.bookmarkKey) {
             var stale = false
-            if let resolved = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope],
+            if let resolved = try? URL(resolvingBookmarkData: data, options: [.withoutUI],
                                       relativeTo: nil, bookmarkDataIsStale: &stale) {
                 url = resolved
                 if stale { try? set(resolved) }
                 return
             }
         }
-        if let path = UserDefaults.standard.string(forKey: Self.pathKey) {
+        if let path = defaults.string(forKey: Self.pathKey) {
             url = URL(fileURLWithPath: path, isDirectory: true)
         }
     }
 
     func set(_ directory: URL) throws {
-        let data = try directory.bookmarkData(options: [.withSecurityScope],
-                                            includingResourceValuesForKeys: nil, relativeTo: nil)
-        UserDefaults.standard.set(data, forKey: Self.bookmarkKey)
-        UserDefaults.standard.set(directory.path, forKey: Self.pathKey)
+        guard directory.isFileURL else { throw CocoaError(.fileReadUnsupportedScheme) }
+        guard try directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        // This app is not sandboxed: a security-scoped bookmark is unnecessary
+        // and can fail for a folder selected in NSOpenPanel. An ordinary bookmark
+        // tracks moves when available; its failure must not reject a valid folder.
+        if let data = try? makeBookmark(directory) {
+            defaults.set(data, forKey: Self.bookmarkKey)
+        } else {
+            defaults.removeObject(forKey: Self.bookmarkKey)
+        }
+        defaults.set(directory.path, forKey: Self.pathKey)
         url = directory
     }
 
     func clear() {
-        UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
-        UserDefaults.standard.removeObject(forKey: Self.pathKey)
+        defaults.removeObject(forKey: Self.bookmarkKey)
+        defaults.removeObject(forKey: Self.pathKey)
         url = nil
     }
 }
