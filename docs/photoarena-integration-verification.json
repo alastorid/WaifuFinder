@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-08",
+  "app": "dist/WaifuFinder.app",
+  "build": {
+    "command": "./build.sh",
+    "result": "pass",
+    "seconds": 107,
+    "interactiveLaunch": false
+  },
+  "regression": {
+    "command": "./run-tests.sh --only PhotoArena",
+    "reportedPasses": 17,
+    "failures": 0,
+    "knownBugs": 0,
+    "seconds": 12.15,
+    "note": "The opt-in 40MP case returns without measurement in this standard suite run; actual 40MP export was separately enabled and measured."
+  },
+  "focusedReconstruction": {
+    "command": "WAIFU_ARENA_40MP=1 tools/test-arena-reconstruction.sh",
+    "passes": 4,
+    "failures": 0
+  },
+  "interactiveUITests": "Neither created nor run; prohibited by AGENTS.md",
+  "dependencies": "No new third-party dependency added",
+  "status": "Working integrated prototype; full forensic accuracy and ANE mission incomplete",
+  "evidence": [
+    "photoarena-forensics-40mp.json",
+    "photoarena-40mp-export.json",
+    "photoarena-registration-benchmark.json",
+    "photoarena-native-roi-validation.json",
+    "PhotoArena-example/evaluation.json"
+  ],
+  "remoteAndHuggingFaceFollowup": {
+    "build": "passed",
+    "buildSeconds": 181,
+    "signatureVerification": "deep strict passed",
+    "testCommand": "WAIFU_TEST_ARENA_INSTALL=1 ./run-tests.sh --only PhotoArena",
+    "reportedPasses": 19,
+    "failures": 0,
+    "seconds": 133.03,
+    "remoteScope": "Authenticated encrypted loopback regional crops, captured backend preference, cache reuse, no silent local fallback, cancellation. Deterministic server catalog; not a two-physical-Mac model benchmark.",
+    "setupReport": "photoarena-huggingface-setup-verification.json",
+    "userModelConfigurationChanged": false,
+    "interactiveUITestsRun": false
+  },
+  "releaseValidation": {
+    "version": "0.1.104",
+    "fullRegression": {
+      "passed": 585,
+      "failed": 0,
+      "knownBugs": 0,
+      "skipped": 16,
+      "seconds": 97.59
+    },
+    "optInHuggingFaceSetup": "Separately passed; see photoarena-huggingface-setup-verification.json",
+    "versionedAppBuild": "passed",
+    "deepStrictSignatureVerification": "passed",
+    "dependencyPolicyAudit": "passed",
+    "interactiveUITestsRun": false
+  }
+}

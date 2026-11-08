@@ -23,6 +23,68 @@ func registerFrameSamplerTests() {
     let suite = "frame sampling"
 
     Registry.shared.add(suite: suite, TestCase(
+        name: "selected focused windows fold overlaps without filling gaps", knownBug: nil) {
+        let ranges = FocusedAnalysisRanges.make(times: [29, 2, 13, 8, 8, 19, 38, .nan, .infinity], duration: 40)
+        checkEqual(ranges, [0.0...22.0, 26.0...32.0, 35.0...40.0],
+                   "overlapping and touching windows merge, disjoint windows stay separate, and endpoints clamp")
+        checkEqual(FocusedAnalysisRanges.make(times: [1, 2], duration: .infinity), [], "invalid duration has no ranges")
+        checkEqual(FocusedAnalysisRanges.make(times: [-1, 41], duration: 40), [], "out-of-video times are ignored")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(
+        name: "focused analysis targets the selection only when its menu belongs to it", knownBug: nil) {
+        let frames = (1...3).map { FrameFixture.make(id: "f\($0)", time: Double($0 * 10)) }
+        let selected: Set<FrameID> = [frames[0].id, frames[1].id]
+        checkEqual(FocusedAnalysisRanges.targets(clicked: frames[1], selected: selected, frames: frames).map(\.id),
+                   [frames[0].id, frames[1].id], "all selected frames are targeted")
+        checkEqual(FocusedAnalysisRanges.targets(clicked: frames[2], selected: selected, frames: frames).map(\.id),
+                   [frames[2].id], "a menu on an unselected frame targets that frame")
+        checkEqual(FocusedAnalysisRanges.targets(clicked: frames[0], selected: [frames[0].id], frames: frames).map(\.id),
+                   [frames[0].id], "a single selection stays a single target")
+    })
+
+    Registry.shared.add(suite: suite, TestCase(
+        name: "focused analysis scores every selected window and skips the gap", knownBug: nil) {
+        let directory = try Temporary.directory("focused-multiple-windows")
+        let clip = try VideoFixture.makeMP4(in: directory, durationSeconds: 22,
+                                            width: 64, height: 48, frameRate: 2)
+        var full: [SampledFrame] = []
+        for try await frame in AVFoundationFrameSampler().sample(
+            clip, analysisWidth: 64, mode: .full, onProgress: { _ in }
+        ) { full.append(frame) }
+
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.settings.analysisMode = .quick
+            session.settings.analysisWidth = 64
+            session.loadVideo(at: clip)
+            for _ in 0..<600 where session.progress.isRunning {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            checkEqual(session.progress.phase, .complete, "initial quick analysis completes")
+            guard session.progress.phase == .complete,
+                  let first = session.frames.first(where: { abs($0.timeSeconds - 2) < 0.01 }),
+                  let second = session.frames.first(where: { abs($0.timeSeconds - 18) < 0.01 }) else {
+                check(false, "quick analysis contains both selected frames")
+                return
+            }
+            let before = Set(session.frames.map(\.id))
+            session.selectFrame(first.id)
+            session.selectFrame(second.id, command: true)
+            session.analyzeFocusedRange(around: second)
+            for _ in 0..<600 where session.progress.isRunning {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            checkEqual(session.progress.phase, .complete, "focused analysis completes")
+            let expected = Set(full.filter { (0.0...5.0).contains($0.timeSeconds)
+                                             || (15.0...21.0).contains($0.timeSeconds) }
+                .map { FrameID(sampleIndex: $0.sampleIndex) }).union(before)
+            checkEqual(Set(session.frames.map(\.id)), expected,
+                       "both selected ranges gain all frames without adding frames in the gap")
+        }.value
+    })
+
+    Registry.shared.add(suite: suite, TestCase(
         name: "native-frame concurrency scales down for large sources and small memory budgets", knownBug: nil) {
         let normal = FrameProcessingConcurrency(width: 1920, height: 1080,
                                                processorCount: 8, physicalMemory: 16 * 1024 * 1024 * 1024,

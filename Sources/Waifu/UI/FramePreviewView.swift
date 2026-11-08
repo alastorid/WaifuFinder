@@ -62,6 +62,7 @@ struct FramePreviewView: View {
     @State private var arrows = PreviewArrowNavigation()
     @State private var arrowRepeater = PreviewArrowRepeater()
     @State private var loadID = UUID()
+    @State private var qualityRefresh = UUID()
     @State private var photoMetadata: PhotoMetadata?
     @State private var metadataLoading = false
     @State private var metadataError: String?
@@ -168,7 +169,9 @@ struct FramePreviewView: View {
                 safire: safire, safireEnabled: safireEnabled)
                 .frame(width: 0, height: 0)
         }
-        .task(id: "\(metadataTaskID)|\(session.thumbnailGeneration)|\(downloadFromICloud)") {
+        .onReceive(NotificationCenter.default.publisher(for: GridThumbnailLoader.imageUpgraded)
+            .receive(on: RunLoop.main), perform: thumbnailQualityChanged)
+        .task(id: "\(metadataTaskID)|\(session.thumbnailGeneration)|\(downloadFromICloud)|\(qualityRefresh)") {
             await load(frame)
             await preloadNeighbours(of: frame)
         }
@@ -609,18 +612,22 @@ struct FramePreviewView: View {
                     preview = PreviewPhotoSource(content: try await PhotosMedia.shared.previewContent(photoURL, localOnly: true), isOriginal: true)
                 } catch {
                     try Task.checkCancellation()
-                    // Resolve the best local inspection rendition before exposing a grid thumbnail.
-                    let inspection = try? await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in })
+                    // A cloud-enabled preview queues the selected original as soon
+                    // as the local original probe fails. Cached pixels bridge the wait.
+                    let inspection = downloadFromICloud ? nil
+                        : try? await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in })
                     // The panel's decoded thumbnail and encoded session thumbnail
                     // remain candidates even when PhotoKit successfully returns pixels.
                     var grid = GridThumbnailLoader.shared.cachedImage(identity: identity)
-                    if grid == nil, let data = await session.thumbnailData(for: target) {
+                    if grid == nil, !downloadFromICloud, let data = await session.thumbnailData(for: target) {
                         grid = await GridThumbnailLoader.shared.image(data: data, identity: identity)
                     }
                     let retained = displayedFrameID == target.id && displayedSourceURL == source
                         ? image.flatMap(PhotosMedia.renditionPixels) : nil
+                    let originalThumbnail = GridThumbnailLoader.shared.hasOriginal(identity: identity)
+                        ? GridThumbnailLoader.shared.cachedImage(identity: identity) : nil
                     let fallback = PreviewPhotoSource.sharpest([
-                        retained,
+                        originalThumbnail, retained,
                         PreviewImageCache.shared.cached(Self.previewKey(target, session: session))?.image,
                         PhotosMedia.shared.cachedPreview(photoURL)?.image,
                         PhotosMedia.shared.cachedRendition(photoURL, maxPixelSize: PhotosMedia.analysisPixelSize),
@@ -634,18 +641,29 @@ struct FramePreviewView: View {
                         displayedSourceURL = source
                         displayedIsOriginal = false
                     }
+                    let canDownload = downloadFromICloud
                     preview = try await PreviewPhotoSource.load(
                         original: { try await PhotosMedia.shared.previewContent(photoURL) },
-                        rendition: { throw PhotosMedia.localUnavailable() }, cached: fallback)
+                        rendition: {
+                            if GridThumbnailLoader.shared.hasOriginal(identity: identity),
+                               let pixels = GridThumbnailLoader.shared.cachedImage(identity: identity) { return pixels }
+                            guard canDownload else { throw PhotosMedia.localUnavailable() }
+                            return try await PhotosMedia.shared.inspectionPreview(photoURL, onPreview: { _ in })
+                        }, cached: fallback)
                 }
                 let content = preview.content
                 // Rasterization and thumbnail generation must never run on the UI actor.
                 let prepared = await Task.detached(priority: .userInitiated) { () -> PreviewEvidenceInput? in
-                    if case .still(let pixels) = content {
-                        GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
+                    switch content {
+                    case .still(let pixels):
+                        GridThumbnailLoader.shared.upgrade(pixels, identity: identity, isOriginal: preview.isOriginal)
                         return PreviewEvidenceInput(photoURL: photoURL, image: pixels, isOriginal: preview.isOriginal)
+                    case .animated(let sequence):
+                        if let pixels = sequence.frame(at: 0, maximumPixelSize: PhotosMedia.analysisPixelSize) {
+                            GridThumbnailLoader.shared.upgrade(pixels, identity: identity, isOriginal: true)
+                        }
+                        return nil
                     }
-                    return nil as PreviewEvidenceInput?
                 }.value
                 guard !Task.isCancelled, loadID == request,
                       session.previewFrame?.id == target.id, session.video?.url == source else { return }
@@ -691,6 +709,29 @@ struct FramePreviewView: View {
                   session.previewFrame?.id == target.id, session.video?.url == source else { return }
             note = "Original image unavailable."
         }
+    }
+
+    private func thumbnailQualityChanged(_ notification: Notification) {
+        let identity = session.thumbnailGeneration.uuidString + ":" + frame.thumbnailKey
+        let loader = GridThumbnailLoader.shared
+        guard notification.object as? String == identity, photoInfoURL != nil, animation == nil,
+              session.previewFrame?.id == frame.id, let source = session.video?.url,
+              loader.hasOriginal(identity: identity), let pixels = loader.cachedImage(identity: identity) else { return }
+        if displayedFrameID == frame.id, displayedSourceURL == source {
+            guard !displayedIsOriginal else { return }
+        }
+        if !reading {
+            // A grid read can finish after this preview fell back to a rendition.
+            qualityRefresh = UUID()
+            return
+        }
+        if displayedFrameID == frame.id, displayedSourceURL == source,
+           let current = image.flatMap(PhotosMedia.renditionPixels),
+           PreviewPhotoSource.isSharper(current, than: pixels) { return }
+        image = NSImage(cgImage: pixels, size: NSSize(width: pixels.width, height: pixels.height))
+        displayedFrameID = frame.id
+        displayedSourceURL = source
+        displayedIsOriginal = false
     }
 
     private func preloadNeighbours(of target: AnalyzedFrame) async {

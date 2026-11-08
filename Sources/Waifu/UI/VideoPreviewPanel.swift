@@ -12,6 +12,8 @@ import SwiftUI
 struct VideoPreviewPanel: View {
     @ObservedObject var session: WaifuSession
     @ObservedObject var preview: PreviewController
+    var videoShortcutEnabled: Bool
+    @StateObject private var keyboard = VideoPreviewKeyboardState()
     @State private var selectedThumbnail: NSImage?
     @State private var photosPlayerSource: URL?
     @State private var videoPlayerOffset: Double?
@@ -50,6 +52,10 @@ struct VideoPreviewPanel: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        .background {
+            VideoPreviewKeyboard(state: keyboard, session: session, preview: preview,
+                                 enabled: videoShortcutEnabled && !isPhotosMode)
+        }
         .task(id: focusedPhotoURL) {
             guard let frame = focusedFrame, let source = session.video?.url,
                   PhotosMedia.isPhotos(source) else { return }
@@ -139,13 +145,19 @@ struct VideoPreviewPanel: View {
             Image(nsImage: selectedThumbnail).resizable().aspectRatio(contentMode: .fit)
                 .frame(maxWidth: .infinity).background(Color.black)
         } else if preview.player != nil {
-            // `.clipped()` is not cosmetic. `VideoPlayer` is an `NSView`-backed
+            // `.clipped()` is not cosmetic. The player is an `NSView`-backed
             // `AVPlayerView`, and AppKit does not clip a view's subviews to its
             // bounds by default — so anything the player's own controls draw beyond
             // the 16:9 box (a slider track, an edge of the control bar) can appear
             // anywhere in the window as a stray line. The preview is a fixed box;
             // nothing it contains may draw outside it.
-            VideoPlayer(player: preview.player)
+            Group {
+                if isPhotosMode {
+                    VideoPlayer(player: preview.player)
+                } else {
+                    NativeVideoPreview(player: preview.player, keyboard: keyboard)
+                }
+            }
                 .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .background(Color.black)
@@ -252,6 +264,114 @@ struct VideoPreviewPanel: View {
             preview.load(url: url)
         } else {
             preview.unload()
+        }
+    }
+}
+
+/// Shares the native player view with the panel's keyboard monitor.
+@MainActor
+private final class VideoPreviewKeyboardState: ObservableObject {
+    weak var playerView: AVPlayerView?
+}
+
+private struct NativeVideoPreview: NSViewRepresentable {
+    let player: AVPlayer?
+    let keyboard: VideoPreviewKeyboardState
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.player = player
+        keyboard.playerView = view
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        view.player = player
+        keyboard.playerView = view
+    }
+}
+
+/// A click anywhere in the preview panel selects it for the unmodified F key.
+private struct VideoPreviewKeyboard: NSViewRepresentable {
+    let state: VideoPreviewKeyboardState
+    let session: WaifuSession
+    let preview: PreviewController
+    let enabled: Bool
+
+    func makeNSView(context: Context) -> MonitorView {
+        let view = MonitorView()
+        updateNSView(view, context: context)
+        return view
+    }
+
+    func updateNSView(_ view: MonitorView, context: Context) {
+        view.state = state
+        view.session = session
+        view.preview = preview
+        view.enabled = enabled
+    }
+
+    static func dismantleNSView(_ view: MonitorView, coordinator: ()) {
+        view.removeMonitor()
+    }
+
+    final class MonitorView: NSView {
+        weak var state: VideoPreviewKeyboardState?
+        weak var session: WaifuSession?
+        weak var preview: PreviewController?
+        var enabled = false
+        private var selected = false
+        private var monitor: Any?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            removeMonitor()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+                let consumed = MainActor.assumeIsolated {
+                    guard let self, let panelWindow = self.window else { return false }
+                    if event.type != .keyDown {
+                        self.selected = event.window === panelWindow && self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+                        if self.selected, event.type == .leftMouseDown,
+                           panelWindow.firstResponder is NSTextView {
+                            panelWindow.makeFirstResponder(self)
+                        }
+                        return false
+                    }
+                    guard let playerView = self.state?.playerView else { return false }
+                    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+                    if playerView.isInFullScreenMode, event.window === playerView.window,
+                       event.keyCode == 53, modifiers.isEmpty {
+                        playerView.exitFullScreenMode(options: nil)
+                        return true
+                    }
+                    guard self.selected, self.enabled, panelWindow.isKeyWindow, event.window === panelWindow,
+                          !event.isARepeat, modifiers.isEmpty,
+                          event.charactersIgnoringModifiers?.lowercased() == "f",
+                          panelWindow.attachedSheet == nil,
+                          !(panelWindow.firstResponder is NSTextView),
+                          (panelWindow.firstResponder as? NSTextField)?.isEditable != true,
+                          let session = self.session, !session.isPreviewInteractionBlocked,
+                          session.previewFrame == nil,
+                          let preview = self.preview, preview.player != nil,
+                          let screen = panelWindow.screen,
+                          !playerView.isInFullScreenMode else { return false }
+                    if playerView.enterFullScreenMode(screen, withOptions: nil) {
+                        preview.play()
+                        return true
+                    }
+                    return false
+                }
+                return consumed ? nil : event
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            selected = false
         }
     }
 }

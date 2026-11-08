@@ -1,0 +1,26 @@
+{
+  "acceptedSourceCount" : 2,
+  "analysisSeconds" : 6.6747839450836182,
+  "finalCompressedBytes" : 184647680,
+  "finalPhysicalFootprintBytes" : 1035339456,
+  "fixture" : "Apple Core Image deterministic checkerboard, two identical 8000×5000 sources",
+  "hardware" : "yolo.local",
+  "limitations" : [
+    "Coverage and throughput benchmark only; repetitive pattern does not validate registration accuracy or forensic quality.",
+    "20ms sampled whole-process physical footprint includes Apple image decode\/render allocations; not a guaranteed instantaneous peak.",
+    "No VLM\/MLX\/Core ML inference; ANE placement and utilization are unmeasured.",
+    "macOS paging remains enabled; process swap-ins were not measured."
+  ],
+  "maximumDifference" : 0,
+  "megapixels" : 40,
+  "modelInference" : false,
+  "operatingSystem" : "Version 27.2 (Build 26B123)",
+  "processSwapIns" : null,
+  "referenceHeight" : 5000,
+  "referenceWidth" : 8000,
+  "regionCount" : 216,
+  "sampledPeakCompressedBytes" : 184778752,
+  "sampledPeakPhysicalFootprintBytes" : 1210386136,
+  "schemaVersion" : 1,
+  "unresolvedRegionCount" : 216
+}

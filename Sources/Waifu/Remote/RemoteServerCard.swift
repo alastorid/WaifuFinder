@@ -51,6 +51,7 @@ struct RemoteServerCard: View {
                     }
                     if let capabilities {
                         capability("Tagging", available: capabilities.offersRemoteTagging)
+                        capability("PhotoArena", available: capabilities.arenaRevision == ArenaJudgeConfiguration.revision)
                         capability("SAFIRE", available: capabilities.offersSafire)
                         if WaifuDistribution.isNonCommercialOnly {
                             capability("TruFor", available: capabilities.offersTruFor)

@@ -32,6 +32,8 @@ enum RemoteOpcode: UInt16, Sendable {
     case uncoverResultBegin = 0x0124
     case uncoverResult = 0x0125
     case uncoverResultEnd = 0x0126
+    case arenaRequest = 0x0160
+    case arenaResult = 0x0161
     case truforRequest = 0x0150
     case truforResult = 0x0151
     case truforData = 0x0152

@@ -8,7 +8,11 @@ final class GridThumbnailLoader: @unchecked Sendable {
         let image: CGImage
         // Accessed only under visibleLock. Decoding/prefetching is not display.
         var firstPresentationTime: TimeInterval?
-        init(_ image: CGImage) { self.image = image }
+        let isOriginal: Bool
+        init(_ image: CGImage, isOriginal: Bool = false) {
+            self.image = image
+            self.isOriginal = isOriginal
+        }
     }
     private let cache = NSCache<NSString, Entry>()
     private struct VisibleImage {
@@ -37,16 +41,24 @@ final class GridThumbnailLoader: @unchecked Sendable {
             ?? cache.object(forKey: identity as NSString)?.image
     }
 
+    func hasOriginal(identity: String) -> Bool {
+        visibleLock.withLock {
+            (visibleImages[identity]?.entry ?? cache.object(forKey: identity as NSString))?.isOriginal == true
+        }
+    }
+
     static let imageUpgraded = Notification.Name("Waifu.gridThumbnailUpgraded")
 
     /// Replace degraded pixels, including leases held by cells hidden under preview.
     /// Full inspection images are resized before they enter this bounded cache.
-    func upgrade(_ image: CGImage, identity: String) {
+    func upgrade(_ image: CGImage, identity: String, isOriginal: Bool = false) {
         guard let pixels = try? PhotosMedia.boundedRendition(image, maxPixelSize: PhotosMedia.analysisPixelSize) else { return }
         let changed = visibleLock.withLock { () -> Bool in
-            let previous = visibleImages[identity]?.entry.image ?? cache.object(forKey: identity as NSString)?.image
-            guard PreviewPhotoSource.isSharper(pixels, than: previous) else { return false }
-            let entry = Entry(pixels)
+            let previous = visibleImages[identity]?.entry ?? cache.object(forKey: identity as NSString)
+            guard previous?.isOriginal != true,
+                  isOriginal || PreviewPhotoSource.isSharper(pixels, than: previous?.image) else { return false }
+            let entry = Entry(pixels, isOriginal: isOriginal)
+            entry.firstPresentationTime = previous?.firstPresentationTime
             cache.setObject(entry, forKey: identity as NSString, cost: pixels.bytesPerRow * pixels.height)
             if let visible = visibleImages[identity] {
                 visibleImages[identity] = VisibleImage(entry: entry, owners: visible.owners)
@@ -66,7 +78,7 @@ final class GridThumbnailLoader: @unchecked Sendable {
             } else {
                 let cached = cache.object(forKey: identity as NSString)
                 let entry: Entry
-                if let cached, cached.image === image { entry = cached }
+                if let cached, cached.isOriginal || cached.image === image { entry = cached }
                 else { entry = Entry(image) }
                 visibleImages[identity] = VisibleImage(entry: entry, owners: [owner])
             }

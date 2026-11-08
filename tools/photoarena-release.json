@@ -1,0 +1,7 @@
+{
+  "repository": "alastorid/PhotoArena-MiniCPM-V-4.7-1B-F16",
+  "revision": "dac3e14a51463424f4c8a444e3d0633b71734ea4",
+  "manifestSHA256": "e8c87ba76df1f7baa217b8f8317a0b815b3378a11f3b9b873ebfd89aae9fdb95",
+  "supportFilesSHA256": {},
+  "pathPrefix": "releases/photoarena-f16-e8c87ba76df1f7ba"
+}

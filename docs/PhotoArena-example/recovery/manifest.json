@@ -1,0 +1,525 @@
+{
+  "analysis" : {
+    "elapsedSeconds" : 0.22142910957336426,
+    "height" : 1134,
+    "referenceID" : "variant-0",
+    "regions" : [
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_0",
+        "measurements" : [
+          {
+            "clipping" : 0.38527881855867346,
+            "difference" : 0.031113610808907535,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.00844209754213753,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.38662408322704084,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.008625022274530271,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.38662408322704084,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.008625022274530271,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 448,
+          "width" : 448,
+          "x" : 0,
+          "y" : 0
+        },
+        "unresolved" : true
+      },
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_1",
+        "measurements" : [
+          {
+            "clipping" : 0.2521225286989796,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail.",
+              "OCR text candidate: may be scene text, not a confirmed watermark."
+            ],
+            "sharpness" : 0.01735978571115215,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0.002152423469387762,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.2365672831632653,
+            "difference" : 0.034840479160415355,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail.",
+              "OCR text candidate: may be scene text, not a confirmed watermark."
+            ],
+            "sharpness" : 0.016900305043885545,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0.002152423469387762,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.2521225286989796,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail.",
+              "OCR text candidate: may be scene text, not a confirmed watermark."
+            ],
+            "sharpness" : 0.01735978571115215,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0.002152423469387762,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 448,
+          "width" : 448,
+          "x" : 448,
+          "y" : 0
+        },
+        "unresolved" : true
+      },
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_2",
+        "measurements" : [
+          {
+            "clipping" : 0.25485790019132654,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.013217357255394902,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.25485790019132654,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.013217357255394902,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.2443050462372449,
+            "difference" : 0.03140300390989673,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.01319934223688761,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 448,
+          "width" : 448,
+          "x" : 0,
+          "y" : 448
+        },
+        "unresolved" : true
+      },
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_3",
+        "measurements" : [
+          {
+            "clipping" : 0.14050043845663265,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.013047758165759617,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.14050043845663265,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.013047758165759617,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.14050043845663265,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.013047758165759617,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 448,
+          "width" : 448,
+          "x" : 448,
+          "y" : 448
+        },
+        "unresolved" : true
+      },
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_4",
+        "measurements" : [
+          {
+            "clipping" : 0.05674144657863145,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.015327711967132902,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.05674144657863145,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.015327711967132902,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.05674144657863145,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.015327711967132902,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 238,
+          "width" : 448,
+          "x" : 0,
+          "y" : 896
+        },
+        "unresolved" : true
+      },
+      {
+        "evidence" : [
+          "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."
+        ],
+        "id" : "region_5",
+        "measurements" : [
+          {
+            "clipping" : 0.00013130252100840336,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.007270500111805387,
+            "sourceID" : "variant-0",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.00013130252100840336,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.007270500111805387,
+            "sourceID" : "variant-1",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          },
+          {
+            "clipping" : 0.00013130252100840336,
+            "difference" : 0,
+            "evidence" : [
+              "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+              "Sharpness includes noise and sharpening; it is not authenticated detail."
+            ],
+            "sharpness" : 0.007270500111805387,
+            "sourceID" : "variant-2",
+            "textCandidateFraction" : 0,
+            "validFraction" : 1
+          }
+        ],
+        "rect" : {
+          "height" : 238,
+          "width" : 448,
+          "x" : 448,
+          "y" : 896
+        },
+        "unresolved" : true
+      }
+    ],
+    "schemaVersion" : 1,
+    "sources" : [
+      {
+        "accepted" : true,
+        "alignmentConfidence" : 1,
+        "height" : 1134,
+        "id" : "variant-0",
+        "issues" : [
+
+        ],
+        "transform" : {
+          "a" : 1,
+          "b" : 0,
+          "c" : 0,
+          "d" : 1,
+          "perspectiveX" : 0,
+          "perspectiveY" : 0,
+          "tx" : 0,
+          "ty" : 0
+        },
+        "url" : "file:\/\/\/Users\/henry\/wp\/waifu\/docs\/PhotoArena-example\/variant-0.tiff",
+        "width" : 896
+      },
+      {
+        "accepted" : true,
+        "alignmentConfidence" : 0.988725301945346,
+        "height" : 1134,
+        "id" : "variant-1",
+        "issues" : [
+          "Global alignment only; local distortions remain unverified."
+        ],
+        "transform" : {
+          "a" : 1,
+          "b" : 0,
+          "c" : 0,
+          "d" : 1,
+          "perspectiveX" : 0,
+          "perspectiveY" : 0,
+          "tx" : 0,
+          "ty" : 0
+        },
+        "url" : "file:\/\/\/Users\/henry\/wp\/waifu\/docs\/PhotoArena-example\/variant-1.tiff",
+        "width" : 896
+      },
+      {
+        "accepted" : true,
+        "alignmentConfidence" : 0.9857334140583066,
+        "height" : 1134,
+        "id" : "variant-2",
+        "issues" : [
+          "Global alignment only; local distortions remain unverified."
+        ],
+        "transform" : {
+          "a" : 1,
+          "b" : 0,
+          "c" : 0,
+          "d" : 1,
+          "perspectiveX" : 0,
+          "perspectiveY" : 0,
+          "tx" : 0,
+          "ty" : 0
+        },
+        "url" : "file:\/\/\/Users\/henry\/wp\/waifu\/docs\/PhotoArena-example\/variant-2.tiff",
+        "width" : 896
+      }
+    ],
+    "warnings" : [
+      "Authenticity and watermark classification remain unverified. OCR and residuals are candidate evidence only.",
+      "Global homography cannot validate parallax or local deformation. Tile boundaries are analysis regions, not semantic segmentation."
+    ],
+    "width" : 896
+  },
+  "elapsedSeconds" : 0.024195075035095215,
+  "height" : 1134,
+  "imageFile" : "reconstruction.tiff",
+  "schemaVersion" : 1,
+  "selections" : [
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 448,
+        "width" : 448,
+        "x" : 0,
+        "y" : 0
+      },
+      "regionID" : "region_0",
+      "sourceID" : "variant-1",
+      "unresolved" : true
+    },
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "OCR text candidate: may be scene text, not a confirmed watermark.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 448,
+        "width" : 448,
+        "x" : 448,
+        "y" : 0
+      },
+      "regionID" : "region_1",
+      "sourceID" : "variant-0",
+      "unresolved" : true
+    },
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 448,
+        "width" : 448,
+        "x" : 0,
+        "y" : 448
+      },
+      "regionID" : "region_2",
+      "sourceID" : "variant-0",
+      "unresolved" : true
+    },
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 448,
+        "width" : 448,
+        "x" : 448,
+        "y" : 448
+      },
+      "regionID" : "region_3",
+      "sourceID" : "variant-0",
+      "unresolved" : true
+    },
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 238,
+        "width" : 448,
+        "x" : 0,
+        "y" : 896
+      },
+      "regionID" : "region_4",
+      "sourceID" : "variant-0",
+      "unresolved" : true
+    },
+    {
+      "manual" : false,
+      "reasons" : [
+        "Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.",
+        "Sharpness includes noise and sharpening; it is not authenticated detail.",
+        "Selected by measured agreement, text candidates and technical detail; these signals do not prove originality."
+      ],
+      "rect" : {
+        "height" : 238,
+        "width" : 448,
+        "x" : 448,
+        "y" : 896
+      },
+      "regionID" : "region_5",
+      "sourceID" : "variant-0",
+      "unresolved" : true
+    }
+  ],
+  "sourceFiles" : {
+    "variant-0" : "sources\/001.tiff",
+    "variant-1" : "sources\/002.tiff",
+    "variant-2" : "sources\/003.tiff"
+  },
+  "sourceMapFile" : "source-map.tiff",
+  "sourceMapIndices" : {
+    "variant-0" : 1,
+    "variant-1" : 2,
+    "variant-2" : 3
+  },
+  "sourceSHA256" : {
+    "variant-0" : "9af3be44ff65b6cf2276cb64c1e580c3bcf0402bdcbe2095e55e88eb02726bb1",
+    "variant-1" : "365f963a55b3c3214822e615b5744cad9cf16eac54068464a7a3db2cb07c4bfc",
+    "variant-2" : "68ed65fc14db826075b6247addb8f87cfb381d13b63f060a6c3400ff4db99bec"
+  },
+  "warnings" : [
+    "Authenticity and watermark classification remain unverified. OCR and residuals are candidate evidence only.",
+    "Global homography cannot validate parallax or local deformation. Tile boundaries are analysis regions, not semantic segmentation.",
+    "Authenticity is unresolved. Agreement between sources does not prove original pixels.",
+    "Hard region seams may be visible. No blending or color corrections were applied.",
+    "Output is 8-bit sRGB; high-bit-depth and wide-gamut inputs are converted.",
+    "Source map values are one-based manifest source indices; zero denotes uncovered pixels.",
+    "Original source bytes are archived in sources\/ with SHA256 identities; analysis records original file URLs.",
+    "Consensus may favor correlated edited copies; it is evidence of agreement, not independent provenance."
+  ],
+  "width" : 896
+}

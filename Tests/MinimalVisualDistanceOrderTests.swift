@@ -4,6 +4,43 @@ import Vision
 func registerMinimalVisualDistanceOrderTests() {
     let suite = "frame arrangement: visual distance"
 
+    Registry.shared.add(suite: suite, TestCase(name: "nine visual matches reconcile a deep scroll with the actual prepared thumbnail rows", knownBug: nil) {
+        let directory = try Temporary.directory("visual-nine-viewport")
+        let a = try JSONEncoder().encode(await makeFeaturePrintObservation(0))
+        let b = try JSONEncoder().encode(await makeFeaturePrintObservation(4))
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+            session.frameOrder = .only([.time])
+            let frames = (0..<90).map { index in
+                FrameFixture.make(id: String(format: "f%06d", index), time: Double(index),
+                                  featurePrint: index.isMultiple(of: 2) ? a : b)
+            }
+            session.updateAnalyzedFrames(frames)
+            session.frameOrder.setEnabled(true, for: .minimalVisualDistance)
+            session.frameLimits.time.low = 81
+            for _ in 0..<500 {
+                if !session.isComputingVisualDistance { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            check(!session.isComputingVisualDistance, "nine real Vision prints complete their asynchronous route")
+            checkEqual(Set(session.displayOrderFrames.map(\.id)), Set(frames.suffix(9).map(\.id)), "the route keeps all nine matches")
+            let key = GridStageKey(revision: session.gridRevision, generation: session.thumbnailGeneration,
+                width: 800, columns: 5, groupColumns: 5, grouped: session.usesGroupRows, photosSource: true, square: true)
+            let snapshot = GridStageSnapshot.make(GridStageInput(key: key, sourceURL: nil,
+                rows: session.displayedRows, frames: session.displayOrderFrames, beyondCap: [:], revealed: []))
+            let visibility = FrameGridScrollVisibility()
+            visibility.viewport = CGRect(x: 0, y: 2_000, width: 800, height: 600)
+            // Reproduce the old mismatch: preparation already finds nine items,
+            // while not one drawn row intersects the retained real scroll rect.
+            checkEqual(snapshot.visibleItems(in: visibility.viewport, horizontalOffsets: [:]).count, 9, "preparation clamps internally")
+            check(!snapshot.rows.contains { $0.originY + $0.height > visibility.viewport.minY && $0.originY < visibility.viewport.maxY }, "the old real viewport is entirely below the nine matching thumbnails")
+            checkEqual(visibility.reconcile(snapshot: snapshot, viewportSize: visibility.viewport.size, reset: false), 0,
+                       "same-album filtering explicitly scrolls the short result back into view")
+            check(snapshot.rows.contains { $0.originY + $0.height > visibility.viewport.minY && $0.originY < visibility.viewport.maxY }, "actual and prepared viewports now intersect the matching rows")
+            checkNil(visibility.reconcile(snapshot: snapshot, viewportSize: visibility.viewport.size, reset: false), "stable geometry does not repeatedly reset scrolling")
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "single filtered match is published immediately with MVD enabled", knownBug: nil) {
         let directory = try Temporary.directory("visual-single-match")
         try await Task { @MainActor in

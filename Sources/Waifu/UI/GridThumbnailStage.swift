@@ -265,11 +265,25 @@ struct GridStageSnapshot: Sendable {
                     rowIndexByToken: indices, rowIndexByFrameID: frameIndices)
     }
 
+    /// Use the same content bounds for thumbnail preparation and the actual
+    /// ScrollView handoff. Clamping preparation alone leaves lazy rows offscreen.
+    func clampedViewport(_ viewport: CGRect) -> CGRect {
+        var result = viewport
+        result.origin.y = min(max(0, viewport.minY), max(0, contentHeight - viewport.height))
+        return result
+    }
+
     /// Project the NEW order into the OLD viewport, including scroll clamping
     /// after filtering and each horizontal group's current scroll position.
     func visibleItems(in viewport: CGRect, horizontalOffsets: [String: CGFloat]) -> [GridStageItem] {
-        guard !rows.isEmpty, viewport.height > 0 else { return [] }
-        let top = min(max(0, viewport.minY), max(0, contentHeight - viewport.height))
+        visibleRowRange(in: viewport).flatMap {
+            items(inRow: $0, width: viewport.width, horizontalOffsets: horizontalOffsets)
+        }
+    }
+
+    func visibleRowRange(in viewport: CGRect) -> Range<Int> {
+        guard !rows.isEmpty, viewport.height > 0 else { return 0..<0 }
+        let top = clampedViewport(viewport).minY
         let bottom = top + viewport.height
         var low = 0, high = rows.count
         while low < high {
@@ -277,20 +291,22 @@ struct GridStageSnapshot: Sendable {
             if rows[middle].originY + rows[middle].height <= top { low = middle + 1 }
             else { high = middle }
         }
-        var result: [GridStageItem] = []
-        for index in low..<rows.count {
-            let row = rows[index]
-            if row.originY >= bottom { break }
-            if !row.strip { result.append(contentsOf: row.items); continue }
-            let stride = row.cellWidth + 1
-            let extra = row.beyond > 0 && !row.revealed ? 1 : 0
-            let width = CGFloat(row.items.count + extra) * stride - 1
-            let left = min(max(0, horizontalOffsets[row.id] ?? 0), max(0, width - viewport.width))
-            let first = min(row.items.count, max(0, Int(floor(left / stride))))
-            let end = min(row.items.count, max(first, Int(ceil((left + viewport.width) / stride))))
-            result.append(contentsOf: row.items[first..<end])
-        }
-        return result
+        var end = low
+        while end < rows.count, rows[end].originY < bottom { end += 1 }
+        return low..<end
+    }
+
+    func items(inRow index: Int, width viewportWidth: CGFloat,
+               horizontalOffsets: [String: CGFloat]) -> ArraySlice<GridStageItem> {
+        let row = rows[index]
+        guard row.strip else { return row.items[...] }
+        let stride = row.cellWidth + 1
+        let extra = row.beyond > 0 && !row.revealed ? 1 : 0
+        let width = CGFloat(row.items.count + extra) * stride - 1
+        let left = min(max(0, horizontalOffsets[row.id] ?? 0), max(0, width - viewportWidth))
+        let first = min(row.items.count, max(0, Int(floor(left / stride))))
+        let end = min(row.items.count, max(first, Int(ceil((left + viewportWidth) / stride))))
+        return row.items[first..<end]
     }
 }
 

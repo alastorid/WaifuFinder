@@ -1,0 +1,11 @@
+{
+  "computeBackend": "Apple Core Image and ImageIO; ANE not requested or verified",
+  "exportSeconds": 0.504810094833374,
+  "height": 5000,
+  "peakPhysicalFootprintBytes": 640648536,
+  "scope": "single-source native reconstruction/export; not an end-to-end 40MP analysis benchmark",
+  "width": 8000,
+  "compressedMemoryBytes": null,
+  "processSwapIns": null,
+  "memoryScope": "Sampled whole-process physical footprint during native export; compressed memory and process swap-ins were not measured. Not a guaranteed instantaneous peak; no whole-app or model inference measurement."
+}

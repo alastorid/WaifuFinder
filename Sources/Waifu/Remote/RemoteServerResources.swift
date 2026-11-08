@@ -32,6 +32,8 @@ struct RemoteModelCatalog: Sendable {
         return try await SafireBackend.shared.infer(png:request.png,photo:request.photo)
     }
 
+    var arena: @Sendable (RemoteArenaRequest) async throws -> ArenaJudgeResult = { try await ArenaJudge.local($0.images) }
+
     var trufor:@Sendable (RemoteTruForRequest) async throws -> TruForJobResult = { request in
         guard TruForConfiguration.load()?.fingerprint==request.fingerprint else { throw RemoteError.modelUnavailable("Install matching local TruFor weights on the server") }
         return try await TruForBackend.shared.submit(images:request.images,evidence:request.evidence)

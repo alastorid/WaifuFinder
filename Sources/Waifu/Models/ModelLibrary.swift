@@ -40,6 +40,7 @@ final class ModelLibrary: ObservableObject {
     func release(_ algorithm: UncoverAlgorithm) {
         if let model = ManagedModel.offered.first(where: { $0.algorithm == algorithm }) { inUse[model] = max(0, (inUse[model] ?? 0) - 1) }
     }
+    func inUseArena(_ active: Bool) { inUse[.arena] = max(0, (inUse[.arena] ?? 0) + (active ? 1 : -1)) }
     func acquireTagger() { inUse[.tagger, default: 0] += 1 }
     func releaseTagger() { inUse[.tagger] = max(0, (inUse[.tagger] ?? 0) - 1) }
     func acquireSafire() { inUse[.safire, default:0] += 1 }
@@ -62,6 +63,7 @@ final class ModelLibrary: ObservableObject {
             return SeedVR2Configuration.load()?.optimized(variant: model.rawValue).map { URL(fileURLWithPath: $0.model) }
         case .flash: return FlashVSRConfiguration.load().map { URL(fileURLWithPath: $0.model) }
         case .pgt: return PGTFormerConfiguration.load().map { URL(fileURLWithPath: $0.model) }
+        case .arena: return ArenaJudgeConfiguration.directory
         case .tagger: return WDTaggerConfiguration.availableDirectory
         case .safire: return SafireConfiguration.availableDirectory
         case .trufor: return TruForConfiguration.availableDirectory
@@ -85,7 +87,9 @@ final class ModelLibrary: ObservableObject {
             for model in ManagedModel.offered {
                 let location = Self.configuredLocation(model)
                 let ready: Bool
-                if model == .tagger {
+                if model == .arena {
+                    ready = ArenaJudgeConfiguration.directory != nil
+                } else if model == .tagger {
                     ready = location.map { WDTaggerBackend.isAvailable(directory: $0) } ?? false
                 } else if model == .safire {
                     ready = SafireConfiguration.load() != nil
@@ -264,6 +268,7 @@ final class ModelLibrary: ObservableObject {
             if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
         }
         switch model {
+        case .arena: try removeFile("photoarena-model.txt")
         case .tagger: try removeFile("wd-tagger-model.txt")
         case .safire: try removeFile("safire-model.txt")
         case .trufor: try removeFile("trufor-model.txt")

@@ -108,6 +108,23 @@ func registerPhotosCloudQueueTests() {
         checkEqual(try await preload.value,1,"preempted preload can finish later if its owner still wants it")
         checkEqual(events.all,[1,-1,2,1],"foreground runs ahead of speculative work")
     })
+    Registry.shared.add(suite: suite, TestCase(name: "a promoted preload keeps its transfer when preview opens", knownBug: nil) {
+        let queue = PhotosCloudQueue(), events = TickLog()
+        let ticket = PhotosCloudQueue.PriorityTicket(.preload)
+        let thumbnail = Task {
+            try await queue.perform(priority: .preload, ticket: ticket) {
+                events.record(1)
+                try await Task.sleep(for: .milliseconds(150))
+                events.record(2)
+            }
+        }
+        defer { thumbnail.cancel() }
+        try await waitForCloudTest { events.all.contains(1) }
+        ticket.update(.thumbnail)
+        try await queue.perform(priority: .viewing) { events.record(3) }
+        try await thumbnail.value
+        checkEqual(events.all, [1, 2, 3], "the now-visible request finishes without interruption")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "preload covers three photos in both directions without wrapping", knownBug: nil) {
         checkEqual(PhotosPreviewNeighbours.indices(current:3,count:20),[4,2,5,1,6,0],"nearest right and left photos lead the six-photo window")
         checkEqual(PhotosPreviewNeighbours.indices(current:0,count:3),[1,2],"start does not wrap backwards")

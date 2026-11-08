@@ -1,0 +1,62 @@
+{
+  "checkpoint": "345adbfa02c4a4671e61b7c75502dc9bf24fa93d",
+  "runtime": "7071ba378afa96dcd69c41e1ec2b4912364dbee4",
+  "fixture": "NASA Collins vs Apple-native synthetic watermark, then A/B reversed",
+  "status": "passed",
+  "anePlacement": "not measured; Metal/CPU backend",
+  "results": [
+    {
+      "loadSeconds": 1.1737887500000002,
+      "backend": "llama.cpp Metal/CPU",
+      "compression": "16x",
+      "ready": true
+    },
+    {
+      "tokens": 111,
+      "judgment": {
+        "detail": "A",
+        "evidence": [
+          "American flag on left",
+          "NASA and Ellen Collins patch",
+          "Space shuttle model",
+          "Blue backdrop",
+          "Uniform and posture"
+        ],
+        "consistency": "A",
+        "watermark": "A",
+        "authenticity": "A",
+        "recommended_source": "A",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 4.658748416,
+      "compressedBytes": 76742656,
+      "physicalFootprintBytes": 1557663104,
+      "decodeSeconds": 4.340739667
+    },
+    {
+      "tokens": 128,
+      "judgment": {
+        "detail": "B",
+        "evidence": [
+          "SAMPLE WATERMARK on A",
+          "NASA patch on B",
+          "Eileen Collins patch on B",
+          "Definite patch on B",
+          "Visible American flag on B",
+          "Model space shuttle on B"
+        ],
+        "consistency": "A",
+        "watermark": "A",
+        "authenticity": "B",
+        "recommended_source": "B",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 4.652406875,
+      "compressedBytes": 76611584,
+      "physicalFootprintBytes": 1579945344,
+      "decodeSeconds": 5.303356458
+    }
+  ]
+}

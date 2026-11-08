@@ -55,6 +55,19 @@ func registerPreviewFrameTests() {
         checkEqual(loader.cachedImage(identity: identity)?.width, 512, "late low quality results cannot downgrade the thumbnail")
     })
 
+    Registry.shared.add(suite: "Frame preview", TestCase(name: "original-backed grid pixels replace an equal-sized rendition", knownBug: nil) {
+        let identity = UUID().uuidString
+        let loader = GridThumbnailLoader.shared
+        let rendition = try ImageFixture.cgImage(width: 512, height: 384)
+        let original = try ImageFixture.cgImage(width: 512, height: 384)
+        let owner = UUID()
+        loader.retainVisibleImage(rendition, identity: identity, owner: owner)
+        defer { loader.releaseVisibleImage(identity: identity, owner: owner) }
+        loader.upgrade(original, identity: identity, isOriginal: true)
+        loader.upgrade(rendition, identity: identity)
+        check(loader.hasOriginal(identity: identity), "the visible lease records original quality")
+        check(loader.cachedImage(identity: identity) === original, "the equal-sized original stays visible")
+    })
     Registry.shared.add(suite: "Frame preview", TestCase(name: "a delayed local fallback never downgrades sharper cached photo pixels", knownBug: nil) {
         let sharp = try ImageFixture.cgImage(width: 2048, height: 1536)
         let small = try ImageFixture.cgImage(width: 512, height: 384)

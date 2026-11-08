@@ -32,7 +32,7 @@ final class GridThumbnailPresentation: ObservableObject {
             .sink { @Sendable [weak self] notification in
                 guard let identity = notification.object as? String else { return }
                 Task { @MainActor [weak self] in
-                    guard let self, self.pinnedIdentity == identity,
+                    guard let self, self.activeIdentity == identity || self.pinnedIdentity == identity,
                           let pixels = self.loader.cachedImage(identity: identity) else { return }
                     self.publish(pixels, identity: identity)
                 }
@@ -65,7 +65,7 @@ final class GridThumbnailPresentation: ObservableObject {
         clear()
         guard let pixels = await load(), !Task.isCancelled,
               revision == ticket, activeIdentity == identity else { return }
-        publish(pixels, identity: identity)
+        publish(loader.cachedImage(identity: identity) ?? pixels, identity: identity)
     }
 
     func disappear(identity: String) {

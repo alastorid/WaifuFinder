@@ -238,6 +238,14 @@ actor RemoteServerSession {
                     await self.handleTagBatch(envelope)
                     await self.tagBatchFinished(envelope.streamID)
                 }
+            case .arenaRequest:
+                do {
+                    try await resources.reserve(streamID: envelope.streamID)
+                    Task { [weak self] in
+                        guard let self else { return }
+                        await self.resources.run(streamID: envelope.streamID) { await self.handleArena(envelope) }
+                    }
+                } catch { try? await connection.sendError(envelope, Self.describe(error)) }
             case .truforRequest:
                 do {
                     try await resources.reserve(streamID:envelope.streamID)

@@ -37,7 +37,11 @@ struct WaifuFinderApp: App {
         // the standard toolbar for free.
         .defaultSize(width: 1280, height: 820)
         .windowStyle(.titleBar)
-        .commands { DiagCommands() }
+        .commands { DiagCommands(); PhotoArenaCommands() }
+
+        Window("PhotoArena", id: "photoarena") {
+            ArenaStudioView()
+        }.defaultSize(width: 1280, height: 850)
 
         Settings {
             WaifuSettingsView()
@@ -98,6 +102,16 @@ enum DiagCategoryPicker {
         } else if response > NSApplication.ModalResponse.alertFirstButtonReturn.rawValue - 1,
                   response <= titles.count {
             Diag.enable(selecting: titles[response - 1])
+        }
+    }
+}
+
+struct PhotoArenaCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("PhotoArena…") { openWindow(id: "photoarena") }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
         }
     }
 }

@@ -12,10 +12,12 @@ struct ModelRelease: Decodable, Sendable {
 }
 
 enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
+    case arena = "photoarena"
     case seed3 = "seedvr2-3b", seed7 = "seedvr2-7b", flash = "flashvsr", real = "realesrgan", real4 = "realesrgan-x4plus", pgt = "pgtformer", tagger = "wd-tagger", safire = "safire", trufor = "trufor"
     var id: String { rawValue }
     var name: String {
         switch self {
+        case .arena: "PhotoArena MiniCPM-V 4.7"
         case .seed3: "SeedVR2 3B"
         case .seed7: "SeedVR2 7B"
         case .flash: "FlashVSR 1.1 Tiny"
@@ -29,6 +31,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
     }
     var detail: String {
         switch self {
+        case .arena: "Photo comparison · native Metal/CPU · F16 · about 3.2 GB"
         case .seed3: "Video restoration · optimized 4-bit · about 2.4 GB"
         case .seed7: "Video restoration · optimized 4-bit · about 5.14 GB"
         case .flash: "Streaming video restoration · BF16 · 4× · about 3.51 GB"
@@ -53,6 +56,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
     }
     var releaseName: String? {
         switch self {
+        case .arena: "photoarena-release"
         case .seed3: "seedvr2-release"
         case .seed7: "seedvr2-7b-release"
         case .flash: "flashvsr-release"
@@ -83,6 +87,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
     }
     var workerName: String? {
         switch self {
+        case .arena: "waifu-photoarena"
         case .seed3, .seed7: "waifu-seedvr2"
         case .flash: "waifu-flashvsr"
         case .pgt: "waifu-pgtformer"
@@ -100,7 +105,7 @@ enum ManagedModel: String, CaseIterable, Identifiable, Sendable {
         case .real: .realESRGAN
         case .real4: .realESRGANFour
         case .pgt: .pgtFormer
-        case .tagger, .safire, .trufor: nil
+        case .tagger, .safire, .trufor, .arena: nil
         }
     }
 }
@@ -193,7 +198,7 @@ actor ModelInstaller {
         // A PGTFormer upgrade gets its own directory. Keep the old installation
         // usable until all replacement bytes are verified and activation succeeds.
         let destination = Self.installationDirectory(model, release: release, root: root)
-        if (model == .pgt || model == .tagger || model == .safire || model == .trufor), FileManager.default.fileExists(atPath: destination.path) {
+        if (model == .arena || model == .pgt || model == .tagger || model == .safire || model == .trufor), FileManager.default.fileExists(atPath: destination.path) {
             try await configure(model, directory: destination, progress: progress)
             return destination
         }
@@ -308,6 +313,14 @@ actor ModelInstaller {
         // compiled form. A bare .mlmodelc falls back to the load check alone.
         progress("Setting up \(model.name)", nil)
         try validate(model, directory: directory, progress: progress)
+        if model == .arena {
+            guard let worker = ArenaJudgeConfiguration.executable else { throw Self.fail("Missing native PhotoArena runtime") }
+            let log = FileManager.default.temporaryDirectory.appendingPathComponent("photoarena-setup-\(UUID().uuidString).log")
+            defer { try? FileManager.default.removeItem(at: log) }
+            try await UncoverProcess().run(executable: worker.path,
+                arguments: ["--validate", directory.appendingPathComponent("model.gguf").path, directory.appendingPathComponent("mmproj.gguf").path],
+                log: log, label: "PhotoArena setup")
+        }
         if model == .tagger {
             guard let worker = WDTaggerWorker.executableURL else { throw Self.fail("Missing native WD Tagger runtime.") }
             let log = FileManager.default.temporaryDirectory.appendingPathComponent("tagger-setup-\(UUID().uuidString).log")
@@ -335,11 +348,12 @@ actor ModelInstaller {
         case .tagger: configName = "wd-tagger-model.txt"
         case .safire: configName = "safire-model.txt"
         case .trufor: configName = "trufor-model.txt"
+        case .arena: configName = "photoarena-model.txt"
         }
         let configURL = configRoot.appendingPathComponent(configName)
         let previous = try? Data(contentsOf: configURL)
         do {
-            if model == .tagger || model == .safire || model == .trufor {
+            if model == .tagger || model == .safire || model == .trufor || model == .arena {
                 try Data(directory.path.utf8).write(to: configURL, options: .atomic)
             } else if model == .real || model == .real4 {
                 let actual = directory.pathExtension == "mlmodelc" ? directory : directory.appendingPathComponent("model.mlmodelc")

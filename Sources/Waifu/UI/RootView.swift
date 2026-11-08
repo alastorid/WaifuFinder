@@ -446,7 +446,8 @@ struct RootView: View {
                     // job status shows in the title bar, right of center and just
                     // before the icon actions. Icon actions are in the title bar;
                     // grid zoom is gesture and keyboard shortcut only.
-                    VideoPreviewPanel(session: session, preview: preview)
+                    VideoPreviewPanel(session: session, preview: preview,
+                                      videoShortcutEnabled: !showPhotosWorkspace && !orb.isOpen)
                     Divider()
                     FrameOrderPanel(session: session, link: link)
                 }

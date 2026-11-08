@@ -23,6 +23,7 @@ measured speed/memory comparisons, see the
 | Explore the latest additions | [Recent highlights](#recent-highlights) |
 | Work with my photo library | [Photos workspace](#photos-workspace) |
 | Share models across Macs | [Remote inference](#remote-inference) |
+| Compare and reconstruct photo versions | [PhotoArena](docs/PhotoArena.md) · [Verified behavior and limitations](docs/PhotoArena-delivery.md) |
 | Inspect or restore pixels | [Photo analysis](#photo-analysis) · [Uncover Waifu](#uncover-waifu) |
 | Check measured performance | [WD Tagger measurements](#wd-tagger-performance-matrix) |
 | Build or contribute | [Build and run](#build-and-run) · [Tests](#tests) · [Layout](#layout) |

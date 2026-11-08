@@ -1,0 +1,29 @@
+[
+  {
+    "compared" : 0,
+    "reasons" : [
+      "Measured texture, clipping and cross-source discrepancy; originality unknown."
+    ],
+    "score" : -0.05092372519996275,
+    "sourceID" : "variant-1",
+    "tied" : true
+  },
+  {
+    "compared" : 0,
+    "reasons" : [
+      "Measured texture, clipping and cross-source discrepancy; originality unknown."
+    ],
+    "score" : -0.05099715863712359,
+    "sourceID" : "variant-2",
+    "tied" : true
+  },
+  {
+    "compared" : 0,
+    "reasons" : [
+      "Measured texture, clipping and cross-source discrepancy; originality unknown."
+    ],
+    "score" : -0.05156393550219063,
+    "sourceID" : "variant-0",
+    "tied" : true
+  }
+]

@@ -1,0 +1,61 @@
+{
+  "checkpoint": "345adbfa02c4a4671e61b7c75502dc9bf24fa93d",
+  "runtime": "7071ba378afa96dcd69c41e1ec2b4912364dbee4",
+  "fixture": "NASA Collins, identical-image pair repeated",
+  "status": "passed",
+  "anePlacement": "not measured; Metal/CPU backend",
+  "results": [
+    {
+      "loadSeconds": 0.818638542,
+      "backend": "llama.cpp Metal/CPU",
+      "compression": "16x",
+      "ready": true
+    },
+    {
+      "tokens": 85,
+      "judgment": {
+        "detail": "A",
+        "evidence": [
+          "identical composition",
+          "same patches",
+          "same background",
+          "same lighting",
+          "no visible artifacts"
+        ],
+        "watermark": "A",
+        "consistency": "A",
+        "authenticity": "A",
+        "recommended_source": "A",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 4.653372917,
+      "compressedBytes": 98320384,
+      "physicalFootprintBytes": 1551175040,
+      "decodeSeconds": 3.168194917
+    },
+    {
+      "tokens": 85,
+      "judgment": {
+        "detail": "A",
+        "evidence": [
+          "identical composition",
+          "same patches",
+          "same background",
+          "same lighting",
+          "no visible artifacts"
+        ],
+        "watermark": "A",
+        "consistency": "A",
+        "authenticity": "A",
+        "recommended_source": "A",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 4.641748125,
+      "compressedBytes": 96157696,
+      "physicalFootprintBytes": 1572490624,
+      "decodeSeconds": 3.3966505
+    }
+  ]
+}

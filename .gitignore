@@ -45,3 +45,6 @@ node_modules/
 /Tests/Fixtures/**/*.gz
 /docs/development-archive/**/*.gz
 
+
+# PhotoArena checkpoint artifacts are managed/downloaded, never checked into source.
+/models/photoarena

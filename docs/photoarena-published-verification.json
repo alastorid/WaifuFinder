@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "repository": "alastorid/PhotoArena-MiniCPM-V-4.7-1B-F16",
+  "revision": "dac3e14a51463424f4c8a444e3d0633b71734ea4",
+  "manifestSHA256": "e8c87ba76df1f7baa217b8f8317a0b815b3378a11f3b9b873ebfd89aae9fdb95",
+  "verifiedFiles": [
+    "model.gguf",
+    "mmproj.gguf",
+    "README.md",
+    "LICENSE",
+    "validation.json",
+    "main.mm",
+    "CMakeLists.txt",
+    "build-native-photoarena.sh",
+    "THIRD-PARTY-NOTICES.txt"
+  ],
+  "nativeInference": {
+    "tokens": 111,
+    "judgment": {
+      "detail": "A",
+      "evidence": [
+        "American flag on left",
+        "NASA and Ellen Collins patch",
+        "Space shuttle model",
+        "Blue backdrop",
+        "Uniform and posture"
+      ],
+      "consistency": "A",
+      "watermark": "A",
+      "authenticity": "A",
+      "recommended_source": "A",
+      "quality": "A",
+      "uncertain": false
+    },
+    "prefillSeconds": 4.683587666,
+    "compressedBytes": 72597504,
+    "physicalFootprintBytes": 1560186240,
+    "decodeSeconds": 4.082892417
+  },
+  "qualityValidated": false
+}

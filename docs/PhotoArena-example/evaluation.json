@@ -1,0 +1,14 @@
+{
+  "acceptedSources" : 3,
+  "analysisSeconds" : 0.22142910957336426,
+  "attribution" : "NASA; original repository fixture attribution in Tests\/Fixtures\/RealESRGAN\/README.md",
+  "exportSeconds" : 0.024195075035095215,
+  "fixture" : "Tests\/Fixtures\/RealESRGAN\/nasa-collins-896x1134.jpg",
+  "height" : 1134,
+  "limitations" : "Small real photograph and conventional overlays only. No real AI-edit localization accuracy, authenticity verification, or ANE placement is established.",
+  "meanAbsoluteRGBA8Error" : 0.62410980017006801,
+  "modification" : "Three conventional translucent magenta rectangle overlays; no real AI edits are claimed",
+  "regions" : 6,
+  "unresolvedRegions" : 6,
+  "width" : 896
+}

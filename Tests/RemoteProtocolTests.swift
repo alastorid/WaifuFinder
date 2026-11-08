@@ -1849,3 +1849,100 @@ private struct CancellableRealPhotoBackend: TemporalVideoUpscaler {
         return UncoverResult(prepared:prepared,model:RealESRGANVariant.x4plus.modelName,seconds:0,outputScale:4)
     }
 }
+
+func registerArenaRemoteTests() {
+    let makeCatalog: @Sendable () -> RemoteModelCatalog = {
+        var service = StubCatalog.uncoverOnly()
+        let base = service.capabilities
+        service.capabilities = { version, name, session in
+            var value = await base(version, name, session)
+            value.arenaRevision = ArenaJudgeConfiguration.revision
+            return value
+        }
+        service.arena = { request in
+            try request.validate()
+            return ArenaJudgeResult(judgment: ArenaJudgment(watermark: .b, authenticity: .unknown,
+                detail: .a, quality: .tie, consistency: .unknown, recommended_source: .unknown,
+                uncertain: true, evidence: ["A contains an overlay"]), tokens: 42, prefillSeconds: 1,
+                decodeSeconds: 2, physicalFootprintBytes: 12345, compressedBytes: 50)
+        }
+        return service
+    }
+    Registry.shared.add(suite: "PhotoArena remote", TestCase(name: "structured evidence crosses authenticated encrypted loopback", knownBug: nil) {
+        try await Task { @MainActor in
+            let pair = try LoopbackPair(catalog: makeCatalog(), key: Array(repeating: 0x76, count: 32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("PhotoArena loopback did not authenticate") }
+            check(pair.client.offersArena, "matching runtime advertised")
+            let png = try remoteForensicPNG()
+            let result = try await pair.client.arena([png, png])
+            checkEqual(result.judgment.watermark, .b, "winner survives wire")
+            checkEqual(result.judgment.authenticity, .unknown, "abstention survives wire")
+            checkEqual(result.judgment.evidence, ["A contains an overlay"], "evidence survives wire")
+            checkEqual(result.physicalFootprintBytes, 12345, "memory evidence survives wire")
+        }.value
+    })
+    Registry.shared.add(suite: "PhotoArena remote", TestCase(name: "regional judging uses captured remote backend and caches native crop evidence", knownBug: nil) {
+        try await Task { @MainActor in
+            let pair = try LoopbackPair(catalog: makeCatalog(), key: Array(repeating: 0x78, count: 32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("PhotoArena loopback did not authenticate") }
+            let backend = ArenaInferenceBackend.preferred(clients: [pair.client])
+            check(backend.isRemote, "connected matching server preferred")
+            check(!ArenaInferenceBackend.preferred(clients: []).isRemote, "local route selected only without matching server")
+            let root = try Temporary.directory("arena-regional-remote")
+            let png = try remoteForensicPNG()
+            let sources = try ["a", "b"].map { id -> ArenaAnalyzedSource in
+                let url = root.appendingPathComponent(id + ".png")
+                try png.write(to: url)
+                return ArenaAnalyzedSource(id: id, url: url, width: 2, height: 2,
+                    transform: ArenaTransform(), alignmentConfidence: 1, accepted: true, issues: [])
+            }
+            let region = ArenaRegion(id: "r", rect: ArenaPixelRect(CGRect(x: 0, y: 0, width: 2, height: 2)),
+                measurements: sources.map { ArenaRegionMeasurement(sourceID: $0.id, difference: 0.1, sharpness: 0.1,
+                    clipping: 0, validFraction: 1, textCandidateFraction: 0, evidence: []) }, unresolved: true, evidence: [])
+            let analysis = ArenaAnalysis(referenceID: "a", width: 2, height: 2, sources: sources, regions: [region], warnings: [], elapsedSeconds: 0)
+            let judge = ArenaRegionalJudge(cacheDirectory: root.appendingPathComponent("cache"))
+            let records = try await judge.judge(analysis: analysis, maximumComparisons: 1, infer: backend.infer)
+            checkEqual(records.count, 1, "native crop dispatched through remote inference")
+            checkEqual(records.first?.result.judgment.evidence, ["A contains an overlay"], "remote evidence retained")
+            let cached = try await judge.judge(analysis: analysis, maximumComparisons: 1, infer: { _ in
+                throw ModelInstaller.fail("Cache miss must not invoke this backend")
+            })
+            checkEqual(cached.first?.cacheKey, records.first?.cacheKey, "remote results share validated crop cache")
+            var changed = analysis; changed.regions[0] = ArenaRegion(id: "different", rect: region.rect,
+                measurements: region.measurements, unresolved: true, evidence: [])
+            do {
+                _ = try await judge.judge(analysis: changed, maximumComparisons: 1, infer: { _ in throw RemoteError.modelUnavailable("offline") })
+                check(false, "selected backend failure must surface without local fallback")
+            } catch { }
+        }.value
+    })
+    Registry.shared.add(suite: "PhotoArena remote", TestCase(name: "cancel interrupts only the active judge request", knownBug: nil) {
+        try await Task { @MainActor in
+            let probe = CancellationProbe()
+            var service = makeCatalog()
+            let reply = service.arena
+            service.arena = { request in
+                probe.start()
+                do { try await Task.sleep(for: .seconds(30)) }
+                catch { probe.cancel(); throw error }
+                return try await reply(request)
+            }
+            let pair = try LoopbackPair(catalog: service, key: Array(repeating: 0x77, count: 32))
+            defer { pair.tearDown() }
+            guard await pair.connect() else { throw ModelInstaller.fail("PhotoArena loopback did not authenticate") }
+            let png = try remoteForensicPNG()
+            let work = Task { try await pair.client.arena([png, png]) }
+            let deadline = Date().addingTimeInterval(3)
+            while !probe.started, Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            check(probe.started, "server started request")
+            work.cancel()
+            if case .success = await work.result { check(false, "cancelled request returned success") }
+            let cancelDeadline = Date().addingTimeInterval(3)
+            while !probe.cancelled, Date() < cancelDeadline { try await Task.sleep(for: .milliseconds(10)) }
+            check(probe.cancelled, "cancellation reached server judge")
+            check(pair.client.status.isConnected, "connection remains available")
+        }.value
+    })
+}

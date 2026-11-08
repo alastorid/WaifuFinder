@@ -1,0 +1,159 @@
+{
+  "experiment": "native448-watermark-visibility",
+  "date": "2026-11-08T09:28:59.692Z",
+  "hypothesis": "Native-resolution 448px corresponding crops reduce overlay dilution relative to whole-image overviews; this experiment tests recognition, not authenticity.",
+  "fixture": {
+    "cropHeight": 448,
+    "cropWidth": 448,
+    "generation": "Apple CoreGraphics/CoreText; no resizing or generated detail",
+    "input": "nasa-collins-896x1134.jpg",
+    "knownCleanSource": "clean.png",
+    "knownContaminatedSource": "watermarked.png",
+    "originalHeight": 1134,
+    "originalWidth": 896,
+    "referenceRectBottomLeft": {
+      "height": 448,
+      "width": 448,
+      "x": 224,
+      "y": 343
+    },
+    "watermarkBandBottomLeft": {
+      "height": 104,
+      "width": 448,
+      "x": 0,
+      "y": 172
+    }
+  },
+  "inputSHA256": [
+    {
+      "source": "clean",
+      "sha256": "6a437c607fa107071af41ca266bf96f19fa2fc9c4342c908569c997eb3afe155"
+    },
+    {
+      "source": "watermarked",
+      "sha256": "f29c5bde7f04e238d8fd571b253577a455d6350593c7822d60b7317d43c283a4"
+    }
+  ],
+  "nativeSourceSHA256": "bc9bf4b1eea5c8a2c6f1829f5f2d4667d9b57113f247410f21742f0c102cfe7e",
+  "fixtureGeneratorSHA256": "96c12d4eedb297b8cce9fa5375ff859f5d58dbaa07c37ed75991f760a587cebf",
+  "checkpoint": "345adbfa02c4a4671e61b7c75502dc9bf24fa93d",
+  "runtime": "7071ba378afa96dcd69c41e1ec2b4912364dbee4",
+  "hardware": "Apple M3",
+  "operatingSystem": "27.2.0",
+  "execution": "native llama.cpp Metal/CPU",
+  "loadSeconds": 9.078710375,
+  "wallSeconds": 21.274130916999997,
+  "workerReuse": "one loaded worker for both orders; app currently reloads each order",
+  "status": "execution-passed",
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "parseError": null,
+  "observed": [
+    {
+      "order": [
+        "clean",
+        "watermarked"
+      ],
+      "expected": "A",
+      "watermarkWinner": "A",
+      "overallWinner": "A",
+      "watermarkCorrect": true
+    },
+    {
+      "order": [
+        "watermarked",
+        "clean"
+      ],
+      "expected": "B",
+      "watermarkWinner": "A",
+      "overallWinner": "B",
+      "watermarkCorrect": false
+    }
+  ],
+  "results": [
+    {
+      "order": [
+        "clean",
+        "watermarked"
+      ],
+      "expectedCleaner": "A",
+      "wallSeconds": 6.156375542,
+      "processSwapIns": null,
+      "sampleScope": "whole worker process end-of-request, not peak and not whole app",
+      "tokens": 113,
+      "judgment": {
+        "detail": "A",
+        "evidence": [
+          "NASA patch visible on jacket",
+          "Eileen Collins name patch",
+          "white background",
+          "flag partially visible",
+          "model rocket on right"
+        ],
+        "consistency": "A",
+        "watermark": "A",
+        "authenticity": "A",
+        "recommended_source": "A",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 1.567138542,
+      "compressedBytes": 75956224,
+      "physicalFootprintBytes": 1685671464,
+      "decodeSeconds": 4.522911958
+    },
+    {
+      "order": [
+        "watermarked",
+        "clean"
+      ],
+      "expectedCleaner": "B",
+      "wallSeconds": 5.944206667,
+      "processSwapIns": null,
+      "sampleScope": "whole worker process end-of-request, not peak and not whole app",
+      "tokens": 123,
+      "judgment": {
+        "detail": "B",
+        "evidence": [
+          "NASA patch present in B but not A",
+          "Eileen Dolling patch in B but not A",
+          "Watermark in A but not B",
+          "Model rocket in B but not A"
+        ],
+        "consistency": "B",
+        "watermark": "A",
+        "authenticity": "B",
+        "recommended_source": "B",
+        "quality": "A",
+        "uncertain": false
+      },
+      "prefillSeconds": 0.756936459,
+      "compressedBytes": 68435968,
+      "physicalFootprintBytes": 1686408744,
+      "decodeSeconds": 5.123156458
+    }
+  ],
+  "limitations": [
+    "Single controlled real-image crop pair; not a calibrated accuracy dataset.",
+    "Overlay style and size differ from the earlier whole-image test; no controlled causal speed/accuracy comparison is claimed.",
+    "Footprint and compression are whole-worker end samples, not peak whole-app measurements.",
+    "Process swap-ins are unavailable from this worker protocol.",
+    "No Core ML export, FP16 tensor parity or ANE operation placement is claimed.",
+    "Reversal agreement is not proof of original detail or authenticity."
+  ],
+  "anePlacement": "not measured; backend is Metal/CPU",
+  "fp16ReferenceParity": "not measured",
+  "qualityValidated": false,
+  "reconciled": {
+    "watermark": "unknown",
+    "authenticity": "A",
+    "detail": "A",
+    "quality": "unknown",
+    "consistency": "A",
+    "recommended_source": "A",
+    "uncertain": true
+  },
+  "conclusion": "Native crop did not resolve watermark category reversal bias in this controlled sample. Both overall preferences picked the clean source; watermark and technical quality categories must abstain after reversal."
+}

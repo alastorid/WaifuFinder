@@ -46,12 +46,15 @@ struct FrameGridView: View {
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
+    @State private var arenaWorkspace: ArenaWorkspace?
     @StateObject private var clipExport = ClipExportController()
     @State private var committedNavigation: FrameID?
     @State private var verticalScrollPosition = ScrollPosition()
     @State private var horizontalScrollPositions: [String: ScrollPosition] = [:]
     @State private var scrollVisibility = FrameGridScrollVisibility()
     @StateObject private var thumbnailPrefetcher = GridThumbnailPrefetcher()
+    @StateObject private var photoQualityLoader = GridPhotoQualityLoader()
+    @AppStorage("photosEffectiveDownloadFromICloud") private var cloudDownloads = false
     /// The rung a pinch started from, so cumulative magnification scales one base.
     @State private var pinchBaseWidth: CGFloat?
     @State private var deletionRevision = 0
@@ -72,6 +75,9 @@ struct FrameGridView: View {
             Group {
                 gridWithNavigation(size: geometry.size)
             }
+        }
+        .sheet(item: $arenaWorkspace) { workspace in
+            PhotoArenaView(workspace: workspace)
         }
         .alert("Clip Export Failed", isPresented: Binding(
             get: { clipExport.error != nil }, set: { if !$0 { clipExport.error = nil } }
@@ -194,9 +200,11 @@ struct FrameGridView: View {
             if let snapshot = thumbnailStage.current {
                 thumbnailPrefetcher.install(snapshot: snapshot, session: session)
             }
+            updatePhotoQuality()
         }
         .onDisappear {
             thumbnailStage.stop(); thumbnailPrefetcher.stop()
+            photoQualityLoader.stop()
             borderReleaseTask?.cancel()
             heldDeletionBorder = nil
             heldDeletionIDs.removeAll()
@@ -208,6 +216,7 @@ struct FrameGridView: View {
         }
         .onReceive(session.$selectedFrameIDs.removeDuplicates().receive(on: DispatchQueue.main)) { selected in
             prepareDeletionStage(size: size, selected: selected)
+            updatePhotoQuality(selected: selected)
         }
         .onChange(of: size) { _, _ in
             prepareStage(size: size)
@@ -241,14 +250,20 @@ struct FrameGridView: View {
         .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, rect in
             scrollVisibility.viewport = rect
             thumbnailStage.updateViewport(rect)
+            updatePhotoQuality()
         }
         .onChange(of: thumbnailStage.current?.key) { old, _ in
             if let snapshot = thumbnailStage.current {
                 thumbnailPrefetcher.install(snapshot: snapshot, session: session)
-                if old?.generation != snapshot.key.generation {
-                    verticalScrollPosition.scrollTo(y: 0)
+                let reset = old?.generation != snapshot.key.generation || old?.grouped != snapshot.key.grouped
+                if let offset = scrollVisibility.reconcile(snapshot: snapshot, viewportSize: size, reset: reset) {
+                    var transaction = Transaction(animation: nil)
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { verticalScrollPosition.scrollTo(y: offset) }
+                    thumbnailStage.updateViewport(scrollVisibility.viewport)
                 }
             }
+            updatePhotoQuality()
             if let id = session.gridNavigationFrameID, isNavigationTarget(id) {
                 committedNavigation = id
                 scroll(to: id)
@@ -265,7 +280,10 @@ struct FrameGridView: View {
             committedNavigation = id
             scroll(to: id)
         }
+        .onChange(of: cloudDownloads) { _, _ in updatePhotoQuality() }
+        .onChange(of: session.previewFrame?.id) { _, _ in updatePhotoQuality() }
         .onChange(of: session.focusedFrameID) { _, id in
+            updatePhotoQuality()
             // A focus publication can redraw the grid before a queued
             // scroll event arrives. Reconcile the committed selection too.
             guard let id, isNavigationTarget(id) else { return }
@@ -354,6 +372,7 @@ struct FrameGridView: View {
                     scrollVisibility.horizontalViewports[row.id] = rect
                     thumbnailStage.updateHorizontalOffset(row: row.id, offset: rect.minX)
                     thumbnailPrefetcher.setHorizontalOffset(row: row.id, offset: rect.minX)
+                    updatePhotoQuality()
                 }
                 .onAppear {
                     scrollHorizontally(to: committedNavigation, in: row)
@@ -392,6 +411,19 @@ struct FrameGridView: View {
                 return await GridThumbnailLoader.shared.image(data: data, identity: generation.uuidString + ":" + frame.thumbnailKey)
             }
         }
+    }
+
+    private func updatePhotoQuality(selected: Set<FrameID>? = nil) {
+        guard cloudDownloads, let snapshot = thumbnailStage.current,
+              snapshot.key.generation == session.thumbnailGeneration else {
+            photoQualityLoader.stop()
+            return
+        }
+        photoQualityLoader.update(snapshot: snapshot, viewport: scrollVisibility.viewport,
+                                  horizontalOffsets: scrollVisibility.horizontalViewports.mapValues(\.minX),
+                                  focused: session.previewFrame?.id ?? session.focusedFrameID,
+                                  selected: selected ?? session.selectedFrameIDs,
+                                  preloading: session.previewFrame == nil)
     }
 
     private func prepareDeletionStage(size: CGSize, selected: Set<FrameID>) {
@@ -557,6 +589,18 @@ struct FrameGridView: View {
             PhotosMedia.shared.photoItemURL(for: $0.url, seconds: frame.timeSeconds)
         }
 
+        if let video = session.video, isSelected, session.selectedFrameIDs.count >= 2 {
+            Button("Compare Selected in PhotoArena") {
+                let sources = session.frames.filter { session.selectedFrameIDs.contains($0.id) }.map {
+                    let photo = PhotosMedia.shared.photoItemURL(for: video.url, seconds: $0.timeSeconds)
+                    return ArenaSource(id: String(describing: $0.id), url: photo ?? video.url,
+                                       seconds: photo == nil ? $0.timeSeconds : 0)
+                }
+                if sources.count >= 2 { arenaWorkspace = ArenaWorkspace(sources: sources) }
+            }
+            Divider()
+        }
+
         if let photoURL {
             Button("Open in Photos.app") { PhotosAppIntegration.reveal(photoURL) }
             Divider()
@@ -649,7 +693,6 @@ private struct FrameCell: View {
     @StateObject private var thumbnail: GridThumbnailPresentation
     @State private var isSelected: Bool
     @State private var isQueuedForDeletion: Bool
-    @AppStorage("photosEffectiveDownloadFromICloud") private var cloudDownloads = false
     @State private var isThumbnailVisible = false
     @State private var isHovered = false
     @State private var showsFrameNumber = false
@@ -760,20 +803,6 @@ private struct FrameCell: View {
                     return await GridThumbnailLoader.shared.image(data: data, identity: thumbnailIdentity)
                 }
             }
-        }
-        .task(id: "\(thumbnailIdentity)|\(isThumbnailVisible)|\(cloudDownloads)|\(session.previewFrame != nil)|\(session.photosLocalPassRunning)") {
-            guard isThumbnailVisible, cloudDownloads, isPhotosSource,
-                  session.previewFrame == nil, !session.photosLocalPassRunning, let sourceURL else { return }
-            let identity = thumbnailIdentity
-            let (photoURL, _) = PhotosMedia.shared.resolve(sourceURL, seconds: frame.timeSeconds)
-            do {
-                for try await pixels in PhotosMedia.shared.renditionPreviews(
-                    photoURL, allowNetwork: true, priority: .thumbnail
-                ) {
-                    guard !Task.isCancelled, session.thumbnailGeneration == generation else { return }
-                    GridThumbnailLoader.shared.upgrade(pixels, identity: identity)
-                }
-            } catch { /* Keep the cached thumbnail when an upgrade is unavailable. */ }
         }
         .onDisappear { thumbnail.disappear(identity: thumbnailIdentity) }
 

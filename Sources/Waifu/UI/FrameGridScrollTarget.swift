@@ -17,6 +17,20 @@ final class FrameGridScrollVisibility {
     var viewport = CGRect.zero
     var horizontalViewports: [String: CGRect] = [:]
 
+    /// Reconcile the viewport when an asynchronous layout replaces a longer
+    /// list or changes from group strips to a flat visual route. Return an
+    /// explicit ScrollPosition request; native lazy-layout clamping is not a
+    /// substitute for moving the actual viewport to the prepared rows.
+    func reconcile(snapshot: GridStageSnapshot, viewportSize: CGSize, reset: Bool) -> CGFloat? {
+        let previous = viewport
+        var proposed = previous
+        if proposed.height <= 0 { proposed.size = viewportSize }
+        if reset { proposed.origin.y = 0 }
+        let corrected = snapshot.clampedViewport(proposed)
+        viewport = corrected
+        return reset || abs(previous.minY - corrected.minY) > 0.5 ? corrected.minY : nil
+    }
+
     nonisolated static func needsReveal(lower: CGFloat, upper: CGFloat,
                             visibleLower: CGFloat, visibleUpper: CGFloat,
                             margin: CGFloat = 0) -> Bool {

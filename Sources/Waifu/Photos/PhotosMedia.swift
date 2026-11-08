@@ -74,7 +74,7 @@ final class PhotosMedia: @unchecked Sendable {
     // Encoded originals support re-decoding after the bounded pixel cache evicts an image.
     private let previewOriginals: NSCache<NSString, OriginalBox> = {
         let cache = NSCache<NSString, OriginalBox>()
-        cache.countLimit = 9
+        cache.countLimit = 512
         cache.totalCostLimit = 256 * 1024 * 1024
         return cache
     }()
@@ -646,23 +646,6 @@ final class PhotosMedia: @unchecked Sendable {
         }
     }
 
-    /// Show degraded cached pixels immediately, then replace them with the exact
-    /// requested rendition. Tiny previews never satisfy the completed cache key.
-    func renditionPreviews(_ url: URL, maxPixelSize: Int = analysisPixelSize,
-                           allowNetwork: Bool, priority: PhotosCloudQueue.Priority = .background) -> AsyncThrowingStream<CGImage, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    let final = try await rendition(url, maxPixelSize: maxPixelSize, allowNetwork: allowNetwork,
-                                                    priority: priority, onPreview: { continuation.yield($0) })
-                    continuation.yield(final)
-                    continuation.finish()
-                } catch { continuation.finish(throwing: error) }
-            }
-            continuation.onTermination = { _ in task.cancel() }
-        }
-    }
-
     /// Analysis requests 512px; tagging requests its own model-sized rendition.
     /// Prefer the final requested pixels, with a smaller cached thumbnail as a
     /// fallback if Photos cannot supply a larger local rendition.
@@ -823,25 +806,51 @@ final class PhotosMedia: @unchecked Sendable {
 
     /// Reads a Photos still directly into memory and detects animated formats for
     /// preview playback. Ordinary analysis continues to use small PhotoKit renditions.
-    private func originalPreviewData(_ url: URL, priority: PhotosCloudQueue.Priority, localOnly: Bool = false) async throws -> (Data, CGImagePropertyOrientation) {
+    private func originalPreviewData(_ url: URL, priority: PhotosCloudQueue.Priority, localOnly: Bool = false,
+                                     ticket: PhotosCloudQueue.PriorityTicket? = nil) async throws -> (Data, CGImagePropertyOrientation) {
         try Task.checkCancellation()
         guard let item = item(url), item.isStill, let identity = item.assetCacheKey else {
             throw Self.failure("This photo is no longer available in Photos.")
         }
-        let key = "\(identity.identifier)|\(identity.modifiedMilliseconds)|\(identity.pixelWidth)x\(identity.pixelHeight)" as NSString
-        if let cached = previewOriginals.object(forKey: key) { return (cached.data, cached.orientation) }
-        let result: (Data, CGImagePropertyOrientation)
+        let key = "\(identity.identifier)|\(identity.modifiedMilliseconds)|\(identity.pixelWidth)x\(identity.pixelHeight)"
+        if let cached = previewOriginals.object(forKey: key as NSString) { return (cached.data, cached.orientation) }
         if Self.downloadFromICloud && !localOnly {
-            result = try await PhotosCloudQueue.shared.perform(priority: priority) {
-                try Task.checkCancellation()
-                return try await self.requestOriginalData(item, allowNetwork: Self.downloadFromICloud)
+            return try await PhotosCloudQueue.shared.perform(priority: priority, ticket: ticket) {
+                // The grid or preview may have fetched this while we waited.
+                try await self.loadOriginalData(item, key: key, allowNetwork: Self.downloadFromICloud)
             }
-        } else {
-            result = try await requestOriginalData(item, allowNetwork: false)
         }
+        return try await loadOriginalData(item, key: key, allowNetwork: false)
+    }
+
+    private func loadOriginalData(_ item: Item, key: String, allowNetwork: Bool) async throws -> (Data, CGImagePropertyOrientation) {
         try Task.checkCancellation()
-        previewOriginals.setObject(OriginalBox(data: result.0, orientation: result.1), forKey: key, cost: result.0.count)
+        if let cached = previewOriginals.object(forKey: key as NSString) { return (cached.data, cached.orientation) }
+        let result = try await requestOriginalData(item, allowNetwork: allowNetwork)
+        try Task.checkCancellation()
+        previewOriginals.setObject(OriginalBox(data: result.0, orientation: result.1),
+                                   forKey: key as NSString, cost: result.0.count)
         return result
+    }
+
+    /// The grid warms the same encoded original the preview opens. Decode only
+    /// display-sized pixels here, including the first frame of animated photos.
+    func originalThumbnail(_ url: URL, ticket: PhotosCloudQueue.PriorityTicket) async throws -> CGImage {
+        if let cached = cachedPreview(url), cached.isOriginal { return cached.image }
+        let (data, orientation) = try await originalPreviewData(url, priority: .preload, ticket: ticket)
+        try Task.checkCancellation()
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let pixels = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: Self.analysisPixelSize,
+                kCGImageSourceShouldCacheImmediately: true
+              ] as CFDictionary) else { throw Self.failure("Photos returned an unreadable image.") }
+        if orientation == .up { return pixels }
+        let oriented = CIImage(cgImage: pixels).oriented(orientation)
+        guard let image = Self.originalImageContext.value.createCGImage(oriented, from: oriented.extent) else {
+            throw Self.failure("Photos returned an unreadable image.")
+        }
+        return image
     }
 
     private func requestOriginalData(_ item: Item, allowNetwork: Bool) async throws -> (Data, CGImagePropertyOrientation) {
@@ -854,6 +863,8 @@ final class PhotosMedia: @unchecked Sendable {
             timeoutError: allowNetwork ? Self.failure("Photos did not return this image. Try again.") : Self.localUnavailable())
         let result = try await request.perform { completion in
             PHImageManager.default().requestImageDataAndOrientation(for: item.asset, options: options) { data, _, orientation, info in
+                if (info?[PHImageCancelledKey] as? Bool) == true { completion(.failure(CancellationError())); return }
+                if (info?[PHImageResultIsDegradedKey] as? Bool) == true { return }
                 guard let data else {
                     completion(.failure(!allowNetwork ? Self.localUnavailable() : (info?[PHImageErrorKey] as? Error ?? Self.failure("Photos could not read this image."))))
                     return

@@ -202,6 +202,7 @@ final class RemoteServer: ObservableObject {
         var flags: RemoteBeacon.BeaconFlags = [.accepting]
         if client != nil { flags.insert(.clientConnected) }
         if capabilities.offersRemoteTagging { flags.insert(.taggerReady) }
+        if capabilities.arenaRevision == ArenaJudgeConfiguration.revision { flags.insert(.arenaReady) }
         if capabilities.offersSafire { flags.insert(.safireReady) }
         if capabilities.offersTruFor { flags.insert(.truforReady) }
         for algorithm in UncoverAlgorithm.allCases where capabilities.offersRemote(algorithm) {

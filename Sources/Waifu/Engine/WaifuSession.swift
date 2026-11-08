@@ -1531,14 +1531,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             && !isRegrouping && !taggingProgress.isRunning && !restoringTagMemory
     }
 
-    /// Scores only the not-yet-analyzed frames within three seconds on either
-    /// side of the chosen thumbnail, then adds them to the existing result set.
+    /// Scores missing frames in the union of the selected thumbnails' ±3-second windows.
     func analyzeFocusedRange(around frame: AnalyzedFrame) {
-        guard canAnalyzeFocusedRange, let video,
-              frame.timeSeconds.isFinite, video.durationSeconds.isFinite else { return }
-        let lower = max(0, frame.timeSeconds - 3)
-        let upper = min(video.durationSeconds, frame.timeSeconds + 3)
-        guard lower <= upper else { return }
+        guard canAnalyzeFocusedRange, let video else { return }
+        let targets = FocusedAnalysisRanges.targets(clicked: frame, selected: selectedFrameIDs, frames: frames)
+        let timeRanges = FocusedAnalysisRanges.make(times: targets.map(\.timeSeconds), duration: video.durationSeconds)
+        guard !timeRanges.isEmpty else { return }
 
         analysisTask?.cancel()
         analysisGeneration = UUID()
@@ -1546,17 +1544,17 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let config = settings.validated()
         let existingFrames = frames
         let existingGroups = groups
-        let expected = max(1, Int(ceil((upper - lower) * max(1, video.frameRate))))
+        let expected = max(1, Int(ceil(timeRanges.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
+                                      * max(1, video.frameRate))))
         let presentInRange = existingFrames.reduce(into: 0) { count, existing in
-            if (lower...upper).contains(existing.timeSeconds) { count += 1 }
+            if timeRanges.contains(where: { $0.contains(existing.timeSeconds) }) { count += 1 }
         }
         progress = AnalysisProgress(phase: .sampling, processed: 0,
                                     total: max(1, expected - presentInRange), elapsed: 0,
-                                    message: "Finding missing frames in the ±3-second range…")
+                                    message: "Finding missing frames in the ±3-second ranges…")
         errorMessage = nil
-        let timeRange = lower...upper
         analysisTask = Task.detached { [weak self] in
-            await self?.runFocusedRangePipeline(video: video, settings: config, timeRange: timeRange,
+            await self?.runFocusedRangePipeline(video: video, settings: config, timeRanges: timeRanges,
                                                 existingFrames: existingFrames, existingGroups: existingGroups,
                                                 token: token)
         }
@@ -2358,25 +2356,22 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// existing analysis. The sampler excludes already analyzed decoded indices
     /// before it rasterizes or sends a frame to Vision.
     private nonisolated func runFocusedRangePipeline(video: VideoInfo, settings: WaifuSettings,
-                                                    timeRange: ClosedRange<Double>,
+                                                    timeRanges: [ClosedRange<Double>],
                                                     existingFrames: [AnalyzedFrame],
                                                     existingGroups: [FrameGroup], token: UUID) async {
         let started = Date()
-        let rangeSeconds = max(0, timeRange.upperBound - timeRange.lowerBound)
+        let rangeSeconds = timeRanges.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
         let expected = max(1, Int(ceil(rangeSeconds * max(1, video.frameRate)))
-                           - existingFrames.filter { timeRange.contains($0.timeSeconds) }.count)
+                           - existingFrames.filter { frame in
+                               timeRanges.contains { $0.contains(frame.timeSeconds) }
+                           }.count)
         var progress = AnalysisProgress(phase: .scoring, total: expected,
-                                       message: "Analyzing missing frames in the ±3-second range…")
+                                       message: "Analyzing missing frames in the ±3-second ranges…")
         var scoringTask: Task<Void, Never>?
         do {
             await acceptProgress(progress, token: token)
             try Task.checkCancellation()
-            let excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
-            let sampleIndexMaps = try await focusedRangeSampleIndexMaps(video: video, timeRange: timeRange,
-                                                                         existingFrames: existingFrames)
-            let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
-                mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
-                sampleIndexMaps: sampleIndexMaps, onProgress: { _ in })
+            var excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                 videoStem: video.url.deletingPathExtension().lastPathComponent)
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(
@@ -2385,22 +2380,31 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 workerCount: FrameProcessingConcurrency(width: video.width, height: video.height,
                                                         analysisWidth: settings.analysisWidth).scoringWorkers,
                 cacheSuffix: "-\(token.uuidString)")
-            let scoring = pipeline.start(frames: sampled,
-                minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in })
-            scoringTask = scoring.task
             var additions: [AnalyzedFrame] = []
             var lastPulse = started
-            for try await frame in scoring.frames {
+            for timeRange in timeRanges {
                 try Task.checkCancellation()
-                additions.append(frame)
-                progress.processed += 1
-                progress.facesProcessed += frame.faceCount
-                if frame.hasSignificantFace { progress.framesWithFaces += 1 }
-                let now = Date()
-                if now.timeIntervalSince(lastPulse) >= 0.25 {
-                    progress.elapsed = now.timeIntervalSince(started)
-                    await acceptProgress(progress, token: token)
-                    lastPulse = now
+                let sampleIndexMaps = try await focusedRangeSampleIndexMaps(video: video, timeRange: timeRange,
+                                                                             existingFrames: existingFrames)
+                let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
+                    mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
+                    sampleIndexMaps: sampleIndexMaps, onProgress: { _ in })
+                let scoring = pipeline.start(frames: sampled,
+                    minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in })
+                scoringTask = scoring.task
+                for try await frame in scoring.frames {
+                    try Task.checkCancellation()
+                    additions.append(frame)
+                    excludedIndices.insert(frame.id.sampleIndex)
+                    progress.processed += 1
+                    progress.facesProcessed += frame.faceCount
+                    if frame.hasSignificantFace { progress.framesWithFaces += 1 }
+                    let now = Date()
+                    if now.timeIntervalSince(lastPulse) >= 0.25 {
+                        progress.elapsed = now.timeIntervalSince(started)
+                        await acceptProgress(progress, token: token)
+                        lastPulse = now
+                    }
                 }
             }
             try Task.checkCancellation()
@@ -2411,7 +2415,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 progress.elapsed = Date().timeIntervalSince(started)
                 progress.groupedFrames = existingFrames.count
                 progress.groupsIdentified = existingGroups.count
-                progress.message = "Complete · no missing frames in this range"
+                progress.message = "Complete · no missing frames in these ranges"
                 await completeFocusedRangeAnalysis(frames: existingFrames, groups: existingGroups,
                                                    progress: progress, token: token)
                 return

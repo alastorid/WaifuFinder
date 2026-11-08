@@ -33,6 +33,7 @@ struct RemoteBeacon: Equatable, Sendable {
         static let taggerReady = BeaconFlags(rawValue: 1 << 2)
         // Bits 3...7 are reserved for reconstruction algorithms.
         static let safireReady = BeaconFlags(rawValue: 1 << 8)
+        static let arenaReady = BeaconFlags(rawValue: 1 << 10)
         static let truforReady = BeaconFlags(rawValue: 1 << 9)
     }
 
@@ -116,6 +117,7 @@ struct DiscoveredServer: Identifiable, Equatable, Sendable {
     var availableAlgorithms: Set<String>
     var busy: Bool
     var lastSeen: Date
+    var offersArena: Bool = false
 
     func keyState(storedKeyID: Data?) -> RemoteKeyState {
         guard let storedKeyID else { return .none }
@@ -141,7 +143,7 @@ actor RemoteBeaconCache {
             offersSafire: beacon.flags.contains(.safireReady),
             offersTruFor: beacon.flags.contains(.truforReady), offersTagging: beacon.flags.contains(.taggerReady),
             availableAlgorithms: Set(UncoverAlgorithm.allCases.filter { beacon.offers($0) }.map(\.rawValue)),
-            busy: beacon.flags.contains(.clientConnected), lastSeen: now)
+            busy: beacon.flags.contains(.clientConnected), lastSeen: now, offersArena: beacon.flags.contains(.arenaReady))
     }
 
     /// Returns the live servers, dropping any that have missed three beats so a

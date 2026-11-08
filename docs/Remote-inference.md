@@ -262,3 +262,29 @@ photo timeout cancels that stream. Ordinary video reconstruction retains its
 existing cancellation and timeout policy. Stale preview generations cannot commit
 late results. Prepared upload/result PNGs are temporary and removed after the job;
 completed preview images are cached in RAM with a 128 MiB bound.
+
+## PhotoArena
+
+PhotoArena can use a connected server advertising the exact native MiniCPM runtime
+revision. Install its model on the server in Settings → Models. Ask MiniCPM captures
+that server and sends two bounded overview images through the existing encrypted
+connection. The server performs both image orders using the native Metal/CPU model;
+disagreements abstain. There is no silent local fallback after a remote failure.
+PhotoArena cancellation stops its request and worker while retaining the connection.
+See `PhotoArena.md` for model quality limitations and native benchmark evidence.
+
+### PhotoArena regional judging
+
+The dedicated PhotoArena workspace and the original overview Arena both capture
+one compatible remote-first inference route per action. Native corresponding region
+crops use the existing authenticated encrypted PhotoArena transport, preserving
+cancellation, server resource accounting and structured judgments. The client does
+not need local PhotoArena weights when a compatible server is connected. A failed
+remote action reports its error rather than changing machines. Scalar region caches
+remain keyed by actual crop pixels, reference geometry and pinned runtime revision.
+
+Install PhotoArena on the inference server through Settings → Models → PhotoArena
+MiniCPM-V 4.7 → Download. The same manager also supports local inference setup. It
+fetches the pinned Hugging Face release, verifies every checksum, validates native
+model loading and activates the folder only after success. Successful setup through
+the model manager pushes refreshed server capabilities to connected clients.

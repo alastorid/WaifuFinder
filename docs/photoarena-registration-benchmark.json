@@ -1,0 +1,91 @@
+{
+  "cases" : [
+    {
+      "accepted" : true,
+      "analysisSeconds" : 0.26889097690582275,
+      "case" : "rotation-2-degrees",
+      "correlation" : 0.99948830638453179,
+      "issues" : [
+        "Global alignment only; local distortions remain unverified."
+      ],
+      "meanTileCoverage" : 0.97707080879226693,
+      "transform" : {
+        "a" : 0.99869239027982504,
+        "b" : -0.034913982373752241,
+        "c" : 0.034437462538861277,
+        "d" : 0.9988292463206162,
+        "perspectiveX" : -2.921871299231416e-07,
+        "perspectiveY" : -3.6970639763714665e-07,
+        "tx" : -19.171945524503606,
+        "ty" : 15.939695610001396
+      }
+    },
+    {
+      "accepted" : true,
+      "analysisSeconds" : 0.15021097660064697,
+      "case" : "crop-inset",
+      "correlation" : 0.99998891834462367,
+      "issues" : [
+        "Global alignment only; local distortions remain unverified."
+      ],
+      "meanTileCoverage" : 0.67184627757352944,
+      "transform" : {
+        "a" : 1,
+        "b" : 0,
+        "c" : 0,
+        "d" : 1,
+        "perspectiveX" : 0,
+        "perspectiveY" : 0,
+        "tx" : 70,
+        "ty" : 95
+      }
+    },
+    {
+      "accepted" : true,
+      "analysisSeconds" : 0.26580905914306641,
+      "case" : "crop-off-center",
+      "correlation" : 0.99970683412758388,
+      "issues" : [
+        "Global alignment only; local distortions remain unverified."
+      ],
+      "meanTileCoverage" : 0.68846615794755406,
+      "transform" : {
+        "a" : 1.0009517296877031,
+        "b" : 0.00010988682232373185,
+        "c" : 0.00011928243367208398,
+        "d" : 1.0009606726143352,
+        "perspectiveX" : 9.1249132975235355e-07,
+        "perspectiveY" : 2.7942073050629764e-07,
+        "tx" : 34.705071039699902,
+        "ty" : 126.90554447442008
+      }
+    },
+    {
+      "accepted" : true,
+      "analysisSeconds" : 0.26185703277587891,
+      "case" : "mild-perspective",
+      "correlation" : 0.99946277221902502,
+      "issues" : [
+        "Global alignment only; local distortions remain unverified.",
+        "Lower-resolution source requires conventional geometric resampling; no additional detail is recovered."
+      ],
+      "meanTileCoverage" : 0.9959659156631403,
+      "transform" : {
+        "a" : 1.0391255852918302,
+        "b" : 0.009917772197630889,
+        "c" : 0.011397884775929212,
+        "d" : 1.0230115824990496,
+        "perspectiveX" : 1.8278718277909048e-05,
+        "perspectiveY" : 3.3680473276905466e-06,
+        "tx" : -12.460833933789152,
+        "ty" : -8.7204371837098584
+      }
+    }
+  ],
+  "fixture" : "nasa-collins-896x1134.jpg",
+  "generator" : "Apple Core Image; no learned modification",
+  "limitations" : [
+    "Single real photograph; global correlation is not proof of local pixel alignment or robustness across scenes.",
+    "Perspective mapping is estimated; no feature-level ground-truth reprojection score is claimed."
+  ]
+}

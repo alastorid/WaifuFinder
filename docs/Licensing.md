@@ -189,3 +189,17 @@ weights are not relicensed as MIT; independently authored WaifuFinder source rem
 MIT. TruFor is offered only in the non-commercial build and is otherwise excluded the
 same way PGTFormer is. See [TruFor for Photos](TruFor.md), `Runtime/TRUFOR-LICENSE.txt`
 and `Runtime/TRUFOR-CMX-LICENSE.txt`.
+
+## PhotoArena MiniCPM runtime
+
+PhotoArena redistributes OpenBMB's official MiniCPM-V 4.7 1B F16 GGUF language
+weights and 16x-compression vision projector under the upstream Apache-2.0 model
+license, pinned to revision `345adbfa02c4a4671e61b7c75502dc9bf24fa93d`. The package
+retains attribution, LICENSE, checksums and validation limitations. The native
+llama.cpp/ggml runtime is MIT at revision
+`7071ba378afa96dcd69c41e1ec2b4912364dbee4`. The complete linked dependency notices
+are in `Runtime/PhotoArena/THIRD-PARTY-NOTICES.txt` and the app's Runtime resources.
+The build uses CMake (BSD-3-Clause), Ninja (Apache-2.0) and Apple Clang/SDK.
+The native target disables video support, subprocess helpers, OpenSSL and server/UI
+components; its dynamic dependencies are Apple system libraries. No additional
+Python packages are installed for model preparation, release or inference.
