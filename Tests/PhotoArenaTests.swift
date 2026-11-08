@@ -73,4 +73,61 @@ func registerPhotoArenaTests() {
         }
     })
 
+    Registry.shared.add(suite: "PhotoArena", TestCase(name: "buffered worker framing preserves coalesced replies and refuses truncation", knownBug: nil) {
+        let pipe = Pipe()
+        try pipe.fileHandleForWriting.write(contentsOf: Data("ready\nfirst\nsecond\n".utf8))
+        try pipe.fileHandleForWriting.close()
+        let reader = ArenaPipeReader(pipe.fileHandleForReading)
+        checkEqual(try reader.line(), Data("ready".utf8), "ready frame")
+        checkEqual(try reader.line(), Data("first".utf8), "first coalesced frame")
+        checkEqual(try reader.line(), Data("second".utf8), "second coalesced frame")
+        do { _ = try reader.line(); check(false, "EOF rejected") } catch { }
+        let truncated = Pipe()
+        try truncated.fileHandleForWriting.write(contentsOf: Data("unfinished".utf8))
+        try truncated.fileHandleForWriting.close()
+        do { _ = try ArenaPipeReader(truncated.fileHandleForReading).line(); check(false, "partial frame rejected") } catch { }
+    })
+    Registry.shared.add(suite: "PhotoArena", TestCase(name: "one action reuses one worker for paired and legacy replies", knownBug: nil) {
+        let root = try Temporary.directory("arena-pair-protocol")
+        let a = Data([1, 2, 3]), b = Data([4, 5])
+        for paired in [false, true] {
+            let directory = root.appendingPathComponent(paired ? "paired" : "legacy")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let worker = directory.appendingPathComponent("worker.sh")
+            let first = ArenaJudgeResult(judgment: ArenaJudgment(watermark: .a, authenticity: .unknown, detail: .a,
+                quality: .tie, consistency: .unknown, recommended_source: .a, uncertain: true, evidence: ["forward"]),
+                tokens: 3, prefillSeconds: 0, decodeSeconds: 0, physicalFootprintBytes: 0, compressedBytes: 0)
+            let reverse = ArenaJudgeResult(judgment: ArenaJudgment(watermark: .b, authenticity: .unknown, detail: .b,
+                quality: .tie, consistency: .unknown, recommended_source: .b, uncertain: true, evidence: ["reverse"]),
+                tokens: 4, prefillSeconds: 0, decodeSeconds: 0, physicalFootprintBytes: 0, compressedBytes: 0)
+            let encoded = try [first, reverse].map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+            let header = paired ? "{\"ready\":true,\"pairedComparison\":true}" : "{\"ready\":true}"
+            let read = "IFS= read -r request\nprintf '%s\\n' \"$request\" >> \"${1%/*}/requests.jsonl\"\n"
+            let script = "#!/bin/sh\nprintf '%s\\n' '" + header + "'\n" + read +
+                "printf '%s\\n' '" + encoded[0] + "'\n" + (paired ? "" : read) +
+                "printf '%s\\n' '" + encoded[1] + "'\n"
+            try script.write(to: worker, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: worker.path)
+            let result = try await ArenaJudge.compare(images: [a, b], directory: directory, executable: worker)
+            checkEqual(result.tokens, 7, "both outputs preserved")
+            checkEqual(result.judgment.watermark, .a, "reverse order reconciled")
+            let lines = try String(contentsOf: directory.appendingPathComponent("requests.jsonl"), encoding: .utf8).split(separator: "\n")
+            checkEqual(lines.count, paired ? 1 : 2, "paired images uploaded once; legacy requests share one worker")
+            let values = try lines.map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+            checkEqual(values[0]["images"] as? [String], [a.base64EncodedString(), b.base64EncodedString()], "streamed payload decodes exactly")
+            if paired { checkEqual(values[0]["compareBoth"] as? Bool, true, "native paired flag") }
+            else { checkEqual(values[1]["images"] as? [String], [b.base64EncodedString(), a.base64EncodedString()], "legacy reverse payload") }
+        }
+    })
+    Registry.shared.add(suite: "PhotoArena", TestCase(name: "cancelling a paired local action reaps its worker", knownBug: nil) {
+        let root = try Temporary.directory("arena-pair-cancel")
+        let worker = root.appendingPathComponent("worker.sh")
+        try "#!/bin/sh\nprintf '%s\\n' '{\"ready\":true,\"pairedComparison\":true}'\nwhile IFS= read -r request; do :; done\n".write(to: worker, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: worker.path)
+        let task = Task { try await ArenaJudge.compare(images: [Data([1]), Data([2])], directory: root, executable: worker) }
+        try await Task.sleep(for: .milliseconds(80))
+        task.cancel()
+        do { _ = try await task.value; check(false, "cancelled action returned a result") } catch { }
+    })
+
 }

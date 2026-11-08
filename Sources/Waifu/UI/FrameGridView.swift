@@ -617,7 +617,7 @@ struct FrameGridView: View {
         }
 
         if session.photosAlbumURL == nil, let video = session.video {
-            Button("Export +-3 seconds clips") {
+            Button("Export ±3 seconds clips") {
                 let targets = FocusedAnalysisRanges.targets(clicked: frame,
                     selected: session.selectedFrameIDs, frames: session.frames)
                 clipExport.begin(video: video, frames: targets)

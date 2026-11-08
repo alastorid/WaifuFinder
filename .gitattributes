@@ -1,2 +1,5 @@
 # Unified diffs intentionally contain blank context lines prefixed with spaces.
 docs/development-archive/**/adapter-snapshot.patch -whitespace
+
+# Blank context lines in unified patches contain a required space prefix.
+Runtime/PhotoArena/patches/*.patch whitespace=-blank-at-eol

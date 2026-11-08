@@ -30,13 +30,14 @@ This is **Metal/CPU**, not an ANE/Core ML backend. No Core ML conversion, ANE
 placement measurement or FP16-reference tensor parity is claimed. F16 describes
 the upstream GGUF weights, not a guarantee that every intermediate is FP16.
 
-The app sends bounded 1600px overviews through anonymous pipes and requests both
-A/B orders. Each request owns a child process; model loading repeats for the
-reverse pass. The native worker itself supports repeated requests, but the app
-currently prioritizes cancellation isolation over keeping a model resident.
-Local model requests are serialized on a dedicated background queue, have a
-300-second watchdog per pass and terminate their own worker on cancellation.
-Requests do not write image or activation scratch files.
+The overview interface sends bounded 1600px images; the regional interface sends
+native crops. Inputs travel through anonymous pipes and both A/B orders are judged.
+One child process owns the complete pair, reusing model/context and bounded image
+computations between orders. All recurrent/KV state is cleared for each order.
+The process exits after the action; no model remains resident between actions.
+Local requests are serialized, retain a 300-second watchdog per pass and terminate
+only their own worker on cancellation. No image or activation scratch is written.
+See [runtime optimization and measured limits](PhotoArena-optimization.md).
 
 ## Reliability limits and measured evidence
 

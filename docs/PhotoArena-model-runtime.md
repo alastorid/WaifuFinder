@@ -28,7 +28,7 @@ A defensible future conversion must separately export the image encoder, merge/p
 
 ## Remaining limitations
 
-The crop center policy is budgeted inspection, not complete AI coverage. The scheduler is a sparse heuristic rather than a calibrated information-gain policy. The current model still reloads per order; persistent worker reuse and embedding reuse remain future optimizations. Reversal consistency is not accuracy. No validated dataset of real AI retouching, object replacement or AI upscaling is introduced by these tests. Unknown provenance is retained as unknown. This runtime cannot certify that a reconstruction is AI-edit-free or that text detected by OCR is a watermark.
+The crop center policy is budgeted inspection, not complete AI coverage. The scheduler is a sparse heuristic rather than a calibrated information-gain policy. Model/context reuse and bounded embedding reuse now apply within one forward/reverse action; workers are released between actions. See PhotoArena-optimization.md for the single before/after session and its warm-latency limitation. Reversal consistency is not accuracy. No validated dataset of real AI retouching, object replacement or AI upscaling is introduced by these tests. Unknown provenance is retained as unknown. This runtime cannot certify that a reconstruction is AI-edit-free or that text detected by OCR is a watermark.
 
 ## Remote regional inference and Hugging Face setup
 

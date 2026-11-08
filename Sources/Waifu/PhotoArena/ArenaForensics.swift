@@ -8,7 +8,14 @@ import simd
 /// Deterministic pixel evidence. It deliberately does not classify AI edits from appearance.
 enum ArenaForensics {
     private static let color = CGColorSpace(name: CGColorSpace.sRGB)!
-    private static let context = CIContext(options: [.cacheIntermediates: false])
+    // Apple documents CIContext as immutable and safe to share across threads.
+    // Older SDKs omit its Sendable annotation; keep that compatibility assertion
+    // narrowly scoped instead of disabling checking for the CoreImage module.
+    private final class SharedContext: @unchecked Sendable {
+        let value = CIContext(options: [.cacheIntermediates: false])
+    }
+    private static let sharedContext = SharedContext()
+    private static var context: CIContext { sharedContext.value }
     private static func failure(_ message: String) -> NSError {
         NSError(domain: "PhotoArena.Analysis", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }

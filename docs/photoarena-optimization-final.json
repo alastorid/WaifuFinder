@@ -1,0 +1,2414 @@
+{
+  "session": "one-final-comparative-evaluation",
+  "date": "2026-11-08T12:22:40.210Z",
+  "reference": {
+    "directory": "/var/folders/sy/j5wt0qz50r51lmgqzthvh0r00000gn/T/photoarena-opt-reference-1zqqvhzt",
+    "commit": "6a8de440b27413d8dac276d35ac30058541fbb02",
+    "workerSHA256": "c41fad67a6d6d6066a4e0ef2d14d716464acddabad32eda7e4587f663e519d74",
+    "unrelatedUIHash": "e1083b08650c4ad8bbaabe181697101089fee1ef7a3b5ed9f811e337b493637d"
+  },
+  "optimizedSourceSHA256": "f2a1138d5f4cc1ce9f5ac220cf86bb9ee6889c5021f56bb7c6bbfb0e50fbde56",
+  "patchSHA256": "3bc1a46aa1897b5fa1441b377b87acf56fa2337077fdb7dc79ccbb18fba453a4",
+  "originalWorkerSHA256": "c41fad67a6d6d6066a4e0ef2d14d716464acddabad32eda7e4587f663e519d74",
+  "optimizedWorkerSHA256": "849c8829bfa290a690d862fdf658a142e20e07357f3f4bfbb1ffae8692ba6119",
+  "hardware": "Apple M3",
+  "operatingSystem": "27.2.0",
+  "precision": "Unchanged official F16 weights; unchanged FP32 recurrent state and gated RMS math",
+  "protocol": "Unchanged prompt, 512 output tokens, batch/ubatch512, threads4, Flash Attention; optimized context fits same full prompt and output budget",
+  "instrumentation": "Identical DYLD observer in both clients and workers. TASK_VM_INFO lifetime physical peak, 10ms sampled compression and Metal currentAllocatedSize; scalar traces only. No purge, CPU affinity, GPU eviction, paging controls or precision overrides.",
+  "limitations": [
+    "Production ArenaJudge.swift clients with only path lookup redirected; pre-encoded app inputs. Full SwiftUI GUI is not launched or included. PNG encoding is outside timed judging.",
+    "Process lifetime physical peak is queried during inference; Metal/compression are sampled, so brief allocation spikes may be missed.",
+    "Peak client plus peak sequential worker is a conservative upper bound, not a simultaneous measured GUI process tree peak.",
+    "OS/file/Metal compiler caches are left intact. Cold means a fresh client/model process, not a physically cold disk/cache.",
+    "Warm comparisons reuse one native worker on both sides; shipped application releases its worker after each complete action.",
+    "Exact outputs on these controlled pairs are not broad calibrated model-quality validation or a universal memory bound.",
+    "ledgerSwapinsRaw retains the kernel counter without assuming its units; ANE placement is not requested or measured."
+  ],
+  "workloads": [
+    {
+      "id": "native448",
+      "inputSHA256": [
+        "6a437c607fa107071af41ca266bf96f19fa2fc9c4342c908569c997eb3afe155",
+        "f29c5bde7f04e238d8fd571b253577a455d6350593c7822d60b7317d43c283a4"
+      ],
+      "cold": [
+        {
+          "variant": "original",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 23.466909417,
+          "firstJudgmentFromProcessStartSeconds": 16.512999057769775,
+          "result": {
+            "tokens": 236,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch visible on jacket",
+                "Eileen Collins name patch",
+                "white background",
+                "flag partially visible",
+                "model rocket on right",
+                "Reverse pass (A=original B, B=original A):",
+                "NASA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "consistency": "A",
+              "watermark": "unknown",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "prefillSeconds": 1.722115916,
+            "compressedBytes": 64339968,
+            "physicalFootprintBytes": 1501253064,
+            "decodeSeconds": 10.044863250999999
+          },
+          "wallSeconds": 23.008478045463562,
+          "rawPasses": [
+            {
+              "tokens": 113,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch visible on jacket",
+                  "Eileen Collins name patch",
+                  "white background",
+                  "flag partially visible",
+                  "model rocket on right"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 0.87779575,
+              "compressedBytes": 64339968,
+              "physicalFootprintBytes": 1495190960,
+              "decodeSeconds": 4.782734334
+            },
+            {
+              "tokens": 123,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NASA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 0.844320166,
+              "compressedBytes": 0,
+              "physicalFootprintBytes": 1501253064,
+              "decodeSeconds": 5.262128917
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 41720,
+                "sampleCount": 1740,
+                "peakPhysicalBytes": 11649672,
+                "sampledPeakCompressedBytes": 5111808,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 7471752
+              },
+              {
+                "pid": 41721,
+                "sampleCount": 1143,
+                "peakPhysicalBytes": 1683344912,
+                "sampledPeakCompressedBytes": 92143616,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1494371760
+              },
+              {
+                "pid": 41826,
+                "sampleCount": 556,
+                "peakPhysicalBytes": 1679969832,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1493274032
+              }
+            ],
+            "clientPeakPhysicalBytes": 11649672,
+            "workerPeakPhysicalBytes": 1683344912,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1694994584,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 92143616,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 8.855456000000002,
+          "firstJudgmentFromProcessStartSeconds": 5.633946895599365,
+          "result": {
+            "tokens": 236,
+            "prefillSeconds": 1.019555959,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch visible on jacket",
+                "Eileen Collins name patch",
+                "white background",
+                "flag partially visible",
+                "model rocket on right",
+                "Reverse pass (A=original B, B=original A):",
+                "NASA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "compressedBytes": 88768512,
+            "physicalFootprintBytes": 1391283584,
+            "decodeSeconds": 6.137229125
+          },
+          "wallSeconds": 8.571568965911865,
+          "rawPasses": [
+            {
+              "tokens": 113,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.843389417,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch visible on jacket",
+                  "Eileen Collins name patch",
+                  "white background",
+                  "flag partially visible",
+                  "model rocket on right"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 352,
+              "embeddingCacheBytes": 532480,
+              "decodeSeconds": 3.127274417,
+              "physicalFootprintBytes": 1380666728,
+              "compressedBytes": 88768512,
+              "contextInitSeconds": 0.028391375
+            },
+            {
+              "tokens": 123,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.176166542,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NASA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 352,
+              "embeddingCacheBytes": 532480,
+              "decodeSeconds": 3.009954708,
+              "physicalFootprintBytes": 1391283584,
+              "compressedBytes": 88489984,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 41827,
+                "sampleCount": 700,
+                "peakPhysicalBytes": 5292680,
+                "sampledPeakCompressedBytes": 2342912,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 5030536
+              },
+              {
+                "pid": 41828,
+                "sampleCount": 667,
+                "peakPhysicalBytes": 1586499040,
+                "sampledPeakCompressedBytes": 89473024,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1391283584
+              }
+            ],
+            "clientPeakPhysicalBytes": 5292680,
+            "workerPeakPhysicalBytes": 1586499040,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1591791720,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 89473024,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 8.167955209,
+          "firstJudgmentFromProcessStartSeconds": 4.593142747879028,
+          "result": {
+            "tokens": 236,
+            "prefillSeconds": 0.9858851260000001,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch visible on jacket",
+                "Eileen Collins name patch",
+                "white background",
+                "flag partially visible",
+                "model rocket on right",
+                "Reverse pass (A=original B, B=original A):",
+                "NASA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "compressedBytes": 101302272,
+            "physicalFootprintBytes": 1389137208,
+            "decodeSeconds": 6.069167125
+          },
+          "wallSeconds": 8.155285000801086,
+          "rawPasses": [
+            {
+              "tokens": 113,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.808535167,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch visible on jacket",
+                  "Eileen Collins name patch",
+                  "white background",
+                  "flag partially visible",
+                  "model rocket on right"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 352,
+              "embeddingCacheBytes": 532480,
+              "decodeSeconds": 2.693921625,
+              "physicalFootprintBytes": 1388350776,
+              "compressedBytes": 0,
+              "contextInitSeconds": 0.075387875
+            },
+            {
+              "tokens": 123,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.177349959,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NASA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 352,
+              "embeddingCacheBytes": 532480,
+              "decodeSeconds": 3.3752455,
+              "physicalFootprintBytes": 1389137208,
+              "compressedBytes": 101302272,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42015,
+                "sampleCount": 663,
+                "peakPhysicalBytes": 5456520,
+                "sampledPeakCompressedBytes": 2605056,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 5259912
+              },
+              {
+                "pid": 42016,
+                "sampleCount": 657,
+                "peakPhysicalBytes": 1582517680,
+                "sampledPeakCompressedBytes": 101351424,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1389137208
+              }
+            ],
+            "clientPeakPhysicalBytes": 5456520,
+            "workerPeakPhysicalBytes": 1582517680,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1587974200,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 101351424,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "original",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 15.957938125,
+          "firstJudgmentFromProcessStartSeconds": 7.6804358959198,
+          "wallSeconds": 15.929856061935425,
+          "result": {
+            "tokens": 236,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch visible on jacket",
+                "Eileen Collins name patch",
+                "white background",
+                "flag partially visible",
+                "model rocket on right",
+                "Reverse pass (A=original B, B=original A):",
+                "NASA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "prefillSeconds": 1.697574667,
+            "compressedBytes": 100859904,
+            "physicalFootprintBytes": 1495453080,
+            "decodeSeconds": 10.446021333000001
+          },
+          "rawPasses": [
+            {
+              "tokens": 113,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch visible on jacket",
+                  "Eileen Collins name patch",
+                  "white background",
+                  "flag partially visible",
+                  "model rocket on right"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 0.870768875,
+              "compressedBytes": 97583104,
+              "physicalFootprintBytes": 1495453080,
+              "decodeSeconds": 4.857854833
+            },
+            {
+              "tokens": 123,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NASA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 0.826805792,
+              "compressedBytes": 100859904,
+              "physicalFootprintBytes": 1494666672,
+              "decodeSeconds": 5.5881665
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42026,
+                "sampleCount": 1295,
+                "peakPhysicalBytes": 11682440,
+                "sampledPeakCompressedBytes": 5472256,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 8487560
+              },
+              {
+                "pid": 42027,
+                "sampleCount": 619,
+                "peakPhysicalBytes": 1679707664,
+                "sampledPeakCompressedBytes": 99598336,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1495453080
+              },
+              {
+                "pid": 42050,
+                "sampleCount": 664,
+                "peakPhysicalBytes": 1677250064,
+                "sampledPeakCompressedBytes": 123076608,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1494666672
+              }
+            ],
+            "clientPeakPhysicalBytes": 11682440,
+            "workerPeakPhysicalBytes": 1679707664,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1691390104,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 123076608,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "warm": [
+        {
+          "variant": "original",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 13.020568791000006,
+              "passes": [
+                {
+                  "tokens": 113,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch visible on jacket",
+                      "Eileen Collins name patch",
+                      "white background",
+                      "flag partially visible",
+                      "model rocket on right"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 0.845072458,
+                  "compressedBytes": 123715584,
+                  "physicalFootprintBytes": 1502121416,
+                  "decodeSeconds": 5.308495125
+                },
+                {
+                  "tokens": 123,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NASA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 0.852632084,
+                  "compressedBytes": 103366656,
+                  "physicalFootprintBytes": 1503301088,
+                  "decodeSeconds": 5.881134625
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 15.021816250000004,
+              "passes": [
+                {
+                  "tokens": 113,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch visible on jacket",
+                      "Eileen Collins name patch",
+                      "white background",
+                      "flag partially visible",
+                      "model rocket on right"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 1.004927958,
+                  "compressedBytes": 103350272,
+                  "physicalFootprintBytes": 1503497696,
+                  "decodeSeconds": 5.495818708
+                },
+                {
+                  "tokens": 123,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NASA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 1.0930705,
+                  "compressedBytes": 103350272,
+                  "physicalFootprintBytes": 1507839456,
+                  "decodeSeconds": 7.285892041
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": false,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42068,
+                "sampleCount": 2359,
+                "peakPhysicalBytes": 1676332584,
+                "sampledPeakCompressedBytes": 146046976,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 130925624
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1676332584,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1676332584,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 146046976,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 12.028872250000001,
+              "passes": [
+                {
+                  "tokens": 113,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 0.9494758750000001,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch visible on jacket",
+                      "Eileen Collins name patch",
+                      "white background",
+                      "flag partially visible",
+                      "model rocket on right"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 352,
+                  "embeddingCacheBytes": 532480,
+                  "decodeSeconds": 4.312624792,
+                  "physicalFootprintBytes": 1390677304,
+                  "compressedBytes": 78643200,
+                  "contextInitSeconds": 0.135977083
+                },
+                {
+                  "tokens": 123,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 0.449820459,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NASA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 352,
+                  "embeddingCacheBytes": 532480,
+                  "decodeSeconds": 6.070178375,
+                  "physicalFootprintBytes": 1391594808,
+                  "compressedBytes": 86556672,
+                  "contextInitSeconds": 0
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 17.71620275000001,
+              "passes": [
+                {
+                  "tokens": 113,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 1.793943708,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch visible on jacket",
+                      "Eileen Collins name patch",
+                      "white background",
+                      "flag partially visible",
+                      "model rocket on right"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 352,
+                  "embeddingCacheBytes": 532480,
+                  "decodeSeconds": 7.588912875,
+                  "physicalFootprintBytes": 1399721272,
+                  "compressedBytes": 86245376,
+                  "contextInitSeconds": 0
+                },
+                {
+                  "tokens": 123,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 1.166295208,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NASA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 352,
+                  "embeddingCacheBytes": 532480,
+                  "decodeSeconds": 7.012480417,
+                  "physicalFootprintBytes": 1399754040,
+                  "compressedBytes": 91291648,
+                  "contextInitSeconds": 0
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": true,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42152,
+                "sampleCount": 1795,
+                "peakPhysicalBytes": 1551486384,
+                "sampledPeakCompressedBytes": 247234560,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 92996568
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1551486384,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1551486384,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 247234560,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "summary": {
+        "originalMedianPairSeconds": 19.469167053699493,
+        "optimizedMedianPairSeconds": 8.363426983356476,
+        "originalMedianColdFirstJudgmentSeconds": 12.096717476844788,
+        "optimizedMedianColdFirstJudgmentSeconds": 5.113544821739197,
+        "originalWarmPairSeconds": 15.021816250000004,
+        "optimizedWarmPairSeconds": 17.71620275000001,
+        "originalPrefillTokensPerSecond": 411.7331570872124,
+        "optimizedPrefillTokensPerSecond": 702.0899344943857,
+        "prefillScope": "Same unchanged prompt-token count; prefill includes preprocessing/vision and multimodal decode, excludes optimized decoder context creation.",
+        "originalDecodeTokensPerSecond": 23.043464662943357,
+        "optimizedDecodeTokensPerSecond": 38.669453762925585,
+        "originalClientWorkerPhysicalBoundBytes": 1694994584,
+        "optimizedClientWorkerPhysicalBoundBytes": 1591791720,
+        "originalWorkerPeakPhysicalBytes": 1683344912,
+        "optimizedWorkerPeakPhysicalBytes": 1586499040,
+        "originalSteadyStateWorkerPhysicalBytes": 1505668576,
+        "optimizedSteadyStateWorkerPhysicalBytes": 1399737656,
+        "originalSampledPeakMetalBytes": 3299786752,
+        "optimizedSampledPeakMetalBytes": 3204366336,
+        "productionGatedRMSDispatchObserved": true,
+        "exactRawJudgmentAgreement": true,
+        "stableWarmState": true,
+        "exactColdReconciledAgreement": true
+      },
+      "accepted": true
+    },
+    {
+      "id": "overview",
+      "inputSHA256": [
+        "5956adbb2c9ac382e99aaa8be2890fa6c74fb09e0489c1e178cdbf8d701abdf7",
+        "39435466b42f06450101df14a519846eac748c6f0390e6997ded6e36a606a520"
+      ],
+      "cold": [
+        {
+          "variant": "original",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 67.571422083,
+          "firstJudgmentFromProcessStartSeconds": 31.64888310432434,
+          "wallSeconds": 67.26715207099915,
+          "result": {
+            "tokens": 239,
+            "prefillSeconds": 29.425127125,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "American flag on left",
+                "NASA and Ellen Collins patch",
+                "Space shuttle model",
+                "Blue backdrop",
+                "Uniform and posture",
+                "Reverse pass (A=original B, B=original A):",
+                "SAMPLE WATERMARK on A",
+                "NASA patch on B",
+                "Eileen Collins patch on B",
+                "Definite patch on B",
+                "Visible American flag on B",
+                "Model space shuttle on B"
+              ],
+              "consistency": "unknown",
+              "watermark": "unknown",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "compressedBytes": 201932800,
+            "physicalFootprintBytes": 1570819576,
+            "decodeSeconds": 28.656570000000002
+          },
+          "rawPasses": [
+            {
+              "tokens": 111,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "American flag on left",
+                  "NASA and Ellen Collins patch",
+                  "Space shuttle model",
+                  "Blue backdrop",
+                  "Uniform and posture"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 14.489770167,
+              "compressedBytes": 201932800,
+              "physicalFootprintBytes": 1566674424,
+              "decodeSeconds": 13.289160833
+            },
+            {
+              "tokens": 128,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "SAMPLE WATERMARK on A",
+                  "NASA patch on B",
+                  "Eileen Collins patch on B",
+                  "Definite patch on B",
+                  "Visible American flag on B",
+                  "Model space shuttle on B"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 14.935356958,
+              "compressedBytes": 189677568,
+              "physicalFootprintBytes": 1570819576,
+              "decodeSeconds": 15.367409167
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42190,
+                "sampleCount": 4515,
+                "peakPhysicalBytes": 15909536,
+                "sampledPeakCompressedBytes": 12861440,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 15532704
+              },
+              {
+                "pid": 42191,
+                "sampleCount": 2305,
+                "peakPhysicalBytes": 1683607056,
+                "sampledPeakCompressedBytes": 340787200,
+                "sampledPeakMetalAllocatedBytes": 3299262464,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1564216824
+              },
+              {
+                "pid": 42258,
+                "sampleCount": 2164,
+                "peakPhysicalBytes": 1685851664,
+                "sampledPeakCompressedBytes": 207060992,
+                "sampledPeakMetalAllocatedBytes": 3299262464,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1568361976
+              }
+            ],
+            "clientPeakPhysicalBytes": 15909536,
+            "workerPeakPhysicalBytes": 1685851664,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1701761200,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299262464,
+            "sampledWorkerPeakCompressedBytes": 340787200,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 27.609440667000015,
+          "firstJudgmentFromProcessStartSeconds": 18.7583270072937,
+          "result": {
+            "tokens": 239,
+            "prefillSeconds": 13.580453958,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "American flag on left",
+                "NASA and Ellen Collins patch",
+                "Space shuttle model",
+                "Blue backdrop",
+                "Uniform and posture",
+                "Reverse pass (A=original B, B=original A):",
+                "SAMPLE WATERMARK on A",
+                "NASA patch on B",
+                "Eileen Collins patch on B",
+                "Definite patch on B",
+                "Visible American flag on B",
+                "Model space shuttle on B"
+              ],
+              "consistency": "unknown",
+              "watermark": "unknown",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "compressedBytes": 135790592,
+            "physicalFootprintBytes": 1653280296,
+            "decodeSeconds": 11.509847542
+          },
+          "wallSeconds": 27.561250925064087,
+          "rawPasses": [
+            {
+              "tokens": 111,
+              "contextCapacity": 1792,
+              "prefillSeconds": 11.518533,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "American flag on left",
+                  "NASA and Ellen Collins patch",
+                  "Space shuttle model",
+                  "Blue backdrop",
+                  "Uniform and posture"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 1134,
+              "embeddingCacheBytes": 3735552,
+              "decodeSeconds": 4.835293709,
+              "physicalFootprintBytes": 1651265040,
+              "compressedBytes": 135790592,
+              "contextInitSeconds": 0.129705208
+            },
+            {
+              "tokens": 128,
+              "contextCapacity": 1792,
+              "prefillSeconds": 2.061920958,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "SAMPLE WATERMARK on A",
+                  "NASA patch on B",
+                  "Eileen Collins patch on B",
+                  "Definite patch on B",
+                  "Visible American flag on B",
+                  "Model space shuttle on B"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 1134,
+              "embeddingCacheBytes": 3735552,
+              "decodeSeconds": 6.674553833,
+              "physicalFootprintBytes": 1653280296,
+              "compressedBytes": 135528448,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42305,
+                "sampleCount": 2015,
+                "peakPhysicalBytes": 8766064,
+                "sampledPeakCompressedBytes": 4407296,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 8766064
+              },
+              {
+                "pid": 42309,
+                "sampleCount": 2005,
+                "peakPhysicalBytes": 1653345832,
+                "sampledPeakCompressedBytes": 162709504,
+                "sampledPeakMetalAllocatedBytes": 3214065664,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1653280296
+              }
+            ],
+            "clientPeakPhysicalBytes": 8766064,
+            "workerPeakPhysicalBytes": 1653345832,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1662111896,
+            "sampledWorkerPeakMetalAllocatedBytes": 3214065664,
+            "sampledWorkerPeakCompressedBytes": 162709504,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 22.943256958000013,
+          "firstJudgmentFromProcessStartSeconds": 16.17423701286316,
+          "wallSeconds": 22.90009105205536,
+          "result": {
+            "tokens": 239,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "American flag on left",
+                "NASA and Ellen Collins patch",
+                "Space shuttle model",
+                "Blue backdrop",
+                "Uniform and posture",
+                "Reverse pass (A=original B, B=original A):",
+                "SAMPLE WATERMARK on A",
+                "NASA patch on B",
+                "Eileen Collins patch on B",
+                "Definite patch on B",
+                "Visible American flag on B",
+                "Model space shuttle on B"
+              ],
+              "watermark": "unknown",
+              "consistency": "unknown",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "prefillSeconds": 11.036538083,
+            "compressedBytes": 9928704,
+            "physicalFootprintBytes": 1655230040,
+            "decodeSeconds": 9.382425083000001
+          },
+          "rawPasses": [
+            {
+              "tokens": 111,
+              "contextCapacity": 1792,
+              "prefillSeconds": 9.461184583,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "American flag on left",
+                  "NASA and Ellen Collins patch",
+                  "Space shuttle model",
+                  "Blue backdrop",
+                  "Uniform and posture"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 1134,
+              "embeddingCacheBytes": 3735552,
+              "decodeSeconds": 4.354395375,
+              "physicalFootprintBytes": 1649380928,
+              "compressedBytes": 9928704,
+              "contextInitSeconds": 0.117007792
+            },
+            {
+              "tokens": 128,
+              "contextCapacity": 1792,
+              "prefillSeconds": 1.5753535,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "SAMPLE WATERMARK on A",
+                  "NASA patch on B",
+                  "Eileen Collins patch on B",
+                  "Definite patch on B",
+                  "Visible American flag on B",
+                  "Model space shuttle on B"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 1134,
+              "embeddingCacheBytes": 3735552,
+              "decodeSeconds": 5.028029708,
+              "physicalFootprintBytes": 1655230040,
+              "compressedBytes": 9928704,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42369,
+                "sampleCount": 1809,
+                "peakPhysicalBytes": 8864392,
+                "sampledPeakCompressedBytes": 81920,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 8864392
+              },
+              {
+                "pid": 42371,
+                "sampleCount": 1799,
+                "peakPhysicalBytes": 1655311960,
+                "sampledPeakCompressedBytes": 9961472,
+                "sampledPeakMetalAllocatedBytes": 3214065664,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1655230040
+              }
+            ],
+            "clientPeakPhysicalBytes": 8864392,
+            "workerPeakPhysicalBytes": 1655311960,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1664176352,
+            "sampledWorkerPeakMetalAllocatedBytes": 3214065664,
+            "sampledWorkerPeakCompressedBytes": 9961472,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "original",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 37.54016983299999,
+          "firstJudgmentFromProcessStartSeconds": 18.723299026489258,
+          "wallSeconds": 37.5157870054245,
+          "result": {
+            "tokens": 239,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "American flag on left",
+                "NASA and Ellen Collins patch",
+                "Space shuttle model",
+                "Blue backdrop",
+                "Uniform and posture",
+                "Reverse pass (A=original B, B=original A):",
+                "SAMPLE WATERMARK on A",
+                "NASA patch on B",
+                "Eileen Collins patch on B",
+                "Definite patch on B",
+                "Visible American flag on B",
+                "Model space shuttle on B"
+              ],
+              "watermark": "unknown",
+              "consistency": "unknown",
+              "authenticity": "A",
+              "recommended_source": "A",
+              "quality": "unknown",
+              "uncertain": true
+            },
+            "prefillSeconds": 17.736604541,
+            "compressedBytes": 166625280,
+            "physicalFootprintBytes": 1752993416,
+            "decodeSeconds": 15.306699542
+          },
+          "rawPasses": [
+            {
+              "tokens": 111,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "American flag on left",
+                  "NASA and Ellen Collins patch",
+                  "Space shuttle model",
+                  "Blue backdrop",
+                  "Uniform and posture"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "A",
+                "recommended_source": "A",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 8.863993916,
+              "compressedBytes": 114999296,
+              "physicalFootprintBytes": 1749929584,
+              "decodeSeconds": 7.411094917
+            },
+            {
+              "tokens": 128,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "SAMPLE WATERMARK on A",
+                  "NASA patch on B",
+                  "Eileen Collins patch on B",
+                  "Definite patch on B",
+                  "Visible American flag on B",
+                  "Model space shuttle on B"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 8.872610625,
+              "compressedBytes": 166625280,
+              "physicalFootprintBytes": 1752993416,
+              "decodeSeconds": 7.895604625
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42396,
+                "sampleCount": 3006,
+                "peakPhysicalBytes": 19628680,
+                "sampledPeakCompressedBytes": 12255232,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 19628680
+              },
+              {
+                "pid": 42397,
+                "sampleCount": 1490,
+                "peakPhysicalBytes": 1749995120,
+                "sampledPeakCompressedBytes": 122142720,
+                "sampledPeakMetalAllocatedBytes": 3299262464,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1747471984
+              },
+              {
+                "pid": 42437,
+                "sampleCount": 1496,
+                "peakPhysicalBytes": 1753075336,
+                "sampledPeakCompressedBytes": 190332928,
+                "sampledPeakMetalAllocatedBytes": 3299262464,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1752977032
+              }
+            ],
+            "clientPeakPhysicalBytes": 19628680,
+            "workerPeakPhysicalBytes": 1753075336,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1772704016,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299262464,
+            "sampledWorkerPeakCompressedBytes": 190332928,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "warm": [
+        {
+          "variant": "original",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 33.34189554100001,
+              "passes": [
+                {
+                  "tokens": 111,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "American flag on left",
+                      "NASA and Ellen Collins patch",
+                      "Space shuttle model",
+                      "Blue backdrop",
+                      "Uniform and posture"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 8.951488292,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1754173016,
+                  "decodeSeconds": 6.509444292
+                },
+                {
+                  "tokens": 128,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "SAMPLE WATERMARK on A",
+                      "NASA patch on B",
+                      "Eileen Collins patch on B",
+                      "Definite patch on B",
+                      "Visible American flag on B",
+                      "Model space shuttle on B"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 9.396401625,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1772818032,
+                  "decodeSeconds": 8.025568666
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 32.272608625,
+              "passes": [
+                {
+                  "tokens": 111,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "American flag on left",
+                      "NASA and Ellen Collins patch",
+                      "Space shuttle model",
+                      "Blue backdrop",
+                      "Uniform and posture"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 8.6744445,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1800851080,
+                  "decodeSeconds": 6.63678975
+                },
+                {
+                  "tokens": 128,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "SAMPLE WATERMARK on A",
+                      "NASA patch on B",
+                      "Eileen Collins patch on B",
+                      "Definite patch on B",
+                      "Visible American flag on B",
+                      "Model space shuttle on B"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 8.895519583,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1816841864,
+                  "decodeSeconds": 7.454122542
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": false,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42484,
+                "sampleCount": 5450,
+                "peakPhysicalBytes": 1817235080,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3299262464,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 204948584
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1817235080,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1817235080,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299262464,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 19.044909125000007,
+              "passes": [
+                {
+                  "tokens": 111,
+                  "contextCapacity": 1792,
+                  "prefillSeconds": 8.33288275,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "American flag on left",
+                      "NASA and Ellen Collins patch",
+                      "Space shuttle model",
+                      "Blue backdrop",
+                      "Uniform and posture"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 1134,
+                  "embeddingCacheBytes": 3735552,
+                  "decodeSeconds": 4.24682525,
+                  "physicalFootprintBytes": 1650478632,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0.094312208
+                },
+                {
+                  "tokens": 128,
+                  "contextCapacity": 1792,
+                  "prefillSeconds": 1.572449625,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "SAMPLE WATERMARK on A",
+                      "NASA patch on B",
+                      "Eileen Collins patch on B",
+                      "Definite patch on B",
+                      "Visible American flag on B",
+                      "Model space shuttle on B"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 1134,
+                  "embeddingCacheBytes": 3735552,
+                  "decodeSeconds": 4.622889208,
+                  "physicalFootprintBytes": 1656245800,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 19.206708999999975,
+              "passes": [
+                {
+                  "tokens": 111,
+                  "contextCapacity": 1792,
+                  "prefillSeconds": 8.726653125,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "American flag on left",
+                      "NASA and Ellen Collins patch",
+                      "Space shuttle model",
+                      "Blue backdrop",
+                      "Uniform and posture"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "A",
+                    "recommended_source": "A",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 1134,
+                  "embeddingCacheBytes": 3735552,
+                  "decodeSeconds": 4.128344,
+                  "physicalFootprintBytes": 1681460776,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                },
+                {
+                  "tokens": 128,
+                  "contextCapacity": 1792,
+                  "prefillSeconds": 1.396234291,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "SAMPLE WATERMARK on A",
+                      "NASA patch on B",
+                      "Eileen Collins patch on B",
+                      "Definite patch on B",
+                      "Visible American flag on B",
+                      "Model space shuttle on B"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 1134,
+                  "embeddingCacheBytes": 3735552,
+                  "decodeSeconds": 4.591796667,
+                  "physicalFootprintBytes": 1681460776,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": true,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42611,
+                "sampleCount": 3177,
+                "peakPhysicalBytes": 1682148904,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3214065664,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 156075088
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1682148904,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1682148904,
+            "sampledWorkerPeakMetalAllocatedBytes": 3214065664,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "summary": {
+        "originalMedianPairSeconds": 52.39146953821182,
+        "optimizedMedianPairSeconds": 25.230670988559723,
+        "originalMedianColdFirstJudgmentSeconds": 25.1860910654068,
+        "optimizedMedianColdFirstJudgmentSeconds": 17.46628201007843,
+        "originalWarmPairSeconds": 32.272608625,
+        "optimizedWarmPairSeconds": 19.206708999999975,
+        "originalPrefillTokensPerSecond": 96.1796744895631,
+        "optimizedPrefillTokensPerSecond": 184.26296732132093,
+        "prefillScope": "Same unchanged prompt-token count; prefill includes preprocessing/vision and multimodal decode, excludes optimized decoder context creation.",
+        "originalDecodeTokensPerSecond": 11.977112371138588,
+        "optimizedDecodeTokensPerSecond": 23.118992987018956,
+        "originalClientWorkerPhysicalBoundBytes": 1772704016,
+        "optimizedClientWorkerPhysicalBoundBytes": 1664176352,
+        "originalWorkerPeakPhysicalBytes": 1817235080,
+        "optimizedWorkerPeakPhysicalBytes": 1682148904,
+        "originalSteadyStateWorkerPhysicalBytes": 1808846472,
+        "optimizedSteadyStateWorkerPhysicalBytes": 1681460776,
+        "originalSampledPeakMetalBytes": 3299262464,
+        "optimizedSampledPeakMetalBytes": 3214065664,
+        "productionGatedRMSDispatchObserved": true,
+        "exactRawJudgmentAgreement": true,
+        "stableWarmState": true,
+        "exactColdReconciledAgreement": true
+      },
+      "accepted": true
+    },
+    {
+      "id": "unequal-native-crops",
+      "inputSHA256": [
+        "6a437c607fa107071af41ca266bf96f19fa2fc9c4342c908569c997eb3afe155",
+        "f457928fcbe36a2e49d62c32b7e6438c4c2c35f9ba924b7cbda58e1ce97dda0c"
+      ],
+      "cold": [
+        {
+          "variant": "original",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 20.370978166999993,
+          "firstJudgmentFromProcessStartSeconds": 9.908347129821777,
+          "wallSeconds": 20.30139398574829,
+          "result": {
+            "tokens": 235,
+            "prefillSeconds": 2.402868333,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch present in A, watermark in B",
+                "WATERMARK text overlay in B",
+                "Image B has added watermark, A does not",
+                "Reverse pass (A=original B, B=original A):",
+                "NACA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "unknown",
+              "recommended_source": "unknown",
+              "quality": "B",
+              "uncertain": true
+            },
+            "compressedBytes": 0,
+            "physicalFootprintBytes": 1688030808,
+            "decodeSeconds": 14.545955834
+          },
+          "rawPasses": [
+            {
+              "tokens": 112,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch present in A, watermark in B",
+                  "WATERMARK text overlay in B",
+                  "Image B has added watermark, A does not"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "B",
+                "uncertain": false
+              },
+              "prefillSeconds": 1.255886625,
+              "compressedBytes": 0,
+              "physicalFootprintBytes": 1682214440,
+              "decodeSeconds": 6.845183792
+            },
+            {
+              "tokens": 123,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NACA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 1.146981708,
+              "compressedBytes": 0,
+              "physicalFootprintBytes": 1688030808,
+              "decodeSeconds": 7.700772042
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42667,
+                "sampleCount": 1588,
+                "peakPhysicalBytes": 15090336,
+                "sampledPeakCompressedBytes": 1441792,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 15090336
+              },
+              {
+                "pid": 42668,
+                "sampleCount": 767,
+                "peakPhysicalBytes": 1682247208,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1681493544
+              },
+              {
+                "pid": 42681,
+                "sampleCount": 814,
+                "peakPhysicalBytes": 1688063576,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1688030808
+              }
+            ],
+            "clientPeakPhysicalBytes": 15090336,
+            "workerPeakPhysicalBytes": 1688063576,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1703153912,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 0,
+          "wallIncludingClientStartupSeconds": 11.210391041999975,
+          "firstJudgmentFromProcessStartSeconds": 6.497082948684692,
+          "wallSeconds": 11.18717098236084,
+          "result": {
+            "tokens": 235,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch present in A, watermark in B",
+                "WATERMARK text overlay in B",
+                "Image B has added watermark, A does not",
+                "Reverse pass (A=original B, B=original A):",
+                "NACA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "unknown",
+              "recommended_source": "unknown",
+              "quality": "B",
+              "uncertain": true
+            },
+            "prefillSeconds": 1.4142003740000002,
+            "compressedBytes": 0,
+            "physicalFootprintBytes": 1581518232,
+            "decodeSeconds": 8.348265667
+          },
+          "rawPasses": [
+            {
+              "tokens": 112,
+              "contextCapacity": 1024,
+              "prefillSeconds": 1.1496334160000001,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch present in A, watermark in B",
+                  "WATERMARK text overlay in B",
+                  "Image B has added watermark, A does not"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "B",
+                "uncertain": false
+              },
+              "promptTokens": 351,
+              "embeddingCacheBytes": 528384,
+              "decodeSeconds": 4.016053125,
+              "physicalFootprintBytes": 1581387160,
+              "compressedBytes": 0,
+              "contextInitSeconds": 0.03379925
+            },
+            {
+              "tokens": 123,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.264566958,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NACA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 351,
+              "embeddingCacheBytes": 528384,
+              "decodeSeconds": 4.332212542,
+              "physicalFootprintBytes": 1581518232,
+              "compressedBytes": 0,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42699,
+                "sampleCount": 890,
+                "peakPhysicalBytes": 5505672,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 5505672
+              },
+              {
+                "pid": 42700,
+                "sampleCount": 885,
+                "peakPhysicalBytes": 1584745880,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1581518232
+              }
+            ],
+            "clientPeakPhysicalBytes": 5505672,
+            "workerPeakPhysicalBytes": 1584745880,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1590251552,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 11.325025874999993,
+          "firstJudgmentFromProcessStartSeconds": 6.56942892074585,
+          "result": {
+            "tokens": 235,
+            "prefillSeconds": 1.267157584,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch present in A, watermark in B",
+                "WATERMARK text overlay in B",
+                "Image B has added watermark, A does not",
+                "Reverse pass (A=original B, B=original A):",
+                "NACA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "consistency": "A",
+              "watermark": "unknown",
+              "authenticity": "unknown",
+              "recommended_source": "unknown",
+              "quality": "B",
+              "uncertain": true
+            },
+            "compressedBytes": 0,
+            "physicalFootprintBytes": 1583222216,
+            "decodeSeconds": 8.516619917
+          },
+          "wallSeconds": 11.295248985290527,
+          "rawPasses": [
+            {
+              "tokens": 112,
+              "contextCapacity": 1024,
+              "prefillSeconds": 1.024331501,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch present in A, watermark in B",
+                  "WATERMARK text overlay in B",
+                  "Image B has added watermark, A does not"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "B",
+                "uncertain": false
+              },
+              "promptTokens": 351,
+              "embeddingCacheBytes": 528384,
+              "decodeSeconds": 4.131414125,
+              "physicalFootprintBytes": 1580666312,
+              "compressedBytes": 0,
+              "contextInitSeconds": 0.037196208
+            },
+            {
+              "tokens": 123,
+              "contextCapacity": 1024,
+              "prefillSeconds": 0.242826083,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NACA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "promptTokens": 351,
+              "embeddingCacheBytes": 528384,
+              "decodeSeconds": 4.385205792,
+              "physicalFootprintBytes": 1583222216,
+              "compressedBytes": 0,
+              "contextInitSeconds": 0
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42713,
+                "sampleCount": 889,
+                "peakPhysicalBytes": 5456520,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 5456520
+              },
+              {
+                "pid": 42714,
+                "sampleCount": 880,
+                "peakPhysicalBytes": 1584172512,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1583222216
+              }
+            ],
+            "clientPeakPhysicalBytes": 5456520,
+            "workerPeakPhysicalBytes": 1584172512,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1589629032,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "original",
+          "repeat": 1,
+          "wallIncludingClientStartupSeconds": 19.936833667,
+          "firstJudgmentFromProcessStartSeconds": 9.3649320602417,
+          "result": {
+            "tokens": 235,
+            "prefillSeconds": 2.035263417,
+            "judgment": {
+              "detail": "A",
+              "evidence": [
+                "Forward pass:",
+                "NASA patch present in A, watermark in B",
+                "WATERMARK text overlay in B",
+                "Image B has added watermark, A does not",
+                "Reverse pass (A=original B, B=original A):",
+                "NACA patch present in B but not A",
+                "Eileen Dolling patch in B but not A",
+                "Watermark in A but not B",
+                "Model rocket in B but not A"
+              ],
+              "watermark": "unknown",
+              "consistency": "A",
+              "authenticity": "unknown",
+              "recommended_source": "unknown",
+              "quality": "B",
+              "uncertain": true
+            },
+            "compressedBytes": 120160256,
+            "physicalFootprintBytes": 1688505920,
+            "decodeSeconds": 14.323684959000001
+          },
+          "wallSeconds": 19.91125798225403,
+          "rawPasses": [
+            {
+              "tokens": 112,
+              "judgment": {
+                "detail": "A",
+                "evidence": [
+                  "NASA patch present in A, watermark in B",
+                  "WATERMARK text overlay in B",
+                  "Image B has added watermark, A does not"
+                ],
+                "consistency": "A",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "B",
+                "uncertain": false
+              },
+              "prefillSeconds": 0.986413125,
+              "compressedBytes": 92717056,
+              "physicalFootprintBytes": 1683918376,
+              "decodeSeconds": 6.826189084
+            },
+            {
+              "tokens": 123,
+              "judgment": {
+                "detail": "B",
+                "evidence": [
+                  "NACA patch present in B but not A",
+                  "Eileen Dolling patch in B but not A",
+                  "Watermark in A but not B",
+                  "Model rocket in B but not A"
+                ],
+                "consistency": "B",
+                "watermark": "A",
+                "authenticity": "B",
+                "recommended_source": "B",
+                "quality": "A",
+                "uncertain": false
+              },
+              "prefillSeconds": 1.048850292,
+              "compressedBytes": 120160256,
+              "physicalFootprintBytes": 1688505920,
+              "decodeSeconds": 7.497495875
+            }
+          ],
+          "memory": {
+            "processes": [
+              {
+                "pid": 42731,
+                "sampleCount": 1593,
+                "peakPhysicalBytes": 14959240,
+                "sampledPeakCompressedBytes": 10125312,
+                "sampledPeakMetalAllocatedBytes": 81920,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 14500488
+              },
+              {
+                "pid": 42732,
+                "sampleCount": 746,
+                "peakPhysicalBytes": 1683934760,
+                "sampledPeakCompressedBytes": 92700672,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1683901992
+              },
+              {
+                "pid": 42751,
+                "sampleCount": 832,
+                "peakPhysicalBytes": 1688538688,
+                "sampledPeakCompressedBytes": 120504320,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 1688505920
+              }
+            ],
+            "clientPeakPhysicalBytes": 14959240,
+            "workerPeakPhysicalBytes": 1688538688,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1703497928,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 120504320,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "warm": [
+        {
+          "variant": "original",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 15.545993083000008,
+              "passes": [
+                {
+                  "tokens": 112,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch present in A, watermark in B",
+                      "WATERMARK text overlay in B",
+                      "Image B has added watermark, A does not"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "B",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 0.954059916,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1688145448,
+                  "decodeSeconds": 6.331044917
+                },
+                {
+                  "tokens": 123,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NACA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 1.12445725,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1688751656,
+                  "decodeSeconds": 7.004754833
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 15.999290333000012,
+              "passes": [
+                {
+                  "tokens": 112,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch present in A, watermark in B",
+                      "WATERMARK text overlay in B",
+                      "Image B has added watermark, A does not"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "B",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 1.324444375,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1688669736,
+                  "decodeSeconds": 6.257538333
+                },
+                {
+                  "tokens": 123,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NACA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "prefillSeconds": 1.187973458,
+                  "compressedBytes": 0,
+                  "physicalFootprintBytes": 1688473128,
+                  "decodeSeconds": 7.075272167
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": false,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42773,
+                "sampleCount": 2674,
+                "peakPhysicalBytes": 1690373672,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3299786752,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 132105200
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1690373672,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1690373672,
+            "sampledWorkerPeakMetalAllocatedBytes": 3299786752,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        },
+        {
+          "variant": "optimized",
+          "rounds": [
+            {
+              "round": 0,
+              "seconds": 8.772704749999976,
+              "passes": [
+                {
+                  "tokens": 112,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 1.164167459,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch present in A, watermark in B",
+                      "WATERMARK text overlay in B",
+                      "Image B has added watermark, A does not"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "B",
+                    "uncertain": false
+                  },
+                  "promptTokens": 351,
+                  "embeddingCacheBytes": 528384,
+                  "decodeSeconds": 3.505121416,
+                  "physicalFootprintBytes": 1583369696,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0.087534083
+                },
+                {
+                  "tokens": 123,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 0.452592292,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NACA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 351,
+                  "embeddingCacheBytes": 528384,
+                  "decodeSeconds": 3.514093541,
+                  "physicalFootprintBytes": 1583402464,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                }
+              ]
+            },
+            {
+              "round": 1,
+              "seconds": 9.516527416999976,
+              "passes": [
+                {
+                  "tokens": 112,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 1.932688333,
+                  "judgment": {
+                    "detail": "A",
+                    "evidence": [
+                      "NASA patch present in A, watermark in B",
+                      "WATERMARK text overlay in B",
+                      "Image B has added watermark, A does not"
+                    ],
+                    "consistency": "A",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "B",
+                    "uncertain": false
+                  },
+                  "promptTokens": 351,
+                  "embeddingCacheBytes": 528384,
+                  "decodeSeconds": 3.052461292,
+                  "physicalFootprintBytes": 1586564600,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                },
+                {
+                  "tokens": 123,
+                  "contextCapacity": 1024,
+                  "prefillSeconds": 0.872549292,
+                  "judgment": {
+                    "detail": "B",
+                    "evidence": [
+                      "NACA patch present in B but not A",
+                      "Eileen Dolling patch in B but not A",
+                      "Watermark in A but not B",
+                      "Model rocket in B but not A"
+                    ],
+                    "consistency": "B",
+                    "watermark": "A",
+                    "authenticity": "B",
+                    "recommended_source": "B",
+                    "quality": "A",
+                    "uncertain": false
+                  },
+                  "promptTokens": 351,
+                  "embeddingCacheBytes": 528384,
+                  "decodeSeconds": 3.576855041,
+                  "physicalFootprintBytes": 1587629560,
+                  "compressedBytes": 0,
+                  "contextInitSeconds": 0
+                }
+              ]
+            }
+          ],
+          "observedGatedRMSPipeline": true,
+          "memory": {
+            "processes": [
+              {
+                "pid": 42823,
+                "sampleCount": 1634,
+                "peakPhysicalBytes": 1589693944,
+                "sampledPeakCompressedBytes": 0,
+                "sampledPeakMetalAllocatedBytes": 3204366336,
+                "ledgerSwapinsRaw": 0,
+                "finalPhysicalBytes": 133202952
+              }
+            ],
+            "clientPeakPhysicalBytes": null,
+            "workerPeakPhysicalBytes": 1589693944,
+            "clientPlusWorkerPhysicalUpperBoundBytes": 1589693944,
+            "sampledWorkerPeakMetalAllocatedBytes": 3204366336,
+            "sampledWorkerPeakCompressedBytes": 0,
+            "maximumWorkerLedgerSwapinsRaw": 0,
+            "notes": "Client peak plus maximum worker peak is a conservative bound, not a simultaneous GUI-app sample. Baseline workers are sequential. Metal allocations are included in physical footprint; do not add them again."
+          }
+        }
+      ],
+      "summary": {
+        "originalMedianPairSeconds": 20.10632598400116,
+        "optimizedMedianPairSeconds": 11.241209983825684,
+        "originalMedianColdFirstJudgmentSeconds": 9.636639595031738,
+        "optimizedMedianColdFirstJudgmentSeconds": 6.533255934715271,
+        "originalWarmPairSeconds": 15.999290333000012,
+        "optimizedWarmPairSeconds": 9.516527416999976,
+        "originalPrefillTokensPerSecond": 316.34932874626804,
+        "optimizedPrefillTokensPerSecond": 523.6152807614058,
+        "prefillScope": "Same unchanged prompt-token count; prefill includes preprocessing/vision and multimodal decode, excludes optimized decoder context creation.",
+        "originalDecodeTokensPerSecond": 16.281042946263618,
+        "optimizedDecodeTokensPerSecond": 27.87133291033345,
+        "originalClientWorkerPhysicalBoundBytes": 1703497928,
+        "optimizedClientWorkerPhysicalBoundBytes": 1590251552,
+        "originalWorkerPeakPhysicalBytes": 1690373672,
+        "optimizedWorkerPeakPhysicalBytes": 1589693944,
+        "originalSteadyStateWorkerPhysicalBytes": 1688571432,
+        "optimizedSteadyStateWorkerPhysicalBytes": 1587097080,
+        "originalSampledPeakMetalBytes": 3299786752,
+        "optimizedSampledPeakMetalBytes": 3204366336,
+        "productionGatedRMSDispatchObserved": true,
+        "exactRawJudgmentAgreement": true,
+        "stableWarmState": true,
+        "exactColdReconciledAgreement": true
+      },
+      "accepted": true
+    }
+  ],
+  "accepted": true,
+  "acceptanceScope": "Primary shipped production action: complete forward/reverse comparison in a fresh client/worker action, worker physical peak, conservative client+worker peak bound, exact judgment/state parity and actual fused dispatch. Not a claim that every warm latency sample improved.",
+  "allWarmLatencyCasesImproved": false,
+  "warmLatencyRegressions": [
+    {
+      "workload": "native448",
+      "originalSeconds": 15.021816250000004,
+      "optimizedSeconds": 17.71620275000001,
+      "note": "Observed final-session result; cause not established. Application does not keep workers resident across actions."
+    }
+  ]
+}

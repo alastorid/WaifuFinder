@@ -79,6 +79,10 @@ actor RemoteLink {
     var isIdle: Bool { Date().timeIntervalSince(lastReceived) > RemoteLimits.idleTimeout }
     private var started = false
     private var parsingPaused = false
+    var waitingForLocalNetwork: Bool {
+        guard case .connecting = state else { return false }
+        return connection.currentPath?.unsatisfiedReason == .localNetworkDenied
+    }
 
     init(endpoint: RemoteAddress.Endpoint) {
         let tcp = NWProtocolTCP.Options()
@@ -117,7 +121,7 @@ actor RemoteLink {
     /// Why the link ended, for a status line. `nil` while it is healthy.
     var disconnectReason: String? { if case .closed(let reason) = state { return reason } else { return nil } }
 
-    func start() {
+    func start(onLocalNetworkDenied: (@Sendable () -> Void)? = nil) {
         guard !started else { return }
         started = true
         connection.stateUpdateHandler = { [weak self] update in
@@ -128,6 +132,10 @@ actor RemoteLink {
                 self.readLoop()
             case .failed(let error):
                 Task { await self.terminate(Self.describe(error)) }
+            case .waiting:
+                Task {
+                    if await self.checkLocalNetworkPermission() { onLocalNetworkDenied?() }
+                }
             case .cancelled:
                 Task { await self.terminate("closed") }
             default:
@@ -135,6 +143,12 @@ actor RemoteLink {
             }
         }
         connection.start(queue: socketQueue)
+    }
+
+    private func checkLocalNetworkPermission() -> Bool {
+        guard case .connecting = state,
+              connection.currentPath?.unsatisfiedReason == .localNetworkDenied else { return false }
+        return true
     }
 
     /// Ends the link and wakes everything waiting on it.

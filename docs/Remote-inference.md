@@ -94,6 +94,15 @@ app version, and an eight-byte `keyID`. It contains no access key. Beacon claims
 not trusted to authorize work; TCP authentication is always required. Manual addresses
 work on networks that block discovery.
 
+If macOS blocks a client connection, the app reports that Local Network access is
+blocked while it waits for permission. Enable WaifuFinder in System Settings →
+Privacy & Security → Local Network. If it already appears enabled but remains
+blocked after a rebuild, removing the stale entry and allowing the next prompt may
+help. macOS does not report whether a blocked connection has a stale entry.
+The standard build uses an ad hoc signature; Apple recommends an Apple-issued
+code-signing identity for reliable local-network privacy recognition across builds.
+See [Apple's local network privacy guidance](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+
 The access key is 32 random bytes. Its display form is `WF1-`, eight groups of eight
 hex characters, then a four-character checksum. The checksum catches typing errors.
 `keyID` is the first eight bytes of SHA256(`"WF1/keyid"` + key); the check group is the

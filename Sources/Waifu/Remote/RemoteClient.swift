@@ -271,10 +271,20 @@ final class RemoteClient: ObservableObject {
         let key = keyStore.loadKey()
         connectTask = Task {
             await previous?.stop()
-            await link.start()
+            await link.start(onLocalNetworkDenied: { [weak self] in
+                Task { @MainActor in
+                    guard let self, self.generation == token,
+                          case .connecting = self.status else { return }
+                    self.status = .refused("Local network access is blocked. Allow WaifuFinder in System Settings → Privacy & Security → Local Network. If it is already allowed, remove its stale entry and allow it again.")
+                }
+            })
             let timeout = Task {
-                do { try await Task.sleep(for: .seconds(RemoteLimits.handshakeTimeout)) } catch { return }
-                await link.close(reason: "Handshake timed out")
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(RemoteLimits.handshakeTimeout)) } catch { return }
+                    if await link.waitingForLocalNetwork { continue }
+                    await link.close(reason: "Handshake timed out")
+                    return
+                }
             }
             defer { timeout.cancel() }
             do {

@@ -1,4 +1,5 @@
 import CoreGraphics
+import Darwin
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -60,6 +61,35 @@ enum ArenaJudgeConfiguration {
     }
 }
 
+/// Bounded line framing without one system call per response byte.
+final class ArenaPipeReader {
+    private let handle: FileHandle
+    private var pending = Data()
+    init(_ handle: FileHandle) { self.handle = handle }
+    func line() throws -> Data {
+        while true {
+            if let end = pending.firstIndex(of: 10) {
+                guard pending.distance(from: pending.startIndex, to: end) < 128 * 1024 else {
+                    throw ModelInstaller.fail("PhotoArena worker response exceeds limit")
+                }
+                let result = Data(pending[..<end])
+                pending.removeSubrange(...end)
+                return result
+            }
+            guard pending.count < 128 * 1024 else { throw ModelInstaller.fail("PhotoArena worker response exceeds limit") }
+            // Foundation read(upToCount:) can wait to fill a pipe buffer. A
+            // single POSIX read returns available bytes immediately, including
+            // a short ready line while the child is waiting for its request.
+            var bytes = Data(count: 4096)
+            let count = bytes.withUnsafeMutableBytes { Darwin.read(handle.fileDescriptor, $0.baseAddress!, $0.count) }
+            if count < 0 && errno == EINTR { continue }
+            guard count > 0 else { throw ModelInstaller.fail("PhotoArena worker stopped before replying") }
+            bytes.count = count
+            pending.append(bytes)
+        }
+    }
+}
+
 /// Each request owns its worker; cancellation cannot stop another queued request.
 private final class ArenaProcess: @unchecked Sendable {
     private let lock = NSLock()
@@ -76,46 +106,61 @@ private final class ArenaProcess: @unchecked Sendable {
         cancelled = true
         if let process, process.isRunning { process.terminate() }
     }
-    static func line(_ handle: FileHandle) throws -> Data {
-        var data = Data()
-        while data.count < 128 * 1024 {
-            guard let byte = try handle.read(upToCount: 1), !byte.isEmpty else {
-                throw ModelInstaller.fail("PhotoArena worker stopped before replying")
-            }
-            if byte[0] == 10 { return data }
-            data.append(byte)
-        }
-        throw ModelInstaller.fail("PhotoArena worker response exceeds limit")
-    }
+
     func run(images: [Data], directory: URL, executable: URL) throws -> ArenaJudgeResult {
         let child = Process(), input = Pipe(), output = Pipe()
         child.executableURL = executable
         child.arguments = [directory.appendingPathComponent("model.gguf").path, directory.appendingPathComponent("mmproj.gguf").path]
         child.standardInput = input; child.standardOutput = output; child.standardError = FileHandle.nullDevice
         try start(child)
-        let watchdog = DispatchWorkItem { [weak self] in self?.stop() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 300, execute: watchdog)
+        var watchdog: DispatchWorkItem?
+        func armWatchdog() {
+            watchdog?.cancel()
+            let item = DispatchWorkItem { [weak self] in self?.stop() }
+            watchdog = item
+            DispatchQueue.global().asyncAfter(deadline: .now() + 300, execute: item)
+        }
+        armWatchdog()
         defer {
-            watchdog.cancel()
+            watchdog?.cancel()
             try? input.fileHandleForWriting.close()
             if child.isRunning { child.terminate() }
             child.waitUntilExit()
             try? output.fileHandleForReading.close()
         }
-        let ready = try Self.line(output.fileHandleForReading)
+        let reader = ArenaPipeReader(output.fileHandleForReading)
+        let ready = try reader.line()
         guard let header = try JSONSerialization.jsonObject(with: ready) as? [String: Any], header["ready"] as? Bool == true else {
             throw ModelInstaller.fail("PhotoArena could not load its model: \(String(decoding: ready, as: UTF8.self))")
         }
-        var request = try JSONSerialization.data(withJSONObject: ["images": images.map { $0.base64EncodedString() }])
-        request.append(10)
-        try input.fileHandleForWriting.write(contentsOf: request)
-        let reply = try Self.line(output.fileHandleForReading)
-        if let json = try JSONSerialization.jsonObject(with: reply) as? [String: Any], let error = json["error"] as? String {
-            throw ModelInstaller.fail(error)
+        let paired = header["pairedComparison"] as? Bool == true
+        func send(_ values: [Data], paired: Bool) throws {
+            // Base64 has no JSON quoting characters. Stream each encoded image
+            // once instead of retaining two strings plus a full JSON copy.
+            try input.fileHandleForWriting.write(contentsOf: Data((paired ? "{\"compareBoth\":true,\"images\":[\"" : "{\"images\":[\"").utf8))
+            for (index, image) in values.enumerated() {
+                if index > 0 { try input.fileHandleForWriting.write(contentsOf: Data("\",\"".utf8)) }
+                try input.fileHandleForWriting.write(contentsOf: image.base64EncodedData())
+            }
+            try input.fileHandleForWriting.write(contentsOf: Data("\"]}\n".utf8))
         }
-        let result = try JSONDecoder().decode(ArenaJudgeResult.self, from: reply)
-        try result.validate()
-        return result
+        func receive() throws -> ArenaJudgeResult {
+            let reply = try reader.line()
+            if let json = try JSONSerialization.jsonObject(with: reply) as? [String: Any], let error = json["error"] as? String {
+                throw ModelInstaller.fail(error)
+            }
+            let result = try JSONDecoder().decode(ArenaJudgeResult.self, from: reply)
+            try result.validate()
+            return result
+        }
+        try send(images, paired: paired)
+        let first = try receive()
+        armWatchdog()
+        // Older bundled workers already accept repeated single requests. Reuse
+        // their model safely too, without requiring a wire-protocol upgrade.
+        if !paired { try send(Array(images.reversed()), paired: false) }
+        let reversed = try receive()
+        return ArenaJudge.reconcile(first, reversed)
     }
 }
 enum ArenaJudge {
@@ -156,15 +201,20 @@ enum ArenaJudge {
                 evidence: ["The encoded overview inputs are byte-identical; no visual preference is supported."]),
                 tokens: 0, prefillSeconds: 0, decodeSeconds: 0, physicalFootprintBytes: 0, compressedBytes: 0)
         }
-        let first = try await single(images)
-        try Task.checkCancellation()
-        let reversed = try await single(Array(images.reversed()))
-        return reconcile(first, reversed)
+        return try await single(images)
     }
     private static func single(_ images: [Data]) async throws -> ArenaJudgeResult {
         guard images.count == 2, images.allSatisfy({ !$0.isEmpty && $0.count <= 16 * 1024 * 1024 }),
               let directory = ArenaJudgeConfiguration.directory, let executable = ArenaJudgeConfiguration.executable else {
             throw ModelInstaller.fail("Install PhotoArena MiniCPM-V 4.7 in Settings → Models first")
+        }
+        return try await compare(images: images, directory: directory, executable: executable)
+    }
+    /// Explicit paths permit background protocol tests and the production-path
+    /// before/after harness without changing the user's model configuration.
+    static func compare(images: [Data], directory: URL, executable: URL) async throws -> ArenaJudgeResult {
+        guard images.count == 2, images.allSatisfy({ !$0.isEmpty && $0.count <= 16 * 1024 * 1024 }) else {
+            throw ModelInstaller.fail("Invalid PhotoArena image payload")
         }
         let process = ArenaProcess()
         let result = try await withTaskCancellationHandler {
