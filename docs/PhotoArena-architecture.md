@@ -1,4 +1,6 @@
-# PhotoArena integrated architecture decision
+# PhotoArena v1 architecture decision record
+
+The current product and architecture are described in [PhotoArena 2.0](PhotoArena-2.0.md). The following is the historical prototype decision record.
 
 ## Independent proposals and debate
 

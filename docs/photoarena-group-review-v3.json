@@ -1,0 +1,441 @@
+{
+  "clientPeakPhysicalFootprintBytes" : 107430824,
+  "differences" : [
+    {
+      "changedPixels" : 0,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 0,
+      "meanAbsoluteError" : 0,
+      "selectedFromOtherSourcePixels" : 0,
+      "sourceID" : "s0",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s1",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s2",
+      "uncoveredPixels" : 0
+    }
+  ],
+  "elapsedSeconds" : 28.203325986862183,
+  "exportSeconds" : 0.007884025573730469,
+  "knownCleanSourceID" : "s0",
+  "mergeSeconds" : 6.008148193359375e-05,
+  "modelRecommendedKnownCleanSource" : false,
+  "outputFile" : "selected-original.png",
+  "outputMatchesKnownCleanFile" : true,
+  "plan" : {
+    "backboneID" : "s0",
+    "kind" : "unresolved",
+    "pendingRegionIDs" : [
+
+    ],
+    "rankings" : [
+      {
+        "alteration" : 3.75,
+        "cleanliness" : 100,
+        "confidence" : "medium",
+        "consistency" : 98.125,
+        "coverage" : 1,
+        "defects" : [
+          "color",
+          "unknown"
+        ],
+        "degradation" : 1.875,
+        "detail" : 91.25,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Uniform blue backdrop and American flag without visible text or logos.",
+          "region_0_0_256_256: Cyan bounding box highlights cyan annotation on blue background",
+          "region_256_0_256_256: Cyan box highlights region with cyan annotation on blue background"
+        ],
+        "sourceID" : "s0"
+      },
+      {
+        "alteration" : 3.875,
+        "cleanliness" : 97.5,
+        "confidence" : "medium",
+        "consistency" : 95.75,
+        "coverage" : 1,
+        "defects" : [
+          "color",
+          "unknown"
+        ],
+        "degradation" : 1.625,
+        "detail" : 85,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Red rectangular artifact on blue surface to right of shuttle.",
+          "region_0_0_256_256: Red bounding box marks red annotation on blue background",
+          "region_256_0_256_256: Red square annotation on blue background",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s1"
+      },
+      {
+        "alteration" : 3.875,
+        "cleanliness" : 97.5,
+        "confidence" : "medium",
+        "consistency" : 95.75,
+        "coverage" : 1,
+        "defects" : [
+          "color",
+          "unknown"
+        ],
+        "degradation" : 1.625,
+        "detail" : 85,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Red rectangular artifact on blue surface to right of shuttle.",
+          "region_0_0_256_256: Red bounding box marks red annotation on blue background",
+          "region_256_0_256_256: Red square annotation on blue background",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s2"
+      }
+    ],
+    "reasons" : [
+      "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.",
+      "Scores compare supplied candidates and are not calibrated probabilities.",
+      "0 review tasks pending; 1016064 reference pixels measured."
+    ],
+    "selections" : [
+      {
+        "manual" : false,
+        "reasons" : [
+          "Whole-source backbone; model assessment does not establish provenance."
+        ],
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        },
+        "regionID" : "backbone",
+        "sourceID" : "s0",
+        "unresolved" : true
+      }
+    ],
+    "unresolvedRegionIDs" : [
+      "region_0_0_256_256",
+      "region_256_0_256_256"
+    ]
+  },
+  "preprocessingSeconds" : 0.27079594135284424,
+  "records" : [
+    {
+      "cacheKey" : "8ca0f01a3ac597d385e90a1c090bc18ee7bf21fb281e449b1f0e5f292ee6265a",
+      "job" : {
+        "id" : "overview",
+        "overview" : true,
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0.019938625,
+        "decodeSeconds" : 5.78482925,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3214114816,
+        "physicalFootprintBytes" : 1594871216,
+        "prefillSeconds" : 0.429133708,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 0,
+              "cleanliness" : 100,
+              "confidence" : "high",
+              "consistency" : 100,
+              "defects" : [
+                "unknown"
+              ],
+              "degradation" : 0,
+              "detail" : 95,
+              "enhancement" : 0,
+              "evidence" : "Uniform blue backdrop and American flag without visible text or logos.",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+                "color"
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular artifact on blue surface to right of shuttle.",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+                "color"
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular artifact on blue surface to right of shuttle.",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 286,
+        "workerPeakPhysicalFootprintBytes" : 1598311880,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "4316f4c9e7221483ad9f6a20b81fb41a888339668dbf07d2b84b5d3caefb3238",
+      "job" : {
+        "detailRect" : {
+          "height" : 88,
+          "width" : 68,
+          "x" : 188,
+          "y" : 168
+        },
+        "id" : "region_0_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0.02455125,
+        "decodeSeconds" : 8.171211334,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1619725744,
+        "prefillSeconds" : 1.0841129999999999,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 100,
+              "confidence" : "high",
+              "consistency" : 100,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 2,
+              "detail" : 90,
+              "enhancement" : 0,
+              "evidence" : "Cyan bounding box highlights cyan annotation on blue background",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : false
+            },
+            {
+              "alteration" : 3,
+              "cleanliness" : 100,
+              "confidence" : "high",
+              "consistency" : 100,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 1,
+              "detail" : 85,
+              "enhancement" : 0,
+              "evidence" : "Red bounding box marks red annotation on blue background",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : false
+            },
+            {
+              "alteration" : 2,
+              "cleanliness" : 100,
+              "confidence" : "high",
+              "consistency" : 100,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 1,
+              "detail" : 80,
+              "enhancement" : 0,
+              "evidence" : "Red bounding box marks red annotation on blue background",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : false
+            }
+          ]
+        },
+        "tokens" : 415,
+        "workerPeakPhysicalFootprintBytes" : 1622429104,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "8e820a9e9c7939a4576607ffdd590df5deff125427dc20f4f49fefaa07809da1",
+      "job" : {
+        "detailRect" : {
+          "height" : 88,
+          "width" : 56,
+          "x" : 256,
+          "y" : 168
+        },
+        "id" : "region_256_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 256,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0,
+        "decodeSeconds" : 8.035936,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1619266992,
+        "prefillSeconds" : 1.083760333,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 100,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 3,
+              "detail" : 90,
+              "enhancement" : 0,
+              "evidence" : "Cyan box highlights region with cyan annotation on blue background",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : false
+            },
+            {
+              "alteration" : 4,
+              "cleanliness" : 100,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 0,
+              "evidence" : "Red square annotation on blue background",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : false
+            },
+            {
+              "alteration" : 3,
+              "cleanliness" : 100,
+              "confidence" : "medium",
+              "consistency" : 88,
+              "defects" : [
+                "color",
+                "unknown"
+              ],
+              "degradation" : 1,
+              "detail" : 80,
+              "enhancement" : 0,
+              "evidence" : "Red square annotation on blue background",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : false
+            }
+          ]
+        },
+        "tokens" : 407,
+        "workerPeakPhysicalFootprintBytes" : 1622461872,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    }
+  ],
+  "scope" : "Actual 3-source optimized Swift + native MiniCPM end-to-end workflow on NASA photograph with conventional red overlays. Client footprint is sampled; native physical lifetime peak, Metal allocation, compressed bytes and raw swap-in ledger are worker measurements. No AI-edit accuracy calibration or whole GUI app measurement.",
+  "verificationSeconds" : 0.20586097240447998
+}

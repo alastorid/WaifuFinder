@@ -1,0 +1,417 @@
+{
+  "clientPeakPhysicalFootprintBytes" : 111674328,
+  "differences" : [
+    {
+      "changedPixels" : 0,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 0,
+      "meanAbsoluteError" : 0,
+      "selectedFromOtherSourcePixels" : 0,
+      "sourceID" : "s0",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s1",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s2",
+      "uncoveredPixels" : 0
+    }
+  ],
+  "elapsedSeconds" : 25.714107036590576,
+  "exportSeconds" : 0.009266018867492676,
+  "mergeSeconds" : 6.496906280517578e-05,
+  "outputFile" : "selected-original.png",
+  "plan" : {
+    "backboneID" : "s0",
+    "kind" : "unresolved",
+    "pendingRegionIDs" : [
+
+    ],
+    "rankings" : [
+      {
+        "alteration" : 5,
+        "cleanliness" : 93,
+        "confidence" : "medium",
+        "consistency" : 93.875,
+        "coverage" : 1,
+        "defects" : [
+
+        ],
+        "degradation" : 1.625,
+        "detail" : 87.625,
+        "enhancement" : 3,
+        "originality" : 95,
+        "reasons" : [
+          "overview: Source 0 matches Source 1\/2 exactly; no visible watermarks or edits.",
+          "region_0_0_256_256: Source 0 and 1\/2 identical; alignment true, correlation 1.000.",
+          "region_256_0_256_256: Source 0 is original, aligned, high correlation; no visible watermarks or edits."
+        ],
+        "sourceID" : "s0"
+      },
+      {
+        "alteration" : 5,
+        "cleanliness" : 93,
+        "confidence" : "medium",
+        "consistency" : 93.875,
+        "coverage" : 1,
+        "defects" : [
+
+        ],
+        "degradation" : 1.625,
+        "detail" : 87.625,
+        "enhancement" : 3,
+        "originality" : 95,
+        "reasons" : [
+          "overview: Source 1 identical to Source 2; no visible watermarks or edits.",
+          "region_0_0_256_256: Source 1 and 2 identical; alignment true, correlation 1.000.",
+          "region_256_0_256_256: Source 1 identical to Source 0, aligned, high correlation; no visible watermarks or edits.",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s1"
+      },
+      {
+        "alteration" : 5,
+        "cleanliness" : 93,
+        "confidence" : "medium",
+        "consistency" : 93.875,
+        "coverage" : 1,
+        "defects" : [
+
+        ],
+        "degradation" : 1.625,
+        "detail" : 87.625,
+        "enhancement" : 3,
+        "originality" : 95,
+        "reasons" : [
+          "overview: Source 1 identical to Source 2; no visible watermarks or edits.",
+          "region_0_0_256_256: Source 1 and 2 identical; alignment true, correlation 1.000.",
+          "region_256_0_256_256: Source 1 identical to Source 0, aligned, high correlation; no visible watermarks or edits.",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s2"
+      }
+    ],
+    "reasons" : [
+      "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.",
+      "Scores compare supplied candidates and are not calibrated probabilities.",
+      "0 review tasks pending; 1016064 reference pixels measured."
+    ],
+    "selections" : [
+      {
+        "manual" : false,
+        "reasons" : [
+          "Whole-source backbone; model assessment does not establish provenance."
+        ],
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        },
+        "regionID" : "backbone",
+        "sourceID" : "s0",
+        "unresolved" : true
+      }
+    ],
+    "unresolvedRegionIDs" : [
+      "region_0_0_256_256",
+      "region_256_0_256_256"
+    ]
+  },
+  "preprocessingSeconds" : 0.2831970453262329,
+  "records" : [
+    {
+      "cacheKey" : "22f14a2d84a997a426d7368d109632f507c68ba9f96730e7b89764abd8db426b",
+      "job" : {
+        "id" : "overview",
+        "overview" : true,
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 105021440,
+        "contextInitSeconds" : 0.088733834,
+        "decodeSeconds" : 6.237809209,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3214114816,
+        "physicalFootprintBytes" : 1594150320,
+        "prefillSeconds" : 0.812796707,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "high",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 0 matches Source 1\/2 exactly; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "high",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 1 identical to Source 2; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "high",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 2 identical to Source 1; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 294,
+        "workerPeakPhysicalFootprintBytes" : 1597541808,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "62c922720f733d6868db4ae69213f5abc9b5cb634d9f02ea9d2443e7f0666ff9",
+      "job" : {
+        "id" : "region_0_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 72073216,
+        "contextInitSeconds" : 0.033493666,
+        "decodeSeconds" : 6.227252875,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1618480560,
+        "prefillSeconds" : 1.091893709,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 0 and 1\/2 identical; alignment true, correlation 1.000.",
+              "originality" : 95,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 1 and 2 identical; alignment true, correlation 1.000.",
+              "originality" : 95,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 2 identical to Source 1; alignment true, correlation 1.000.",
+              "originality" : 95,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 304,
+        "workerPeakPhysicalFootprintBytes" : 1622085040,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "f1684e46cc67318bd4fe98ff399278d359e160e5b6352492d4ddbe9917e5b7f7",
+      "job" : {
+        "id" : "region_256_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 256,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 71663616,
+        "contextInitSeconds" : 0,
+        "decodeSeconds" : 6.389350042,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1618054576,
+        "prefillSeconds" : 1.093599958,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 98,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 1,
+              "detail" : 92,
+              "enhancement" : 3,
+              "evidence" : "Source 0 is original, aligned, high correlation; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 98,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 1,
+              "detail" : 92,
+              "enhancement" : 3,
+              "evidence" : "Source 1 identical to Source 0, aligned, high correlation; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 5,
+              "cleanliness" : 98,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 1,
+              "detail" : 92,
+              "enhancement" : 3,
+              "evidence" : "Source 2 byte-identical to Source 1, aligned, high correlation; no visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 307,
+        "workerPeakPhysicalFootprintBytes" : 1622085040,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    }
+  ],
+  "scope" : "Actual 3-source optimized Swift + native MiniCPM end-to-end workflow on NASA photograph with conventional red overlays. Client footprint is sampled; native physical lifetime peak, Metal allocation, compressed bytes and raw swap-in ledger are worker measurements. No AI-edit accuracy calibration or whole GUI app measurement.",
+  "verificationSeconds" : 0.2160860300064087
+}

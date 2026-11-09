@@ -8,11 +8,14 @@ if ! python3 -c 'import json,pathlib; r=json.load(open(".build/reports/photoaren
 fi
 REFERENCE="$(python3 -c 'import json;print(json.load(open(".build/reports/photoarena-optimization-reference.json"))["directory"])')"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
+# Historical pair benchmark: use the exact optimized pair client that was
+# measured, independent of the later group-review protocol and Swift types.
+git show 2bc873a:Sources/Waifu/PhotoArena/ArenaJudge.swift > "$REFERENCE/optimized-pair-source.swift"
 xcrun clang++ -O2 -dynamiclib -fobjc-arc -std=c++17 -isysroot "$SDK" "$ROOT/tools/photoarena-memory-observer.mm" -framework Foundation -framework Metal -o "$REFERENCE/memory-observer.dylib"
 python3 - "$REFERENCE" <<'PY'
 import sys,pathlib
 r=pathlib.Path(sys.argv[1])
-for name,path in [('original',r/'ArenaJudge.swift'),('optimized',pathlib.Path('Sources/Waifu/PhotoArena/ArenaJudge.swift'))]:
+for name,path in [('original',r/'ArenaJudge.swift'),('optimized',r/'optimized-pair-source.swift')]:
  s=path.read_text(); start=s.index('enum ArenaJudgeConfiguration {');end=s.index('\n}\n',start)+3
  s=s[:start]+'''enum ArenaJudgeConfiguration {
     static let revision = "minicpm-v4.7-f16-16x-llama-7071ba3-v1"

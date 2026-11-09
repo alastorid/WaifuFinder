@@ -20,6 +20,7 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
     var safire: SafireCapability? = nil
     var trufor: SafireCapability? = nil
     var arenaRevision: String? = nil
+    var arenaReviewRevision: String? = nil
     var vision: VisionCapability
 
     struct SafireCapability: Codable, Sendable, Equatable {
@@ -159,6 +160,7 @@ struct RemoteCapabilities: Codable, Sendable, Equatable {
                         runtimeRevision:SafireSpatialResult.runtimeRevision,preprocessingVersion:SafireSpatialResult.preprocessingVersion) },
                     trufor:TruForConfiguration.load().map{.init(available:true,modelFingerprint:$0.fingerprint,runtimeRevision:TruForConfiguration.execution,preprocessingVersion:TruForConfiguration.preprocessing)},
                     arenaRevision: ArenaJudgeConfiguration.directory == nil ? nil : ArenaJudgeConfiguration.revision,
+                    arenaReviewRevision: ArenaJudgeConfiguration.directory == nil ? nil : ArenaGroupPayload.revision,
                     vision: VisionCapability(available: true))
     }
 }

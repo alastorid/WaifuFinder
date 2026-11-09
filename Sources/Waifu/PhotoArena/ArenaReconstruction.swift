@@ -13,6 +13,7 @@ struct ArenaSourceSelection: Codable, Identifiable, Sendable {
     let unresolved: Bool
     let reasons: [String]
     let manual: Bool
+    var mask: ArenaPixelMask? = nil
 }
 struct ArenaExportManifest: Codable, Sendable {
     var schemaVersion = 1
@@ -27,6 +28,8 @@ struct ArenaExportManifest: Codable, Sendable {
     let selections: [ArenaSourceSelection]
     let warnings: [String]
     let elapsedSeconds: Double
+    var recoveryPlan: ArenaRecoveryPlan? = nil
+    var pixelOperations: [String: String]? = nil
 }
 
 /// Copies real, aligned source samples. No generative processing, sharpening,
@@ -70,7 +73,7 @@ enum ArenaReconstruction {
     /// The directory is new to prevent accidental overwrite of source/evidence files.
     /// One RGBA output and one byte-per-pixel source map are allocated. Sources
     /// decode lazily and are rendered sequentially in bounded 512px tiles.
-    static func export(_ analysis: ArenaAnalysis, selections: [ArenaSourceSelection], to directory: URL) throws -> ArenaExportManifest {
+    static func export(_ analysis: ArenaAnalysis, selections: [ArenaSourceSelection], to directory: URL, plan: ArenaRecoveryPlan? = nil) throws -> ArenaExportManifest {
         let start = Date()
         guard !FileManager.default.fileExists(atPath: directory.path) else {
             throw failure("Choose a new export folder; existing files will not be overwritten.")
@@ -82,23 +85,42 @@ enum ArenaReconstruction {
             var archivedFiles: [String: String] = [:]
             var hashes: [String: String] = [:]
             for (index, source) in analysis.sources.enumerated() {
+                try Task.checkCancellation()
                 let fileName = String(format: "%03d", index+1) + "." + source.url.pathExtension
                 let target = sourceDirectory.appendingPathComponent(fileName)
                 try FileManager.default.copyItem(at: source.url, to: target)
                 archivedFiles[source.id] = "sources/" + fileName
                 hashes[source.id] = try hash(target)
+                if let expected = source.fileSHA256, hashes[source.id] != expected {
+                    throw failure("A source file changed after analysis. Reopen the candidates before exporting.")
+                }
             }
             var archivedAnalysis = analysis
             archivedAnalysis.sources = analysis.sources.map { source in
                 ArenaAnalyzedSource(id: source.id, url: directory.appendingPathComponent(archivedFiles[source.id]!),
                     width: source.width, height: source.height, transform: source.transform,
-                    alignmentConfidence: source.alignmentConfidence, accepted: source.accepted, issues: source.issues)
+                    alignmentConfidence: source.alignmentConfidence, accepted: source.accepted, issues: source.issues, fileSHA256: source.fileSHA256)
             }
-            let rendered = try render(archivedAnalysis, selections: selections, scale: 1)
-            try write(rendered.image, to: directory.appendingPathComponent("reconstruction.tiff"))
-            try write(rendered.map, to: directory.appendingPathComponent("source-map.tiff"))
-            let manifest = ArenaExportManifest(width: analysis.width, height: analysis.height,
-                imageFile: "reconstruction.tiff", sourceMapFile: "source-map.tiff",
+            let directID = plan.flatMap { $0.kind == .original ? $0.bestSourceID : $0.kind == .unresolved ? $0.backboneID : nil }
+            var imageFile = "reconstruction.tiff", outputWidth = analysis.width, outputHeight = analysis.height
+            if let directID, let sourceIndex = archivedAnalysis.sources.firstIndex(where: { $0.id == directID }) {
+                let source = archivedAnalysis.sources[sourceIndex]
+                imageFile = "selected-original." + source.url.pathExtension
+                try FileManager.default.copyItem(at: source.url, to: directory.appendingPathComponent(imageFile))
+                outputWidth = source.width; outputHeight = source.height
+                guard let map = CGContext(data: nil, width: source.width, height: source.height, bitsPerComponent: 8, bytesPerRow: source.width,
+                    space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { throw failure("Cannot allocate source map") }
+                map.setFillColor(gray: Double(sourceIndex+1)/255, alpha: 1)
+                map.fill(CGRect(x: 0, y: 0, width: source.width, height: source.height))
+                guard let pixels = map.makeImage() else { throw failure("Cannot finish source map") }
+                try write(pixels, to: directory.appendingPathComponent("source-map.tiff"))
+            } else {
+                let rendered = try render(archivedAnalysis, selections: selections, scale: 1)
+                try write(rendered.image, to: directory.appendingPathComponent(imageFile))
+                try write(rendered.map, to: directory.appendingPathComponent("source-map.tiff"))
+            }
+            var manifest = ArenaExportManifest(width: outputWidth, height: outputHeight,
+                imageFile: imageFile, sourceMapFile: "source-map.tiff",
                 sourceMapIndices: Dictionary(uniqueKeysWithValues: analysis.sources.enumerated().map { ($0.element.id, $0.offset+1) }),
                 sourceSHA256: hashes, sourceFiles: archivedFiles,
                 analysis: analysis, selections: selections,
@@ -109,6 +131,21 @@ enum ArenaReconstruction {
                     "Original source bytes are archived in sources/ with SHA256 identities; analysis records original file URLs.",
                     "Consensus may favor correlated edited copies; it is evidence of agreement, not independent provenance."],
                 elapsedSeconds: Date().timeIntervalSince(start))
+            manifest.recoveryPlan = plan
+            manifest.pixelOperations = Dictionary(uniqueKeysWithValues: analysis.sources.map { source in
+                (source.id, directID != nil ? "Original file bytes copied; source map uses EXIF-oriented native source coordinates, not reference coordinates." :
+                    source.transform == ArenaTransform() ? "Source samples converted to 8-bit sRGB; exact binary source-selection mask; no blending." :
+                    "Projective/affine interpolation and 8-bit sRGB conversion; exact binary source-selection mask; interpolated output is not untouched source pixels.")
+            })
+            if directID != nil {
+                manifest = ArenaExportManifest(width: manifest.width, height: manifest.height, imageFile: manifest.imageFile,
+                    sourceMapFile: manifest.sourceMapFile, sourceMapIndices: manifest.sourceMapIndices, sourceSHA256: manifest.sourceSHA256,
+                    sourceFiles: manifest.sourceFiles, analysis: manifest.analysis, selections: [],
+                    warnings: analysis.warnings + ["Selected file copied byte-for-byte with its original ICC profile, metadata and bit depth; no pixel transformation.",
+                        "Source map uses EXIF-oriented native source coordinates. Reference-space review coordinates and transforms remain in analysis.",
+                        "The model recommendation is comparative and does not establish original provenance."],
+                    elapsedSeconds: Date().timeIntervalSince(start), recoveryPlan: plan, pixelOperations: manifest.pixelOperations)
+            }
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(manifest).write(to: directory.appendingPathComponent("manifest.json"), options: .atomic)
             return manifest
@@ -135,9 +172,12 @@ enum ArenaReconstruction {
         let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: colorSpace])
         let canvas = CGRect(x: 0, y: 0, width: width, height: height)
         output.setBlendMode(.copy); output.interpolationQuality = .none
-        for (sourceIndex, source) in analysis.sources.enumerated() {
-            let regions = selections.filter { $0.sourceID == source.id }
-            guard !regions.isEmpty else { continue }
+        // Preserve operation order: backbone first, then masked replacements.
+        for selection in selections {
+            try Task.checkCancellation()
+            guard let sourceIndex = analysis.sources.firstIndex(where: { $0.id == selection.sourceID }) else { throw failure("Unknown selected source") }
+            let source = analysis.sources[sourceIndex]
+            let regions = [selection]
             guard source.accepted else { throw failure("Selection references a rejected alignment") }
             try autoreleasepool {
                 let image = try ArenaForensics.alignedImage(source)
@@ -147,8 +187,15 @@ enum ArenaReconstruction {
                           region.rect.width.isFinite, region.rect.height.isFinite else { throw failure("Nonfinite selection geometry") }
                     let rect = region.rect.cgRect.applying(CGAffineTransform(scaleX: scale, y: scale)).integral.intersection(canvas)
                     guard !rect.isNull, rect.width > 0, rect.height > 0 else { continue }
+                    output.saveGState(); map.saveGState()
+                    if let mask = region.mask {
+                        let spans = mask.runs.map { CGRect(x: Double($0.x)*scale, y: Double($0.y)*scale, width: Double($0.length)*scale, height: scale) }
+                        output.addRects(spans); output.clip()
+                        map.addRects(spans); map.clip()
+                    }
                     for y in stride(from: Int(rect.minY), to: Int(rect.maxY), by: 512) {
                         for x in stride(from: Int(rect.minX), to: Int(rect.maxX), by: 512) {
+                            try Task.checkCancellation()
                             try autoreleasepool {
                                 let tile = CGRect(x: x, y: y, width: min(512, Int(rect.maxX)-x), height: min(512, Int(rect.maxY)-y))
                                 guard image.extent.contains(tile), let pixels = context.createCGImage(image, from: tile, format: .RGBA8, colorSpace: colorSpace) else {
@@ -160,6 +207,7 @@ enum ArenaReconstruction {
                     }
                     map.setFillColor(gray: Double(sourceIndex+1)/255, alpha: 1)
                     map.fill(rect)
+                    output.restoreGState(); map.restoreGState()
                 }
                 context.clearCaches()
             }

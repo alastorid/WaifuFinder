@@ -111,10 +111,33 @@ func registerArenaReconstructionTests() {
         let expected = arenaReconstructionPixels(original), actual = arenaReconstructionPixels(result)
         let absoluteError = zip(expected, actual).reduce(0.0) { $0 + abs(Double($1.0)-Double($1.1)) } / Double(expected.count)
         check(absoluteError < 1.5, "real source reconstruction preserves original within color rounding (MAE \(absoluteError))")
+        // Inject the known fixture labels at the model boundary to verify the production
+        // recovery path independently of the model's ability to recognize an overlay.
+        let records = ArenaRecoveryPlanner.jobs(analysis).map { job in
+            let findings = inputs.indices.map { i in
+                let patch = CGRect(x:(i%2)*448+32,y:(i/2)*448+32,width:160,height:100)
+                let dirty = job.overview || job.rect.cgRect.intersects(patch)
+                return ArenaCandidateFinding(source:i,originality:dirty ? (job.overview && i == 0 ? 95 : 55) : 92,
+                    cleanliness:dirty ? 20 : 98,detail:80,alteration:dirty ? 70 : 0,enhancement:0,degradation:0,consistency:95,
+                    usable:!dirty,confidence:.medium,defects:dirty ? [.watermark] : [],evidence:"Known synthetic overlay fixture label.")
+            }
+            return ArenaReviewRecord(job:job,sourceIDs:analysis.sources.map(\.id),cacheKey:"fixture",
+                result:ArenaJudgeResult(judgment:ArenaJudgment(watermark:.unknown,authenticity:.unknown,detail:.unknown,quality:.unknown,
+                    consistency:.unknown,recommended_source:.unknown,uncertain:true,evidence:[]),tokens:0,prefillSeconds:0,decodeSeconds:0,
+                    physicalFootprintBytes:0,compressedBytes:0,review:ArenaGroupAssessment(sources:findings)))
+        }
+        let reviewedPlan = try ArenaMergeVerifier.verify(analysis,plan:ArenaRecoveryPlanner.plan(analysis,reviews:records))
+        checkEqual(reviewedPlan.kind,.composite,"no single clean source; verified real-source composite selected")
+        check(reviewedPlan.verification?.contains { $0.accepted } == true,"valid surrounding pixels allow the automatic patch")
+        let reviewedDirectory = directory.appendingPathComponent("reviewed-recovery")
+        let reviewedManifest = try ArenaReconstruction.export(analysis,selections:reviewedPlan.selections,to:reviewedDirectory,plan:reviewedPlan)
+        let reviewed = arenaReconstructionPixels(try arenaReconstructionRead(reviewedDirectory.appendingPathComponent(reviewedManifest.imageFile)))
+        let reviewedError = zip(expected,reviewed).reduce(0.0) { $0+abs(Double($1.0)-Double($1.1)) }/Double(expected.count)
+        check(reviewedError < 1.5,"mask and verified donor reproduce the known source (MAE \(reviewedError))")
         let report: [String: Any] = ["fixture": "Tests/Fixtures/RealESRGAN/nasa-collins-896x1134.jpg",
             "attribution": "NASA; original repository fixture attribution in Tests/Fixtures/RealESRGAN/README.md",
             "modification": "Three conventional translucent magenta rectangle overlays; no real AI edits are claimed",
-            "width": width, "height": height, "meanAbsoluteRGBA8Error": absoluteError,
+            "width": width, "height": height, "meanAbsoluteRGBA8Error": absoluteError, "reviewedMergeMeanAbsoluteRGBA8Error": reviewedError,
             "acceptedSources": analysis.sources.filter(\.accepted).count,
             "regions": analysis.regions.count, "unresolvedRegions": selections.filter(\.unresolved).count,
             "analysisSeconds": analysis.elapsedSeconds, "exportSeconds": manifest.elapsedSeconds,

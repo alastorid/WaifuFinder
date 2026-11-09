@@ -590,7 +590,7 @@ struct FrameGridView: View {
         }
 
         if let video = session.video, isSelected, session.selectedFrameIDs.count >= 2 {
-            Button("Compare Selected in PhotoArena") {
+            Button("Find Best in PhotoArena") {
                 let sources = session.frames.filter { session.selectedFrameIDs.contains($0.id) }.map {
                     let photo = PhotosMedia.shared.photoItemURL(for: video.url, seconds: $0.timeSeconds)
                     return ArenaSource(id: String(describing: $0.id), url: photo ?? video.url,

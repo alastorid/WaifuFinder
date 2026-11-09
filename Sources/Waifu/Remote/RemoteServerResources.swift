@@ -33,6 +33,7 @@ struct RemoteModelCatalog: Sendable {
     }
 
     var arena: @Sendable (RemoteArenaRequest) async throws -> ArenaJudgeResult = { try await ArenaJudge.local($0.images) }
+    var arenaGroup: @Sendable (ArenaGroupPayload) async throws -> ArenaJudgeResult = { try await ArenaJudge.group($0) }
 
     var trufor:@Sendable (RemoteTruForRequest) async throws -> TruForJobResult = { request in
         guard TruForConfiguration.load()?.fingerprint==request.fingerprint else { throw RemoteError.modelUnavailable("Install matching local TruFor weights on the server") }

@@ -40,6 +40,8 @@ TARGET="${ARCH}-apple-macosx${DEPLOYMENT_TARGET}"
 # compiler", usually alongside a `redefinition of module 'SwiftBridging'`.
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 SWIFTC="$(xcrun --find swiftc)"
+OPTIMIZATION=(-Onone)
+if [ "${WAIFU_TEST_OPTIMIZED:-0}" = "1" ]; then OPTIMIZATION=(-O -whole-module-optimization); fi
 
 # Every production source except the `@main` scaffold. UI/ is included: the drop
 # acceptance rule and the session wiring are compiled into the same binary the tests
@@ -66,7 +68,7 @@ fi
 "$SWIFTC" --version
 echo "==> Compiling ${#SOURCES[@]} production + ${#TESTS[@]} test sources for $TARGET"
 "$SWIFTC" \
-    -Onone \
+    "${OPTIMIZATION[@]}" \
     -continue-building-after-errors \
     -swift-version 6 \
     -sdk "$SDK" \

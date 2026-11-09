@@ -1,4 +1,12 @@
-# PhotoArena regional visual judging
+# PhotoArena native model runtime
+
+PhotoArena 2.0 uses the same F16 worker, weights and Metal/CPU backend with an
+additional versioned multi-source grammar. The review request contains a labeled montage of the entire group; regional requests add
+focused detail and native-pixel measurements. It returns independent findings for every
+candidate. Local batches reuse the model process and clear recurrent/KV state between
+requests. The encrypted route negotiates the new contract separately. See
+[PhotoArena 2.0](PhotoArena-2.0.md) for the current workflow. The paired regional harness
+below records the previous implementation and remains a compatibility benchmark.
 
 ## Implemented runtime
 

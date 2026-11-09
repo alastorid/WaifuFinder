@@ -1,4 +1,36 @@
-# PhotoArena native MiniCPM integration
+# PhotoArena 2.0 — find the best of several photographs
+
+Open **File → PhotoArena…** (Shift–Command–P), or choose **Find Best in PhotoArena**
+from the frame grid. Choose or drop 2–16 versions of the same photograph. Review
+starts automatically and evaluates the whole set. The result workspace shows the
+best supported candidate, scores and reasons for every source, and the pixel changes.
+
+If one clean candidate meets the review criteria, its file is copied byte-for-byte.
+Otherwise PhotoArena considers a composite made from real aligned source pixels.
+It rejects automatic patches with insufficient surrounding agreement. When evidence
+is insufficient it retains a source and marks the uncertainty. Equivalent candidates
+can tie. Model scores are comparative judgments, not probabilities of provenance.
+
+Select a candidate to inspect its differences from the result. **Detected changes**
+shows the original group differences; **Output differences** and **Heatmap** compare
+the result to the selected source. Click a red region to inspect its evidence, or
+use **Native region** for corresponding crops at 100%. The result can also be inspected
+side by side, by swiping, by toggling the source, and with a provenance overlay.
+
+Install **PhotoArena MiniCPM-V 4.7** in Settings → Models on the inference Mac.
+A connected server must advertise the multi-source review contract; a compatible
+server can run review without model files on the client. Each action automatically
+reviews an overview and up to 12 more evidence packages. **Review Next Regions**
+continues work shown as pending. Export includes the image, original inputs, source map,
+review findings, transforms and output differences for all reliably aligned sources.
+
+See [implementation, verification and limitations](PhotoArena-2.0.md).
+
+## Historical native integration and v1 workspace
+
+The following notes record the prior A/B contracts, measurements and reproduction
+commands. The voting UI described here was replaced by the workflow above. Its worker
+contract remains available to reproduce the existing native benchmarks.
 
 Select two or more photos or frames, right-click a selected item and choose
 **Compare Selected in PhotoArena**. **Ask MiniCPM** runs the actual

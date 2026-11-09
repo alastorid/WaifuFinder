@@ -1857,6 +1857,7 @@ func registerArenaRemoteTests() {
         service.capabilities = { version, name, session in
             var value = await base(version, name, session)
             value.arenaRevision = ArenaJudgeConfiguration.revision
+            value.arenaReviewRevision = ArenaGroupPayload.revision
             return value
         }
         service.arena = { request in
@@ -1865,6 +1866,17 @@ func registerArenaRemoteTests() {
                 detail: .a, quality: .tie, consistency: .unknown, recommended_source: .unknown,
                 uncertain: true, evidence: ["A contains an overlay"]), tokens: 42, prefillSeconds: 1,
                 decodeSeconds: 2, physicalFootprintBytes: 12345, compressedBytes: 50)
+        }
+        service.arenaGroup = { payload in
+            try payload.validate()
+            let findings = payload.sourceIDs.indices.map { i in
+                ArenaCandidateFinding(source:i,originality:90-i*10,cleanliness:95,detail:85,alteration:0,
+                    enhancement:0,degradation:5,consistency:90,usable:true,confidence:.medium,defects:[],evidence:"Source \(i)")
+            }
+            return ArenaJudgeResult(judgment:ArenaJudgment(watermark:.unknown,authenticity:.unknown,detail:.unknown,
+                quality:.unknown,consistency:.unknown,recommended_source:.unknown,uncertain:true,evidence:["group"]),
+                tokens:200,prefillSeconds:1,decodeSeconds:2,physicalFootprintBytes:12345,compressedBytes:50,
+                review:ArenaGroupAssessment(sources:findings))
         }
         return service
     }
@@ -1880,6 +1892,10 @@ func registerArenaRemoteTests() {
             checkEqual(result.judgment.authenticity, .unknown, "abstention survives wire")
             checkEqual(result.judgment.evidence, ["A contains an overlay"], "evidence survives wire")
             checkEqual(result.physicalFootprintBytes, 12345, "memory evidence survives wire")
+            check(pair.client.offersArenaReview,"group review capability independently negotiated")
+            let group = try await pair.client.arenaGroup(ArenaGroupPayload(revision:ArenaGroupPayload.revision,
+                sourceIDs:["a","b","c"],images:[png,png],context:"Three candidates"))
+            checkEqual(group.review?.sources.map(\.source),[0,1,2],"all three independent findings cross encrypted transport")
         }.value
     })
     Registry.shared.add(suite: "PhotoArena remote", TestCase(name: "regional judging uses captured remote backend and caches native crop evidence", knownBug: nil) {

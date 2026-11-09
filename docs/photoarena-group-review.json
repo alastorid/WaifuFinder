@@ -1,0 +1,432 @@
+{
+  "clientPeakPhysicalFootprintBytes" : 107283416,
+  "differences" : [
+    {
+      "changedPixels" : 0,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 0,
+      "meanAbsoluteError" : 0,
+      "selectedFromOtherSourcePixels" : 0,
+      "sourceID" : "s0",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s1",
+      "uncoveredPixels" : 0
+    },
+    {
+      "changedPixels" : 7000,
+      "comparedPixels" : 1016064,
+      "maximumChannelError" : 230,
+      "meanAbsoluteError" : 0.8024497800663475,
+      "selectedFromOtherSourcePixels" : 7000,
+      "sourceID" : "s2",
+      "uncoveredPixels" : 0
+    }
+  ],
+  "elapsedSeconds" : 30.114006996154785,
+  "exportSeconds" : 0.00813603401184082,
+  "knownCleanSourceID" : "s0",
+  "mergeSeconds" : 3.898143768310547e-05,
+  "modelRecommendedKnownCleanSource" : false,
+  "outputFile" : "selected-original.png",
+  "outputMatchesKnownCleanFile" : true,
+  "plan" : {
+    "backboneID" : "s0",
+    "kind" : "unresolved",
+    "pendingRegionIDs" : [
+
+    ],
+    "rankings" : [
+      {
+        "alteration" : 6.875,
+        "cleanliness" : 73.75,
+        "confidence" : "medium",
+        "consistency" : 8,
+        "coverage" : 1,
+        "defects" : [
+          "overlay"
+        ],
+        "degradation" : 4.25,
+        "detail" : 65,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Red rectangular overlay on astronaut's blue jacket (visible red block)",
+          "region_0_0_256_256: flat colored cover with no visible detail in changed area; RGB median residual 0.0139",
+          "region_256_0_256_256: Flat red overlay block covering torso area; visible detail blocked in changed region"
+        ],
+        "sourceID" : "s0"
+      },
+      {
+        "alteration" : 7.625,
+        "cleanliness" : 64.375,
+        "confidence" : "medium",
+        "consistency" : 6.5,
+        "coverage" : 1,
+        "defects" : [
+          "overlay"
+        ],
+        "degradation" : 5.375,
+        "detail" : 50,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Red rectangular overlay on astronaut's blue jacket (visible red block)",
+          "region_0_0_256_256: red flat block covering scene detail; average RGB (230,5,9)",
+          "region_256_0_256_256: Red rectangular overlay on torso; detail partially obscured",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s1"
+      },
+      {
+        "alteration" : 7.625,
+        "cleanliness" : 64.375,
+        "confidence" : "medium",
+        "consistency" : 6.5,
+        "coverage" : 1,
+        "defects" : [
+          "overlay"
+        ],
+        "degradation" : 5.375,
+        "detail" : 50,
+        "enhancement" : 0,
+        "originality" : 100,
+        "reasons" : [
+          "overview: Red rectangular overlay on astronaut's blue jacket (visible red block)",
+          "region_0_0_256_256: red flat block covering scene detail; average RGB (230,5,9)",
+          "region_256_0_256_256: Red rectangular overlay on torso; detail partially obscured",
+          "Byte-identical candidates share the more cautious assessment; repeated copies add no independent support."
+        ],
+        "sourceID" : "s2"
+      }
+    ],
+    "reasons" : [
+      "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.",
+      "Scores compare supplied candidates and are not calibrated probabilities.",
+      "0 review tasks pending; 1016064 reference pixels measured."
+    ],
+    "selections" : [
+      {
+        "manual" : false,
+        "reasons" : [
+          "Whole-source backbone; model assessment does not establish provenance."
+        ],
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        },
+        "regionID" : "backbone",
+        "sourceID" : "s0",
+        "unresolved" : true
+      }
+    ],
+    "unresolvedRegionIDs" : [
+      "region_0_0_256_256",
+      "region_256_0_256_256"
+    ]
+  },
+  "preprocessingSeconds" : 0.27497196197509766,
+  "records" : [
+    {
+      "cacheKey" : "bc7695d4374dc925d006424ee3058d354fe46cde6a852a7fbe45a72ff8940a66",
+      "job" : {
+        "id" : "overview",
+        "overview" : true,
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0.018814458,
+        "decodeSeconds" : 8.739789375,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3214114816,
+        "physicalFootprintBytes" : 1593773440,
+        "prefillSeconds" : 0.447731417,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 8,
+              "cleanliness" : 70,
+              "confidence" : "medium",
+              "consistency" : 8,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 5,
+              "detail" : 65,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular overlay on astronaut's blue jacket (visible red block)",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : false
+            },
+            {
+              "alteration" : 8,
+              "cleanliness" : 70,
+              "confidence" : "medium",
+              "consistency" : 8,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 5,
+              "detail" : 65,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular overlay on astronaut's blue jacket (visible red block)",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : false
+            },
+            {
+              "alteration" : 8,
+              "cleanliness" : 70,
+              "confidence" : "medium",
+              "consistency" : 8,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 5,
+              "detail" : 65,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular overlay on astronaut's blue jacket (visible red block)",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : false
+            }
+          ]
+        },
+        "tokens" : 381,
+        "workerPeakPhysicalFootprintBytes" : 1593953664,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "dd6a95d481765b19bde3b6ec5def723febb50fa1bb22d649618639fa95f5fc08",
+      "job" : {
+        "detailRect" : {
+          "height" : 88,
+          "width" : 68,
+          "x" : 188,
+          "y" : 168
+        },
+        "id" : "region_0_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0.025131042,
+        "decodeSeconds" : 7.948583292,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1615957400,
+        "prefillSeconds" : 1.093987999,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 80,
+              "confidence" : "medium",
+              "consistency" : 8,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 3,
+              "detail" : 70,
+              "enhancement" : 0,
+              "evidence" : "flat colored cover with no visible detail in changed area; RGB median residual 0.0139",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : false
+            },
+            {
+              "alteration" : 8,
+              "cleanliness" : 60,
+              "confidence" : "medium",
+              "consistency" : 5,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 7,
+              "detail" : 40,
+              "enhancement" : 0,
+              "evidence" : "red flat block covering scene detail; average RGB (230,5,9)",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : false
+            },
+            {
+              "alteration" : 8,
+              "cleanliness" : 60,
+              "confidence" : "medium",
+              "consistency" : 5,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 7,
+              "detail" : 40,
+              "enhancement" : 0,
+              "evidence" : "red flat block covering scene detail; average RGB (230,5,9)",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : false
+            }
+          ]
+        },
+        "tokens" : 400,
+        "workerPeakPhysicalFootprintBytes" : 1618644376,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "b8f9abb2f3d37ff588fd2dcedba40f1851790169d5813e99d04d2bee983e78ad",
+      "job" : {
+        "detailRect" : {
+          "height" : 88,
+          "width" : 56,
+          "x" : 256,
+          "y" : 168
+        },
+        "id" : "region_256_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 256,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 0,
+        "contextInitSeconds" : 0,
+        "decodeSeconds" : 7.475455292,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "metalAllocatedBytes" : 3217522688,
+        "physicalFootprintBytes" : 1616989592,
+        "prefillSeconds" : 1.083474583,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 8,
+              "cleanliness" : 70,
+              "confidence" : "medium",
+              "consistency" : 8,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 5,
+              "detail" : 60,
+              "enhancement" : 0,
+              "evidence" : "Flat red overlay block covering torso area; visible detail blocked in changed region",
+              "originality" : 100,
+              "source" : 0,
+              "usable" : false
+            },
+            {
+              "alteration" : 7,
+              "cleanliness" : 65,
+              "confidence" : "medium",
+              "consistency" : 7,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 4,
+              "detail" : 50,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular overlay on torso; detail partially obscured",
+              "originality" : 100,
+              "source" : 1,
+              "usable" : false
+            },
+            {
+              "alteration" : 7,
+              "cleanliness" : 65,
+              "confidence" : "medium",
+              "consistency" : 7,
+              "defects" : [
+                "overlay"
+              ],
+              "degradation" : 4,
+              "detail" : 50,
+              "enhancement" : 0,
+              "evidence" : "Red rectangular overlay on torso; detail partially obscured",
+              "originality" : 100,
+              "source" : 2,
+              "usable" : false
+            }
+          ]
+        },
+        "tokens" : 377,
+        "workerPeakPhysicalFootprintBytes" : 1619152280,
+        "workerSwapins" : 0
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    }
+  ],
+  "scope" : "Actual 3-source optimized Swift + native MiniCPM end-to-end workflow on NASA photograph with conventional red overlays. Client footprint is sampled; native physical lifetime peak, Metal allocation, compressed bytes and raw swap-in ledger are worker measurements. No AI-edit accuracy calibration or whole GUI app measurement.",
+  "verificationSeconds" : 0.21246600151062012
+}

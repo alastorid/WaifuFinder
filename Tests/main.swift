@@ -48,6 +48,7 @@ while index < arguments.count {
 
 registerPhotoArenaTests()
 registerArenaRegionalJudgeTests()
+registerArenaRecoveryTests()
 registerArenaReconstructionTests()
 registerArenaForensicsTests()
 registerArenaRemoteTests()

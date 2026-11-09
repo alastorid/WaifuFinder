@@ -1,0 +1,278 @@
+{
+  "clientPeakPhysicalFootprintBytes" : 118916032,
+  "elapsedSeconds" : 762.3715169429779,
+  "plan" : {
+    "backboneID" : "s0",
+    "kind" : "unresolved",
+    "pendingRegionIDs" : [
+      "region_256_0_256_256"
+    ],
+    "rankings" : [
+      {
+        "alteration" : 5,
+        "cleanliness" : 90,
+        "confidence" : "low",
+        "consistency" : 95,
+        "coverage" : 0.5,
+        "defects" : [
+
+        ],
+        "degradation" : 2,
+        "detail" : 85,
+        "enhancement" : 3,
+        "originality" : 95,
+        "reasons" : [
+          "overview: Source 0: native 896x1134, aligned true, correlation 1.000. No visible watermarks or edits.",
+          "region_0_0_256_256: Subject is portrait with American flag and space shuttle; no obvious watermarks or edits."
+        ],
+        "sourceID" : "s0"
+      },
+      {
+        "alteration" : 4,
+        "cleanliness" : 88,
+        "confidence" : "low",
+        "consistency" : 92,
+        "coverage" : 0.5,
+        "defects" : [
+
+        ],
+        "degradation" : 1.8,
+        "detail" : 80.8,
+        "enhancement" : 2,
+        "originality" : 93,
+        "reasons" : [
+          "overview: Source 1: native 896x1134, aligned true, correlation 1.000. No visible watermarks or edits.",
+          "region_0_0_256_256: Subject portrait with flag and shuttle; alignment and correlation indicate good quality."
+        ],
+        "sourceID" : "s1"
+      },
+      {
+        "alteration" : 3,
+        "cleanliness" : 85,
+        "confidence" : "low",
+        "consistency" : 90.2,
+        "coverage" : 0.5,
+        "defects" : [
+          "text"
+        ],
+        "degradation" : 1.4,
+        "detail" : 78,
+        "enhancement" : 2.8,
+        "originality" : 91.6,
+        "reasons" : [
+          "overview: Source 2: native 896x1134, aligned true, correlation 1.000. Red text box present.",
+          "region_0_0_256_256: Subject portrait with flag and shuttle; alignment and correlation indicate good quality."
+        ],
+        "sourceID" : "s2"
+      }
+    ],
+    "reasons" : [
+      "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.",
+      "Scores compare supplied candidates and are not calibrated probabilities.",
+      "1 review tasks pending; 1016064 reference pixels measured."
+    ],
+    "selections" : [
+      {
+        "manual" : false,
+        "reasons" : [
+          "Whole-source backbone; model assessment does not establish provenance."
+        ],
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        },
+        "regionID" : "backbone",
+        "sourceID" : "s0",
+        "unresolved" : true
+      }
+    ],
+    "unresolvedRegionIDs" : [
+      "region_0_0_256_256",
+      "region_256_0_256_256"
+    ]
+  },
+  "preprocessingSeconds" : 738.3490769863129,
+  "records" : [
+    {
+      "cacheKey" : "262d2da8ded5697c1c76dc5184654d88842e11fe55a8ec8f25adf21a9cfc927b",
+      "job" : {
+        "id" : "overview",
+        "overview" : true,
+        "rect" : {
+          "height" : 1134,
+          "width" : 896,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 93257728,
+        "decodeSeconds" : 7.12874825,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "physicalFootprintBytes" : 1405570360,
+        "prefillSeconds" : 1.481430583,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "high",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Source 0: native 896x1134, aligned true, correlation 1.000. No visible watermarks or edits.",
+              "originality" : 95,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 4,
+              "cleanliness" : 88,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+
+              ],
+              "degradation" : 3,
+              "detail" : 82,
+              "enhancement" : 2,
+              "evidence" : "Source 1: native 896x1134, aligned true, correlation 1.000. No visible watermarks or edits.",
+              "originality" : 93,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 3,
+              "cleanliness" : 85,
+              "confidence" : "medium",
+              "consistency" : 89,
+              "defects" : [
+                "text"
+              ],
+              "degradation" : 2,
+              "detail" : 78,
+              "enhancement" : 4,
+              "evidence" : "Source 2: native 896x1134, aligned true, correlation 1.000. Red text box present.",
+              "originality" : 91,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 343
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "cacheKey" : "6b922e3b1537aa6a56569377c1e6e760607c1bd82b8b35d0bb560f31afc6f61b",
+      "job" : {
+        "id" : "region_0_0_256_256",
+        "overview" : false,
+        "rect" : {
+          "height" : 256,
+          "width" : 256,
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "result" : {
+        "compressedBytes" : 41369600,
+        "decodeSeconds" : 5.8815725,
+        "judgment" : {
+          "authenticity" : "unknown",
+          "consistency" : "unknown",
+          "detail" : "unknown",
+          "evidence" : [
+            "Independent multi-source review; see review.sources."
+          ],
+          "quality" : "unknown",
+          "recommended_source" : "unknown",
+          "uncertain" : true,
+          "watermark" : "unknown"
+        },
+        "physicalFootprintBytes" : 1435487592,
+        "prefillSeconds" : 1.207099083,
+        "review" : {
+          "sources" : [
+            {
+              "alteration" : 5,
+              "cleanliness" : 90,
+              "confidence" : "medium",
+              "consistency" : 95,
+              "defects" : [
+
+              ],
+              "degradation" : 2,
+              "detail" : 85,
+              "enhancement" : 3,
+              "evidence" : "Subject is portrait with American flag and space shuttle; no obvious watermarks or edits.",
+              "originality" : 95,
+              "source" : 0,
+              "usable" : true
+            },
+            {
+              "alteration" : 4,
+              "cleanliness" : 88,
+              "confidence" : "medium",
+              "consistency" : 92,
+              "defects" : [
+
+              ],
+              "degradation" : 1,
+              "detail" : 80,
+              "enhancement" : 2,
+              "evidence" : "Subject portrait with flag and shuttle; alignment and correlation indicate good quality.",
+              "originality" : 93,
+              "source" : 1,
+              "usable" : true
+            },
+            {
+              "alteration" : 3,
+              "cleanliness" : 85,
+              "confidence" : "medium",
+              "consistency" : 91,
+              "defects" : [
+
+              ],
+              "degradation" : 1,
+              "detail" : 78,
+              "enhancement" : 2,
+              "evidence" : "Subject portrait with flag and shuttle; alignment and correlation indicate good quality.",
+              "originality" : 92,
+              "source" : 2,
+              "usable" : true
+            }
+          ]
+        },
+        "tokens" : 291
+      },
+      "sourceIDs" : [
+        "s0",
+        "s1",
+        "s2"
+      ]
+    }
+  ],
+  "scope" : "Actual 3-source native MiniCPM overview and region review on NASA photograph with conventional red overlays. No AI-edit accuracy calibration. Worker metrics are end-of-pass samples, not whole-app peak. Pending regions are explicit."
+}

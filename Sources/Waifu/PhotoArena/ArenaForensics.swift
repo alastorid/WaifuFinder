@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import CryptoKit
 import Foundation
 import ImageIO
 import Vision
@@ -63,10 +64,16 @@ enum ArenaForensics {
         return result
     }
     static func crop(_ source: ArenaAnalyzedSource, rect: CGRect) throws -> CGImage {
-        guard let output = context.createCGImage(try alignedImage(source), from: rect, format: .RGBA8, colorSpace: color) else {
+        try crop(alignedImage(source), rect: rect)
+    }
+    static func crop(_ image: CIImage, rect: CGRect) throws -> CGImage {
+        guard let output = context.createCGImage(image, from: rect, format: .RGBA8, colorSpace: color) else {
             throw failure("Cannot render aligned PhotoArena crop")
         }
         return output
+    }
+    static func pixelBytes(_ image: CGImage) -> [UInt8] {
+        bytes(CIImage(cgImage: image), rect: CGRect(x: 0,y: 0,width: image.width,height: image.height))
     }
     private static func bytes(_ image: CIImage, rect: CGRect) -> [UInt8] {
         let width = Int(rect.width), height = Int(rect.height)
@@ -184,18 +191,35 @@ enum ArenaForensics {
                   let w = properties[kCGImagePropertyPixelWidth] as? Int, let h = properties[kCGImagePropertyPixelHeight] as? Int,
                   w > 0, h > 0, Double(w)*Double(h) <= 160_000_000 else { throw failure("Unreadable or unsupported image: \(source.url.lastPathComponent)") }
             let rotated = (5...8).contains((properties[kCGImagePropertyOrientation] as? Int) ?? 1)
+            let handle = try FileHandle(forReadingFrom: source.url); defer { try? handle.close() }
+            var digest = SHA256()
+            while let data = try handle.read(upToCount: 1024*1024), !data.isEmpty { try Task.checkCancellation(); digest.update(data: data) }
             return ArenaAnalyzedSource(id: source.id,url: source.url,width: rotated ? h : w,height: rotated ? w : h,
-                transform: ArenaTransform(),alignmentConfidence: 1,accepted: true,issues: [])
+                transform: ArenaTransform(),alignmentConfidence: 1,accepted: true,issues: [],
+                fileSHA256: digest.finalize().map { String(format: "%02x", $0) }.joined())
         }
         let reference = sources.max { $0.width*$0.height < $1.width*$1.height }!
+        var registered: [String: ArenaAnalyzedSource] = [:]
+        if let hash = reference.fileSHA256 { registered[hash] = reference }
         for i in sources.indices where sources[i].id != reference.id {
             try Task.checkCancellation()
-            sources[i] = try register(sources[i], reference: reference)
+            if let hash = sources[i].fileSHA256, let identical = registered[hash] {
+                sources[i].transform = identical.transform; sources[i].accepted = identical.accepted
+                sources[i].alignmentConfidence = identical.alignmentConfidence
+                sources[i].issues = identical.issues + ["Byte-identical source; registration reused."]
+            } else {
+                sources[i] = try register(sources[i], reference: reference)
+                if let hash = sources[i].fileSHA256 { registered[hash] = sources[i] }
+            }
         }
         let accepted = sources.filter(\.accepted)
         let images = try accepted.map(alignedImage)
         let text = accepted.map(textBoxes)
+        var seen: Set<String> = []
+        let distinct = accepted.map { seen.insert($0.fileSHA256 ?? $0.id).inserted }
         var regions: [ArenaRegion] = []
+        var retainedRuns = 0
+        var deferredMasks = 0
         for y in stride(from: 0, to: reference.height, by: tileSize) {
             for x in stride(from: 0, to: reference.width, by: tileSize) {
                 try Task.checkCancellation()
@@ -206,6 +230,7 @@ enum ArenaForensics {
                 var available = [Int](); available.reserveCapacity(accepted.count)
                 var channelValues = [Double](); channelValues.reserveCapacity(accepted.count)
                 var median = [Double](repeating: 0, count: 3)
+                var changed = [Bool](repeating: false, count: count)
                 for pixel in 0..<count {
                     let offset = pixel*4
                     available.removeAll(keepingCapacity: true)
@@ -213,8 +238,9 @@ enum ArenaForensics {
                     guard !available.isEmpty else { continue }
                     for c in 0..<3 {
                         channelValues.removeAll(keepingCapacity: true)
-                        for index in available { channelValues.append(Double(buffers[index][offset+c])) }
+                        for index in available where distinct[index] { channelValues.append(Double(buffers[index][offset+c])) }
                         channelValues.sort()
+                        if channelValues.count >= 2 && channelValues.last! - channelValues.first! > 12 { changed[pixel] = true }
                         let middle = channelValues.count/2
                         median[c] = channelValues.count%2 == 0 ? (channelValues[middle-1]+channelValues[middle])/2 : channelValues[middle]
                     }
@@ -234,12 +260,27 @@ enum ArenaForensics {
                         clipping: clipped[i]/max(1,valid[i]),validFraction: valid[i]/Double(count),textCandidateFraction: textArea,
                         evidence: ["Residual is RGB deviation from cross-source pixel median; agreement is not proof of originality.","Sharpness includes noise and sharpening; it is not authenticated detail."] + (textArea > 0 ? ["OCR text candidate: may be scene text, not a confirmed watermark."] : []))
                 }
-                regions.append(ArenaRegion(id: "region_\(regions.count)",rect: ArenaPixelRect(rect),measurements: measurements,unresolved: true,
-                    evidence: [accepted.count < 2 ? "Fewer than two registered sources cover this analysis." : "Pixel evidence cannot establish original provenance; human or independently trusted evidence is required."]))
+                var runs: [ArenaMaskRun] = []
+                for row in 0..<Int(rect.height) {
+                    var column = 0
+                    while column < width {
+                        guard changed[row*width+column] else { column += 1; continue }
+                        let start = column
+                        while column < width && changed[row*width+column] { column += 1 }
+                        runs.append(ArenaMaskRun(y: y+row, x: x+start, length: column-start))
+                    }
+                }
+                let keepMask = retainedRuns + runs.count <= 500_000
+                if keepMask { retainedRuns += runs.count } else { deferredMasks += 1 }
+                regions.append(ArenaRegion(id: "region_\(x)_\(y)_\(Int(rect.width))_\(Int(rect.height))",rect: ArenaPixelRect(rect),measurements: measurements,unresolved: true,
+                    evidence: [accepted.count < 2 ? "Fewer than two registered sources cover this analysis." : "Pixel evidence cannot establish original provenance; shared edits remain possible."] +
+                        (keepMask ? [] : ["Precise mask deferred: the 500,000-run memory budget was reached; this region is not identical."]),
+                    changeMask: keepMask ? ArenaPixelMask(runs: runs) : nil, maskDeferred: keepMask ? nil : true))
             }
         }
         return ArenaAnalysis(referenceID: reference.id,width: reference.width,height: reference.height,sources: sources,regions: regions,
-            warnings: ["Authenticity and watermark classification remain unverified. OCR and residuals are candidate evidence only.","Global homography cannot validate parallax or local deformation. Tile boundaries are analysis regions, not semantic segmentation."],elapsedSeconds: Date().timeIntervalSince(start))
+            warnings: ["Authenticity and watermark classification remain unverified. OCR and residuals are candidate evidence only.","Global homography cannot validate parallax or local deformation. Tile boundaries group exact changed-pixel runs; they are not object segmentation."] +
+                (deferredMasks == 0 ? [] : ["\(deferredMasks) precise masks deferred by the memory budget; measurements remain available and these regions cannot be automatically patched."]),elapsedSeconds: Date().timeIntervalSince(start))
     }
     static func differenceOverlay(_ analysis: ArenaAnalysis, sourceID: String, maxPixelSize: Int = 1600) throws -> CGImage {
         guard let source = analysis.sources.first(where: { $0.id == sourceID && $0.accepted }), let reference = analysis.sources.first(where: { $0.id == analysis.referenceID }) else { throw failure("Registered source unavailable") }
