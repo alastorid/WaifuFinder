@@ -90,13 +90,8 @@ ranking/cache tests, alignment/difference checks, and exact grid reveal tests.
 `./run-tests.sh` runs the existing regression suites as well. `./build.sh` builds the
 app (`WAIFU_BUILD_CONFIGURATION=debug` selects the supported debug configuration).
 
-The reviewable interactive smoke script is `tools/ui-test-crystal-orb.sh`. Invoke
-only through `./run-ui-tests.sh tools/ui-test-crystal-orb.sh`. The launcher requests
-approval for that exact invocation and sends the required completion notification.
-The script restarts the app, imports a synthetic Apple-generated video, pastes a
-native frame, checks results and all modes, closes to the grid, then checks Photos
-workspace toolbar and paste activation. It restores clipboard contents and saves
-accessibility trees/screenshots. It does not alter Photos assets or iCloud settings.
+The earlier interactive smoke check is historical. Current validation follows the
+noninteractive-only [repository policy](../AGENTS.md).
 
 Synchronous ImageIO query decoding and pair difference rendering each have a serial
 actor. This bounds native processing across rapid query/candidate replacements,

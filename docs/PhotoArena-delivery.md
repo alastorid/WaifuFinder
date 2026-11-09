@@ -1,5 +1,7 @@
 # PhotoArena delivery status
 
+> This records the earlier pairwise delivery and its validation. For the current best-of-many workflow, see [PhotoArena](PhotoArena.md) and the [2.0 implementation report](PhotoArena-2.0.md).
+
 PhotoArena is integrated into WaifuFinder as a native, executable evidence and
 reconstruction prototype. This delivery does not complete every research and
 validation requirement of the mission.

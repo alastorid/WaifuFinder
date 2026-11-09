@@ -1,8 +1,7 @@
 # WaifuFinder regression tests
 
-There is no SwiftPM on this machine, and neither XCTest nor Swift Testing can run, so
-these are not a target in any framework. They are compiled **into the same binary as the
-production sources** by [`../run-tests.sh`](../run-tests.sh):
+The app regression suite uses its own harness. [`../run-tests.sh`](../run-tests.sh)
+compiles the tests and production sources into the same executable:
 
 ```sh
 ../run-tests.sh                 # compile + run everything
@@ -19,11 +18,9 @@ and removes that afterwards. The default run never touches the real cache at
 `~/Library/Application Support/Waifu`, the sample video or `dist/`; every fixture is a
 temporary directory.
 
-Because the production code is compiled in, **a failing case means the real code
-misbehaved** — there is no mock to drift out of sync. Where a production member is `private`
-because it is an implementation detail (`FrameExporter.uniqueDestinationURL`, `RankMap`) it
-is internal and documented as a test seam; nothing here re-implements the logic it is
-testing.
+Cases call production code directly. Some inject fixtures or substitute external
+dependencies to exercise a particular behavior. Internal test seams provide access
+to implementation details such as `FrameExporter.uniqueDestinationURL` and `RankMap`.
 
 ## Remote inference
 
@@ -31,26 +28,13 @@ Run `./run-tests.sh --only remote` from the repository root. The suite uses real
 loopback TCP connections with generated vocabulary, image fixtures and injected model
 backends. It needs no downloaded weights and does not read or write the login Keychain.
 Network discovery is tested as encoded datagrams and an expiring cache; the loopback
-listener does not need to advertise on the LAN. Hardware model execution and interactive
-Settings layout are separate checks.
+listener does not need to advertise on the LAN. Hardware model execution has separate opt-in checks.
 
-## Interactive UI tests
+## Test policy
 
-Save interactive checks as executable scripts and launch each invocation through
-[`../run-ui-tests.sh`](../run-ui-tests.sh):
-
-```sh
-../run-ui-tests.sh /absolute/path/to/ui-test-script argument
-```
-
-After the approved script exits, the launcher sends a native macOS notification
-that the UI steps are finished and control is back with the user.
-
-The launcher shows a native message box with the exact script and arguments before
-starting it. **OK** approves only that invocation, ending when the script exits.
-Cancel, closing the dialog, or a dialog error prevents execution. There is no
-approval timeout, stored approval, or unattended bypass. This does not authorize
-separate UI actions by an agent. The background regression runner is unchanged.
+Run automated, noninteractive tests only. Repository policy prohibits creating or
+running interactive UI tests and using the legacy launcher. See [AGENTS.md](../AGENTS.md)
+for the full policy.
 
 ## `knownBug:` markers
 
@@ -92,6 +76,16 @@ samples for transport-stream and HLS tests. No external media executable is need
 | `FrameExporterTests.swift` | export naming, the overwrite suffix, and a real PNG/JPEG round trip |
 | `RemoteProtocolTests.swift` | bounded binary framing, encryption and replay rejection, keys, discovery expiry, vocabulary integrity, real TCP handshake/UInt8/LZ4 tagging/reconstruction with injected models, cancellation/model-reference cleanup, busy rejection, kick and reconnect |
 | `UncoverTests.swift` | snapped ROI/letterboxing/rotation, large selections at every scale, degradation, known-value compositing, consecutive PTS, variable-timing audio/video export, cancellation, algorithm cache/preparation reuse, unsupported-factor preservation, failure retention, and opt-in real native inference |
+
+## PhotoArena
+
+Run `./run-tests.sh --only PhotoArena` from the repository root. The suites cover
+native registration and difference masks, selecting one best candidate from several,
+abstaining on ties, preserving original bytes, verifying recovered patches, and
+sending structured evidence over encrypted loopback. Model installation and live
+multi-source inference checks are opt-in. See the
+[PhotoArena implementation report](../docs/PhotoArena-2.0.md) for the measured model
+limitations.
 
 ## WD Tagger
 

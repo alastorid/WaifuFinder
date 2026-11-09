@@ -7,12 +7,11 @@ Find the best frames in a long video — and explore, rank and tag your Photos a
 **[Visit the WaifuFinder showcase](https://alastorid.github.io/WaifuFinder/)** ·
 **[Get the latest macOS release](https://github.com/alastorid/WaifuFinder/releases)**
 
-Public release builds include PGTFormer and are for non-commercial use. See
+Public release builds offer a separate PGTFormer model download and are for non-commercial use. See
 [the licensing notes](docs/Licensing.md) for the model terms and the separate commercial build.
 
-For the pinned WD Tagger, TruFor and SAFIRE versions, reference parity and
-measured speed/memory comparisons, see the
-[native model status summary](docs/Native-model-status.md).
+Find feature guides, maintenance instructions and benchmark evidence in the
+[documentation index](docs/README.md).
 
 ## Start here
 
@@ -23,7 +22,7 @@ measured speed/memory comparisons, see the
 | Explore the latest additions | [Recent highlights](#recent-highlights) |
 | Work with my photo library | [Photos workspace](#photos-workspace) |
 | Share models across Macs | [Remote inference](#remote-inference) |
-| Compare and reconstruct photo versions | [PhotoArena](docs/PhotoArena.md) · [Verified behavior and limitations](docs/PhotoArena-delivery.md) · [Runtime optimization](docs/PhotoArena-optimization.md) |
+| Compare and reconstruct photo versions | [PhotoArena](docs/PhotoArena.md) · [Implementation and limitations](docs/PhotoArena-2.0.md) |
 | Inspect or restore pixels | [Photo analysis](#photo-analysis) · [Uncover Waifu](#uncover-waifu) |
 | Check measured performance | [WD Tagger measurements](#wd-tagger-performance-matrix) |
 | Build or contribute | [Build and run](#build-and-run) · [Tests](#tests) · [Layout](#layout) |
@@ -472,8 +471,8 @@ workers under `Runtime/` use SwiftPM with the clone-local workaround prepared by
 `tools/native-toolchain/prepare.sh`. App regression cases use a hand-rolled harness rather
 than XCTest or Swift Testing. `run-tests.sh` compiles the production sources — everything
 except the `@main` scaffold — together with everything under `Tests/` into one throwaway
-executable. Because the production code is compiled in, **a failing case means the real
-code misbehaved**; there is no mock to drift out of sync.
+executable. Cases exercise production code and can inject fixtures or substitute
+external dependencies such as model workers.
 
 See [`Tests/README.md`](Tests/README.md) for the harness and which suite covers what.
 
@@ -930,7 +929,7 @@ waifu/
 ```
 
 The engine/UI contract is in [`docs/API.md`](docs/API.md). Current subsystem details and
-validation live in the model and feature documents under `docs/`.
+validation are linked from the [documentation index](docs/README.md).
 
 ## Requirements
 

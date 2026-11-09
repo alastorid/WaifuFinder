@@ -2,20 +2,24 @@
 
 Open **File → PhotoArena…** (Shift–Command–P), or choose **Find Best in PhotoArena**
 from the frame grid. Choose or drop 2–16 versions of the same photograph. Review
-starts automatically and evaluates the whole set. The result workspace shows the
-best supported candidate, scores and reasons for every source, and the pixel changes.
+starts automatically and evaluates the whole set. The gallery shows one suggested
+best candidate and groups the other candidates under **The rest**, in input order.
+An incomplete review makes the suggestion provisional. A tie or insufficient
+evidence can leave the best candidate undecided.
 
 If one clean candidate meets the review criteria, its file is copied byte-for-byte.
 Otherwise PhotoArena considers a composite made from real aligned source pixels.
 It rejects automatic patches with insufficient surrounding agreement. When evidence
-is insufficient it retains a source and marks the uncertainty. Equivalent candidates
-can tie. Model scores are comparative judgments, not probabilities of provenance.
+is insufficient it retains a source and marks the uncertainty. Model scores are
+comparative judgments. In the recorded three-source fixture the model misclassified
+the clean candidate and the planner withheld a winner.
 
-Select a candidate to inspect its differences from the result. **Detected changes**
-shows the original group differences; **Output differences** and **Heatmap** compare
-the result to the selected source. Click a red region to inspect its evidence, or
-use **Native region** for corresponding crops at 100%. The result can also be inspected
-side by side, by swiping, by toggling the source, and with a provenance overlay.
+**Detected changes** outlines the group's measured differences with red rectangles.
+Select a rectangle to see a leader line and the named candidate's model finding.
+Green **+** marks a positive finding, red **−** marks a negative finding, and amber
+**?** marks missing or uncertain evidence. **Output differences** runs a pixel audit
+against the selected source. **Native region** shows corresponding crops at 100%.
+Other views include side by side, swipe, blink, overlay, provenance and alignment.
 
 Install **PhotoArena MiniCPM-V 4.7** in Settings → Models on the inference Mac.
 A connected server must advertise the multi-source review contract; a compatible
