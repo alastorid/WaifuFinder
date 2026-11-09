@@ -78,7 +78,7 @@ struct ArenaStudioView: View {
             }
             Text("\(analysis.sources.count) candidates · \(studio.changeRegions.count) changed regions · \(studio.plan?.pendingRegionIDs.count ?? 0) review tasks pending · \(studio.plan?.unresolvedRegionIDs.count ?? 0) regions with uncertainty")
                 .font(.caption)
-            Text(studio.plan?.reasons.first ?? "Preparing evidence…").font(.caption).foregroundStyle(.secondary)
+            Text((studio.plan?.pendingRegionIDs.isEmpty == false ? "Provisional choice · review is incomplete. " : "") + (studio.plan?.reasons.first ?? "Preparing evidence…")).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private func gallery(_ analysis: ArenaAnalysis) -> some View {
@@ -86,18 +86,25 @@ struct ArenaStudioView: View {
         let area = Double(analysis.width)*Double(analysis.height)
         return ScrollView(.horizontal) {
             HStack(spacing: 10) {
-                ForEach(studio.plan?.rankings ?? [], id: \.sourceID) { rank in
+                ForEach(candidateCards(analysis), id: \.sourceID) { rank in
+                    if rank.sourceID == analysis.sources.first(where: { $0.id != studio.plan?.bestSourceID })?.id {
+                        Divider()
+                        Text("The rest").font(.headline).padding(.horizontal, 6)
+                    }
                     Button {
                         studio.sourceID = rank.sourceID
-                        studio.differenceScope = "Output differences"
+                        studio.differenceScope = "Detected changes"
                     } label: {
                         HStack(spacing: 7) {
                             if let image = studio.previews[rank.sourceID] {
                                 Image(decorative: image, scale: 1).resizable().scaledToFit().frame(width: 70, height: 62)
                             }
                             VStack(alignment: .leading, spacing: 3) {
+                                if rank.sourceID == studio.plan?.bestSourceID {
+                                    Text("Suggested best").font(.caption.bold()).foregroundStyle(.green)
+                                }
                                 Text(sourceName(rank.sourceID, analysis)).font(.caption.bold()).lineLimit(1)
-                                Text("Originality \(score(rank.originality)) · detail \(score(rank.detail))").font(.caption)
+
                                 Text("\(rank.confidence.rawValue) confidence · \(Int(rank.coverage*100))% regional review").font(.caption2)
                                 Text(rank.defects.isEmpty ? "No classified defects yet" : rank.defects.map(\.rawValue).joined(separator: ", "))
                                     .font(.caption2).lineLimit(1)
@@ -109,6 +116,11 @@ struct ArenaStudioView: View {
                 }
             }
         }.frame(height: 86)
+    }
+    private func candidateCards(_ analysis: ArenaAnalysis) -> [ArenaCandidateAssessment] {
+        let candidates = analysis.sources.compactMap { source in studio.plan?.rankings.first { $0.sourceID == source.id } }
+        return candidates.filter { $0.sourceID == studio.plan?.bestSourceID }
+            + candidates.filter { $0.sourceID != studio.plan?.bestSourceID }
     }
     private func contributions(_ analysis: ArenaAnalysis) -> [String:Int] {
         guard let plan = studio.plan else { return [:] }
@@ -131,18 +143,18 @@ struct ArenaStudioView: View {
                 }.buttonStyle(.bordered).controlSize(.small)
             }
             HStack {
-                Toggle("Red differences", isOn: $studio.showRed).toggleStyle(.checkbox)
-                Text("Sensitivity").font(.caption)
+                Toggle("Difference annotations", isOn: $studio.showRed).toggleStyle(.checkbox)
+                Text("Audit threshold").font(.caption)
                 Slider(value: $studio.tolerance, in: 1...64, step: 1).frame(maxWidth: 100)
-                    .help("Lower thresholds reveal smaller pixel differences. Color, compression and alignment can also cause differences.")
-                Text("Opacity").font(.caption)
-                Slider(value: $studio.opacity, in: 0.1...0.9).frame(maxWidth: 90)
+                    .disabled(studio.differenceScope != "Output differences")
+                    .help("Threshold for the output pixel audit. Region boxes show the detected regions used for model review.")
+
                 if studio.inspectionMode == "Swipe" { Slider(value: $swipe, in: 0...1).frame(maxWidth: 100) }
                 if studio.inspectionMode == "Blink" { Button(blink ? "Show Result" : "Show Source") { blink.toggle() } }
                 Spacer(minLength: 0)
             }.controlSize(.small)
             HStack {
-                ForEach(["Detected changes", "Output differences", "Heatmap"],id:\.self) { scope in
+                ForEach(["Detected changes", "Output differences"],id:\.self) { scope in
                     Button(scope) { studio.differenceScope = scope; studio.showRed = true }
                         .tint(studio.differenceScope == scope ? .accentColor : .secondary)
                 }
@@ -198,8 +210,8 @@ struct ArenaStudioView: View {
                     if !source, studio.inspectionMode == "Overlay", let cg = studio.previews[studio.sourceID] {
                         Image(decorative: cg, scale: 1).resizable().frame(width: size.width, height: size.height).opacity(0.4)
                     }
-                    if studio.showRed, let overlay = studio.redOverlay {
-                        Image(decorative: overlay, scale: 1).resizable().interpolation(.none).frame(width: size.width, height: size.height)
+                    if studio.showRed {
+                        annotations(analysis, scale: scale, size: size, showingSource: showingSource)
                     }
                     if studio.inspectionMode == "Provenance", let plan = studio.plan {
                         Canvas { context, _ in
@@ -241,7 +253,7 @@ struct ArenaStudioView: View {
                     let x = (location.x-(geometry.size.width-size.width)/2-studio.pan.width)/scale
                     let y = Double(analysis.height)-(location.y-(geometry.size.height-size.height)/2-studio.pan.height)/scale
                     studio.regionID = studio.changeRegions.first { region in
-                        region.changeMask?.contains(x: Int(floor(x)), y: Int(floor(y))) ?? region.rect.cgRect.contains(CGPoint(x: x,y: y))
+                        (region.changeMask?.bounds ?? region.rect.cgRect).contains(CGPoint(x: x,y: y))
                     }?.id
                 }
                 .gesture(DragGesture().onChanged { value in
@@ -251,6 +263,40 @@ struct ArenaStudioView: View {
                     studio.zoom = max(1, min(32, zoomOrigin*value.magnification))
                 }.onEnded { _ in zoomOrigin = studio.zoom })
         }
+    }
+    private func annotations(_ analysis: ArenaAnalysis, scale: Double, size: CGSize, showingSource: Bool) -> some View {
+        Canvas { context, _ in
+            let regions = studio.changeRegions
+            for region in regions {
+                let bounds = region.changeMask?.bounds ?? region.rect.cgRect
+                let rect = CGRect(x: bounds.minX*scale, y: (Double(analysis.height)-bounds.maxY)*scale,
+                                  width: bounds.width*scale, height: bounds.height*scale)
+                context.stroke(Path(rect), with: .color(.red), lineWidth: region.id == studio.regionID ? 2.5 : 1)
+            }
+            // Only the selected region gets a callout: dense differences must not cover the photo.
+            guard let region = studio.region else { return }
+            let candidate = showingSource ? studio.sourceID :
+                (studio.plan?.selections.last { $0.regionID == region.id }?.sourceID ?? studio.plan?.backboneID ?? studio.sourceID)
+            let finding = studio.records.last { $0.id == region.id }?.finding(candidate)
+            let positive = finding.map { $0.usable && $0.cleanliness >= 90 && $0.alteration <= 10 && $0.enhancement <= 10 && $0.defects.allSatisfy { [.natural, .color, .geometry, .compression].contains($0) } } ?? false
+            let uncertain = finding == nil || finding?.confidence == .low || finding?.defects.contains(.unknown) == true
+            let color: Color = uncertain ? .orange : positive ? .green : .red
+            let prefix = uncertain ? "?" : positive ? "+" : "−"
+            let label = "\(prefix) \(sourceName(candidate, analysis)) · \(finding?.confidence.rawValue ?? "unreviewed")\n\(finding?.evidence ?? "Awaiting regional model review")"
+            let bounds = region.changeMask?.bounds ?? region.rect.cgRect
+            let anchor = CGPoint(x: bounds.midX*scale, y: (Double(analysis.height)-bounds.maxY)*scale)
+            let width = min(300.0, max(80, size.width-16))
+            let text = context.resolve(Text(label).font(.caption).foregroundColor(color))
+            let measured = text.measure(in: CGSize(width: width-16, height: 130))
+            let box = CGRect(x: min(max(8, anchor.x+24), max(8, size.width-width-8)),
+                             y: min(max(8, anchor.y-measured.height-40), max(8, size.height-measured.height-24)),
+                             width: width, height: measured.height+16)
+            var leader = Path(); leader.move(to: anchor)
+            leader.addLine(to: CGPoint(x: box.minX, y: box.maxY)); leader.addLine(to: CGPoint(x: box.maxX, y: box.maxY))
+            context.stroke(leader, with: .color(color), lineWidth: 1)
+            context.fill(Path(box), with: .color(.black.opacity(0.85)))
+            context.draw(text, in: box.insetBy(dx: 8, dy: 8))
+        }.frame(width: size.width, height: size.height).allowsHitTesting(false)
     }
     private func inspector(_ analysis: ArenaAnalysis) -> some View {
         ScrollView {
@@ -306,7 +352,7 @@ struct ArenaStudioView: View {
                     }
                 }
                 Divider()
-                Text("Scores are uncalibrated assessments. Shared watermarks and shared edits may be unobservable. Red marks pixel differences, including color, compression and alignment effects.")
+                Text("Scores are uncalibrated assessments. Shared watermarks and shared edits may be unobservable. Red boxes locate measured differences. Leader labels show model findings: + green, − red, ? uncertain. Findings describe the named candidate; differences alone are not defects.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(analysis.warnings, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
             }.padding(.leading, 10).frame(maxWidth: .infinity, alignment: .leading)

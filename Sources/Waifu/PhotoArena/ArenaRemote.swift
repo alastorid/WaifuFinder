@@ -90,7 +90,11 @@ struct ArenaReviewBackend: Sendable {
                 var records: [ArenaReviewRecord] = []
                 for job in jobs {
                     try Task.checkCancellation()
-                    let payload = try await Task.detached { try ArenaGroupEvidence.prepare(analysis, job: job) }.value
+                    let preparation = Task.detached { try ArenaGroupEvidence.prepare(analysis, job: job) }
+                    let payload = try await withTaskCancellationHandler {
+                        try await preparation.value
+                    } onCancel: { preparation.cancel() }
+                    try Task.checkCancellation()
                     let key = try ArenaGroupEvidence.key(payload, job: job)
                     let record: ArenaReviewRecord
                     if let saved = previous.last(where: { $0.cacheKey == key && $0.sourceIDs == payload.sourceIDs }),

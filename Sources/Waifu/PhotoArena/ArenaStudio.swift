@@ -60,6 +60,7 @@ final class ArenaStudio: ObservableObject {
         cancelTasks(); generation = UUID(); let token = generation
         analysis = nil; plan = nil; records = []; previews = [:]; nativeCrops = [:]; resultImage = nil; redOverlay = nil; resultCrop = nil
         overrides = [:]; preferredSource = nil; history = []; regionID = nil; storage = nil
+        difference = nil; zoom = 1; pan = .zero; nativeDetail = false
         if let ingestionDirectory { try? FileManager.default.removeItem(at: ingestionDirectory) }
         ingestionDirectory = nil
         phase = .ingesting; status = "Reading candidates…"
@@ -198,8 +199,7 @@ final class ArenaStudio: ObservableObject {
                 let checked = try plan.verification == nil ? ArenaMergeVerifier.verify(analysis,plan:plan) : plan
                 let image = try ArenaReconstruction.preview(analysis, selections: checked.selections)
                 if scope == "Detected changes" {
-                    let overlay = try ArenaOutputInspector.detectedOverlay(analysis,tolerance:threshold,opacity:alpha)
-                    return (checked,image,Optional<ArenaOutputDifference>.none,Optional(overlay))
+                    return (checked,image,Optional<ArenaOutputDifference>.none,Optional<CGImage>.none)
                 }
                 let diff = try? ArenaOutputInspector.compare(analysis, selections: checked.selections, sourceID: selected,
                     tolerance: threshold, opacity: alpha, heatmap: scope == "Heatmap")

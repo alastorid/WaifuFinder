@@ -55,6 +55,7 @@ func registerArenaRecoveryTests() {
         let records = jobs.map { recoveryRecord(analysis, job: $0, findings: [recoveryFinding(0,originality: 30,clean: false,detail: 100),recoveryFinding(1,originality: 95),recoveryFinding(2,originality: 50,clean: false)]) }
         let plan = ArenaRecoveryPlanner.plan(analysis, reviews: records)
         checkEqual(plan.bestSourceID,"s1","originality outranks apparent sharpness")
+        checkEqual(plan.rankings.map(\.sourceID), analysis.sources.map(\.id), "the rest retain input order, not score order")
         checkEqual(plan.kind,.original,"single clean candidate avoids composite")
         check(plan.pendingRegionIDs.isEmpty,"all meaningful regions reviewed")
         let directory = root.appendingPathComponent("export")

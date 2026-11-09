@@ -132,7 +132,7 @@ enum ArenaRecoveryPlanner {
         }
         let area = Double(analysis.width)*Double(analysis.height)
         let changedArea = max(1, regions.reduce(0) { $0 + $1.rect.width*$1.rect.height })
-        var ranks = analysis.sources.map { source -> ArenaCandidateAssessment in
+        let ranks = analysis.sources.map { source -> ArenaCandidateAssessment in
             var sums = [Double](repeating: 0, count: 7), weight = 0.0, reviewed = 0.0
             var defects: Set<ArenaDefect> = [], reasons: [String] = [], low = false
             for job in allJobs {
@@ -154,22 +154,26 @@ enum ArenaRecoveryPlanner {
                 coverage: coverage, confidence: low || !pending.isEmpty || weight == 0 ? .low : .medium,
                 defects: defects.sorted { $0.rawValue < $1.rawValue }, reasons: reasons)
         }
-        ranks.sort {
-            let a = $0.originality ?? -1, b = $1.originality ?? -1
-            if abs(a-b) > 0.001 { return a > b }
-            return $0.sourceID < $1.sourceID
+        func strongest(_ candidates: [ArenaCandidateAssessment]) -> ArenaCandidateAssessment? {
+            candidates.max {
+                let a = $0.originality ?? -1, b = $1.originality ?? -1
+                return a == b ? $0.sourceID > $1.sourceID : a < b
+            }
         }
-        let first = ranks.first
-        let tied = ranks.count > 1 && abs((first?.originality ?? -1)-(ranks[1].originality ?? -1)) < 3
-        let best = first?.originality != nil && !tied ? first?.sourceID : nil
+        func uniqueBest(_ candidates: [ArenaCandidateAssessment]) -> String? {
+            guard let top = strongest(candidates), let score = top.originality,
+                  !candidates.contains(where: { $0.sourceID != top.sourceID && score - ($0.originality ?? -1) < 3 }) else { return nil }
+            return top.sourceID
+        }
+        let best = uniqueBest(ranks)
         let reference = analysis.sources.first { $0.id == analysis.referenceID }!
         let requested = preferredSource.flatMap { id in analysis.sources.first { $0.id == id && $0.accepted && $0.width > 0 } }
         // A backbone must cover the complete reference canvas. Cropped candidates remain eligible as patches.
         let backbone = requested.flatMap { source in
             analysis.regions.allSatisfy { $0.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 } } ? source : nil
-        } ?? ranks.compactMap { rank in
-            analysis.sources.first { source in source.id == rank.sourceID && source.accepted && analysis.regions.allSatisfy { $0.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 } } }
-        }.first ?? reference
+        } ?? strongest(ranks.filter { rank in
+            analysis.sources.contains { source in source.id == rank.sourceID && source.accepted && analysis.regions.allSatisfy { $0.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 } } }
+        }).flatMap { rank in analysis.sources.first { $0.id == rank.sourceID } } ?? reference
         func clean(_ f: ArenaCandidateFinding) -> Bool {
             f.usable && f.confidence != .low && f.cleanliness >= 90 && f.alteration <= 10 && f.enhancement <= 10
                 && f.defects.allSatisfy { [.natural, .color, .geometry, .compression].contains($0) }
@@ -180,10 +184,7 @@ enum ArenaRecoveryPlanner {
                 && analysis.sources.contains { $0.id == rank.sourceID && $0.accepted }
                 && analysis.regions.allSatisfy { region in region.measurements.contains { $0.sourceID == rank.sourceID && $0.validFraction >= 0.9999 } }
         }
-        let single = eligible.first.flatMap { top -> String? in
-            if let second = eligible.dropFirst().first, abs((top.originality ?? 0)-(second.originality ?? 0)) < 3 { return nil }
-            return top.sourceID
-        }
+        let single = uniqueBest(eligible)
         let direct = single != nil && overrides.isEmpty && preferredSource == nil
         let outputBase = direct ? analysis.sources.first { $0.id == single }! : backbone
         let base = ArenaSourceSelection(regionID: "backbone", sourceID: outputBase.id,
