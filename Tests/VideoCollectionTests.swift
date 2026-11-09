@@ -15,6 +15,11 @@ private func collectionFrame(index: Int, time: Double, score: Float = 0.75) -> A
                   faceCount: 0, faceAreaFraction: nil, featurePrint: nil)
 }
 
+private actor VideoIssueRecorder {
+    var issues: [VideoProcessingIssue] = []
+    func append(_ issue: VideoProcessingIssue) { issues.append(issue) }
+}
+
 func registerVideoCollectionTests() {
     let suite = "video collection"
     Registry.shared.add(suite: suite, TestCase(name: "original videos share a timeline without creating media or resampling", knownBug: nil) {
@@ -127,6 +132,67 @@ func registerVideoCollectionTests() {
             analysisWidth: 96, analysisMode: .full)
         check(changedTags.key(for: batchFrame) != batchTags.key(for: batchFrame), "edited video invalidates its tag cache")
 
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "unreadable middle video logs failure and keeps both surrounding sources", knownBug: nil) {
+        let directory = try Temporary.directory("collection-recovery")
+        let first = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
+        let broken = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
+        let last = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
+        let prepared = try await MediaImport.prepare([first, broken, last])
+        try FileManager.default.removeItem(at: broken)
+        let recorder = VideoIssueRecorder()
+        var frames: [SampledFrame] = []
+        for try await frame in AVFoundationFrameSampler().sample(prepared.url, analysisWidth: 96,
+            mode: .full, timeRange: nil, excludingSampleIndices: [], onProgress: { _ in },
+            onIssue: { await recorder.append($0) }) { frames.append(frame) }
+        checkEqual(frames.count, 8, "all frames from working videos survive")
+        checkEqual(Set(frames.map { VideoCollection.sourceIndex($0.sampleIndex) }), Set([0, 2]), "skipping does not renumber sources")
+        let issues = await recorder.issues
+        checkEqual(issues.count, 1, "one failure is logged")
+        checkEqual(issues.first?.source, broken, "log identifies the failed original")
+        check(!(issues.first?.reason.isEmpty ?? true), "log includes the cause")
+        checkEqual(issues.first?.framesRetained, 0, "unreadable file is reported unprocessed")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "mixed invalid imports continue and all invalid inputs fail with logs", knownBug: nil) {
+        let directory = try Temporary.directory("collection-import-recovery")
+        let good = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
+        let bad = directory.appendingPathComponent("invalid.mp4")
+        try Data("invalid video".utf8).write(to: bad)
+        let recorder = VideoIssueRecorder()
+        let prepared = try await MediaImport.prepare([bad, good], onIssue: { await recorder.append($0) })
+        checkEqual(try await collectionFrames(prepared.url).count, 4, "readable source still runs")
+        let issues = await recorder.issues
+        checkEqual(issues.count, 1, "failed import logs once")
+        checkEqual(issues.first?.source, bad, "import log preserves original path")
+        _ = await checkThrowsAsync("all invalid inputs cannot succeed") {
+            try await MediaImport.prepare([bad, bad], onIssue: { await recorder.append($0) })
+        }
+        checkEqual(await recorder.issues.count, 3, "all invalid files have reasons")
+    })
+    Registry.shared.add(suite: suite, TestCase(name: "late cannot decode retains prefix and cancellation is never logged", knownBug: nil) {
+        let directory = try Temporary.directory("reader-recovery")
+        let source = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)
+        let original = try await collectionFrames(source)
+        let recorder = VideoIssueRecorder()
+        let stream = AsyncThrowingStream<SampledFrame, Error> { continuation in
+            continuation.yield(original[0])
+            continuation.yield(original[1])
+            continuation.finish(throwing: FrameSamplingError.assetReaderFailed("Cannot Decode"))
+        }
+        let reader = RecoveringVideoReader(frames: stream, source: source, onIssue: { await recorder.append($0) })
+        var kept: [Int] = []
+        while let frame = try await reader.next() { kept.append(frame.sampleIndex) }
+        checkEqual(kept, original.prefix(2).map(\.sampleIndex), "completed prefix survives decoding failure")
+        checkNil(try await reader.next(), "failed reader stays exhausted")
+        let issues = await recorder.issues
+        checkEqual(issues.count, 1, "failure logs once")
+        checkEqual(issues.first?.reason, "Asset reader failed: Cannot Decode", "decoder reason is preserved")
+        checkEqual(issues.first?.framesRetained, 2, "log distinguishes partial processing")
+        let cancelled = AsyncThrowingStream<SampledFrame, Error> { $0.finish(throwing: CancellationError()) }
+        let stopped = RecoveringVideoReader(frames: cancelled, source: source, onIssue: { await recorder.append($0) })
+        let error = await checkThrowsAsync("cancellation propagates") { try await stopped.next() }
+        check(error is CancellationError, "cancellation retains its type")
+        checkEqual(await recorder.issues.count, 1, "cancel is not a file error")
     })
     Registry.shared.add(suite: suite, TestCase(name: "single input is unchanged and invalid or cancelled batches fail", knownBug: nil) {
         let directory = try Temporary.directory("collection-errors")

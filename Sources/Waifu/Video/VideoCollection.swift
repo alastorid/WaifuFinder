@@ -5,6 +5,7 @@ struct VideoCollection: Sendable {
     struct Member: Sendable {
         let video: VideoInfo
         let offset: Double
+        var originalSource: URL? = nil
     }
     let url: URL
     let members: [Member]
@@ -73,9 +74,21 @@ struct VideoCollection: Sendable {
 
 extension MediaImport {
     /// Keep original sources and their normal import lifetimes; only probe metadata.
-    static func prepare(_ sources: [URL]) async throws -> PreparedMedia {
+    static func prepare(_ sources: [URL],
+                        onIssue: (@Sendable (VideoProcessingIssue) async -> Void)? = nil) async throws -> PreparedMedia {
         guard !sources.isEmpty else { throw failure("No videos were supplied.") }
-        if sources.count == 1 { return try await prepare(sources[0]) }
+        if sources.count == 1 {
+            do {
+                let input = try await prepare(sources[0])
+                if onIssue != nil { _ = try await VideoProbe.probe(input.url) }
+                return input
+            } catch {
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                await onIssue?(VideoProcessingIssue(source: sources[0], stage: "Reading input",
+                    reason: error.localizedDescription, framesRetained: 0))
+                throw error
+            }
+        }
         var inputs: [PreparedMedia] = []
         var members: [VideoCollection.Member] = []
         var offset: Double = 0
@@ -85,14 +98,19 @@ extension MediaImport {
                 let input = try await prepare(source)
                 let video = try await VideoProbe.probe(input.url)
                 inputs.append(input)
-                members.append(.init(video: video, offset: offset))
+                members.append(.init(video: video, offset: offset, originalSource: source))
                 offset += video.durationSeconds
             } catch {
-                if Task.isCancelled { throw CancellationError() }
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
+                if let onIssue {
+                    await onIssue(VideoProcessingIssue(source: source, stage: "Reading input", reason: error.localizedDescription, framesRetained: 0))
+                    continue
+                }
                 throw failure("Could not read \(source.lastPathComponent): \(error.localizedDescription)")
             }
         }
         try Task.checkCancellation()
+        guard !members.isEmpty else { throw failure("None of the supplied videos could be read. See Processing Errors for details.") }
         let url = URL(string: "waifu-videos://\(UUID().uuidString)/\(sources.count)%20videos")!
         VideoCollection.register(VideoCollection(url: url, members: members))
         return PreparedMedia(url: url, inputs: inputs)
@@ -109,6 +127,7 @@ actor VideoCollectionSampler {
     private let excludingSampleIndices: Set<Int>
     private let sampleIndexMaps: [Int: FrameSampleIndexMap]
     private let onProgress: @Sendable (Int) -> Void
+    private let onIssue: (@Sendable (VideoProcessingIssue) async -> Void)?
     private var memberIndex = 0
     private var processed = 0
     private var iterator: AsyncThrowingStream<SampledFrame, Error>.Iterator?
@@ -116,11 +135,13 @@ actor VideoCollectionSampler {
     init(collection: VideoCollection, width: Int, mode: AnalysisMode, timeRange: ClosedRange<Double>?,
          excludingSampleIndices: Set<Int>,
          sampleIndexMaps: [Int: FrameSampleIndexMap],
-         onProgress: @escaping @Sendable (Int) -> Void) {
+         onProgress: @escaping @Sendable (Int) -> Void,
+         onIssue: (@Sendable (VideoProcessingIssue) async -> Void)? = nil) {
         self.collection = collection; self.width = width; self.mode = mode
         self.timeRange = timeRange; self.excludingSampleIndices = excludingSampleIndices
         self.sampleIndexMaps = sampleIndexMaps
         self.onProgress = onProgress
+        self.onIssue = onIssue
     }
     func next() async throws -> SampledFrame? {
         try Task.checkCancellation()
@@ -149,10 +170,17 @@ actor VideoCollectionSampler {
                     guard VideoCollection.sourceIndex(index) == memberIndex else { return nil }
                     return VideoCollection.localIndex(index)
                 })
+                let reportIssue = onIssue.map { callback in
+                    let source = member.originalSource ?? member.video.url
+                    return { @Sendable (issue: VideoProcessingIssue) async in
+                        await callback(VideoProcessingIssue(source: source, stage: issue.stage,
+                            reason: issue.reason, framesRetained: issue.framesRetained))
+                    }
+                }
                 iterator = AVFoundationFrameSampler().sample(member.video.url, analysisWidth: width,
                     mode: mode, timeRange: memberRange, excludingSampleIndices: memberExclusions,
                     sampleIndexMaps: [0: sampleIndexMaps[memberIndex]].compactMapValues { $0 },
-                    onProgress: { _ in }).makeAsyncIterator()
+                    onProgress: { _ in }, onIssue: reportIssue).makeAsyncIterator()
             }
             var active = iterator!
             let frame = try await active.next(isolation: self)

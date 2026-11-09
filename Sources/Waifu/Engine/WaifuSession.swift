@@ -391,6 +391,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
 
     // MARK: UI state
 
+    @Published private(set) var videoProcessingIssues: [VideoProcessingIssue] = []
+
+    private func acceptVideoIssue(_ issue: VideoProcessingIssue, token: UUID) {
+        guard token == analysisGeneration else { return }
+        videoProcessingIssues.append(issue)
+    }
+
     @Published var errorMessage: String?
     @Published var focusedFrameID: FrameID?
     private let gridScrollSubject = PassthroughSubject<FrameID, Never>()
@@ -1310,6 +1317,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         cancelTagging(keepingCompletedResults: false)
         cancel()
         clearResults()
+        videoProcessingIssues = []
         errorMessage = nil
 
         video = nil
@@ -1491,6 +1499,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         importedMedia = nil
         photosOrderSyncMessage = nil
         errorMessage = nil
+        videoProcessingIssues = []
         progress = AnalysisProgress()
     }
 
@@ -1504,6 +1513,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         cancelTagging(keepingCompletedResults: false)
         cancel()
         clearResults()
+        videoProcessingIssues = []
         errorMessage = nil
 
         progress = AnalysisProgress(phase: .sampling, processed: 0, total: 1, elapsed: 0, message: "Decoding and scoring every frame…")
@@ -2388,7 +2398,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                                                                              existingFrames: existingFrames)
                 let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
                     mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
-                    sampleIndexMaps: sampleIndexMaps, onProgress: { _ in })
+                    sampleIndexMaps: sampleIndexMaps, onProgress: { _ in },
+                    onIssue: { [weak self] issue in await self?.acceptVideoIssue(issue, token: token) })
                 let scoring = pipeline.start(frames: sampled,
                     minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in })
                 scoringTask = scoring.task
@@ -2479,7 +2490,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         do {
             let videoInfo: VideoInfo
             if let url {
-                let prepared = if let preparedSource { preparedSource } else { try await MediaImport.prepare(sourceURLs ?? [url]) }
+                let prepared = if let preparedSource { preparedSource } else { try await MediaImport.prepare(sourceURLs ?? [url], onIssue: { [weak self] issue in
+                    await self?.acceptVideoIssue(issue, token: token)
+                }) }
                 videoInfo = try await VideoProbe.probe(prepared.url)
                 try Task.checkCancellation()
                 guard await acceptVideo(videoInfo, token: token, prepared: prepared) else { return }
@@ -2520,7 +2533,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 sampled = AsyncThrowingStream(unfolding: { try await photosSampler.next() })
             } else {
                 sampled = AVFoundationFrameSampler().sample(videoInfo.url, analysisWidth: analysisWidth,
-                                                           mode: mode, onProgress: { _ in })
+                                                           mode: mode, timeRange: nil, excludingSampleIndices: [], onProgress: { _ in },
+                    onIssue: { [weak self] issue in
+                        let original = sourceURLs?.count == 1 ? sourceURLs?.first : nil
+                        await self?.acceptVideoIssue(VideoProcessingIssue(source: original ?? issue.source,
+                            stage: issue.stage, reason: issue.reason, framesRetained: issue.framesRetained), token: token)
+                    })
             }
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                                                 videoStem: videoInfo.url.deletingPathExtension().lastPathComponent)
@@ -2601,6 +2619,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.elapsed = Date().timeIntervalSince(started)
             let skipped = await photosSampler?.unavailableItemCount ?? 0
             progress.message = skipped == 0 ? "Complete" : "Complete · \(skipped) items unavailable locally"
+            let videoIssueCount = await videoProcessingIssues.count
+            if album == nil, videoIssueCount > 0 {
+                progress.message = analyzed.isEmpty ? "No frames processed · see Processing Errors" : "Complete · \(videoIssueCount) video errors"
+                if analyzed.isEmpty { progress.phase = .failed }
+            }
             await completeAnalysis(frames: finalFrames, groups: groups, progress: progress, token: token)
             if album != nil, !allowNetwork, skipped > 0 {
                 await resumeMissingPhotosAfterLocalPass(token: token)

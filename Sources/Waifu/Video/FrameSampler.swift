@@ -101,14 +101,15 @@ final class AVFoundationFrameSampler: FrameSampling {
         timeRange: ClosedRange<Double>?,
         excludingSampleIndices: Set<Int>,
         sampleIndexMaps: [Int: FrameSampleIndexMap] = [:],
-        onProgress: @escaping @Sendable (Int) -> Void
+        onProgress: @escaping @Sendable (Int) -> Void,
+        onIssue: (@Sendable (VideoProcessingIssue) async -> Void)? = nil
     ) -> AsyncThrowingStream<SampledFrame, Error> {
         if let collection = VideoCollection.get(url) {
             let producer = VideoCollectionSampler(collection: collection, width: analysisWidth, mode: mode,
                                                   timeRange: timeRange,
                                                   excludingSampleIndices: excludingSampleIndices,
                                                   sampleIndexMaps: sampleIndexMaps,
-                                                  onProgress: onProgress)
+                                                  onProgress: onProgress, onIssue: onIssue)
             return AsyncThrowingStream(unfolding: { try await producer.next() })
         }
         if let album = PhotosMedia.shared.album(url) {
@@ -128,7 +129,10 @@ final class AVFoundationFrameSampler: FrameSampling {
         // `AsyncStream` does), so cancellation is observed where it matters: the
         // producer checks for it before each frame and throws, which ends the
         // stream, releases it, and with it the reader.
-        return AsyncThrowingStream(unfolding: { try await producer.next() })
+        let frames = AsyncThrowingStream(unfolding: { try await producer.next() })
+        guard let onIssue else { return frames }
+        let recovering = RecoveringVideoReader(frames: frames, source: url, onIssue: onIssue)
+        return AsyncThrowingStream(unfolding: { try await recovering.next() })
     }
 }
 

@@ -14,6 +14,7 @@ import UniformTypeIdentifiers
 /// grid, and the second is what the order panel is for.
 struct RootView: View {
     @StateObject private var session = WaifuSession()
+    @StateObject private var processingErrorsWindow = VideoProcessingErrorsWindow()
     @StateObject private var orb = WaifuCrystalOrbModel()
     // Only the player panel observes its clock; playback must not refresh the grid.
     @State private var preview = PreviewController()
@@ -193,7 +194,20 @@ struct RootView: View {
 
     var body: some View {
         observedWorkspace
+        .onChange(of: session.videoProcessingIssues.count) { _, count in
+            if count > 0 { processingErrorsWindow.show(session: session) }
+            else { processingErrorsWindow.hide() }
+        }
+        .onDisappear { processingErrorsWindow.hide() }
         .toolbar {
+            if !session.videoProcessingIssues.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { processingErrorsWindow.show(session: session) } label: {
+                        Label("Processing Errors (\(session.videoProcessingIssues.count))", systemImage: "exclamationmark.triangle")
+                    }
+                    .help("Show files that could not be fully processed")
+                }
+            }
             // The title bar carries the window-level controls and the workspace's
             // icon actions, top right; status text rides in the same right edge,
             // just before those icons, inside its tag-like capsule.
