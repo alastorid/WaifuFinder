@@ -9,7 +9,7 @@ configuration and results of a specific investigation.
 | Task | Guide |
 |---|---|
 | Browse media and work with Photos albums | [Photos workspace](../README.md#photos-workspace), [preview loading](Photos-preview.md) |
-| Find the best version of one photograph | [PhotoArena](PhotoArena.md), [selection, reconstruction and limitations](PhotoArena-2.0.md) |
+| Find the best version of one photograph | [Super Merger](SuperMerger.md) |
 | Inspect photographic alterations | [TruFor](TruFor.md), [SAFIRE](ImageLineage.md) |
 | Find visually similar frames or inspect candidates | [Vector Search](WaifuVectorSearch.md), [Crystal Orb](WaifuCrystalOrb.md) |
 | Filter and organize tags | [Tag groups](Danbooru-tag-groups.md), [tag summaries](Tag-summary.md) |
@@ -32,7 +32,7 @@ configuration and results of a specific investigation.
 Hardware results apply to the configurations and fixtures in each report. Keep the
 associated JSON and examples beside their reports so old links remain usable.
 
-- **PhotoArena:** [v1 architecture](PhotoArena-architecture.md),
+- **PhotoArena (historical):** [2.0 implementation](PhotoArena-2.0.md), [v1 architecture](PhotoArena-architecture.md),
   [deterministic forensics](PhotoArena-forensics.md), [v1 delivery](PhotoArena-delivery.md),
   [native worker](PhotoArena-model-runtime.md), [paired inference optimization](PhotoArena-optimization.md),
   and [multi-source model results](photoarena-group-review.json).

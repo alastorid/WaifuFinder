@@ -22,7 +22,7 @@ Find feature guides, maintenance instructions and benchmark evidence in the
 | Explore the latest additions | [Recent highlights](#recent-highlights) |
 | Work with my photo library | [Photos workspace](#photos-workspace) |
 | Share models across Macs | [Remote inference](#remote-inference) |
-| Compare and reconstruct photo versions | [PhotoArena](docs/PhotoArena.md) · [Implementation and limitations](docs/PhotoArena-2.0.md) |
+| Compare and reconstruct photo versions | [Super Merger](docs/SuperMerger.md) |
 | Inspect or restore pixels | [Photo analysis](#photo-analysis) · [Uncover Waifu](#uncover-waifu) |
 | Check measured performance | [WD Tagger measurements](#wd-tagger-performance-matrix) |
 | Build or contribute | [Build and run](#build-and-run) · [Tests](#tests) · [Layout](#layout) |

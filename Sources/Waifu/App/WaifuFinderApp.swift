@@ -37,11 +37,7 @@ struct WaifuFinderApp: App {
         // the standard toolbar for free.
         .defaultSize(width: 1280, height: 820)
         .windowStyle(.titleBar)
-        .commands { DiagCommands(); PhotoArenaCommands() }
-
-        Window("PhotoArena", id: "photoarena") {
-            ArenaStudioView()
-        }.defaultSize(width: 1280, height: 850)
+        .commands { DiagCommands(); SuperMergerCommands() }
 
         Settings {
             WaifuSettingsView()
@@ -106,11 +102,12 @@ enum DiagCategoryPicker {
     }
 }
 
-struct PhotoArenaCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
+struct SuperMergerCommands: Commands {
+    @FocusedValue(\.openSuperMerger) private var openSuperMerger
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("PhotoArena…") { openWindow(id: "photoarena") }
+            Button("Super Merger…") { openSuperMerger?() }
+                .disabled(openSuperMerger == nil)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
         }
     }

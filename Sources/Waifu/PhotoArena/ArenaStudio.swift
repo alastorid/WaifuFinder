@@ -7,27 +7,27 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ArenaStudio: ObservableObject {
+    @Published var admissionReason: String?
+    @Published var excludedSources: [ArenaAnalyzedSource] = []
     @Published var analysis: ArenaAnalysis?
     @Published var plan: ArenaRecoveryPlan?
     @Published var phase: ArenaWorkflowPhase = .empty
     @Published var status = "Choose several versions of one photograph to find the best source."
     @Published var previews: [String: CGImage] = [:]
     @Published var nativeCrops: [String: CGImage] = [:]
-    @Published var resultCrop: CGImage?
-    @Published var resultImage: CGImage?
-    @Published var redOverlay: CGImage?
+    struct Output {
+        let image: CGImage
+        let plan: ArenaRecoveryPlan
+    }
+    @Published private(set) var output: Output?
+    var resultImage: CGImage? { output?.image }
     @Published var difference: ArenaOutputDifference?
     @Published var records: [ArenaReviewRecord] = []
     @Published var sourceID = ""
     @Published var regionID: String?
-    @Published var inspectionMode = "Result"
     @Published var differenceScope = "Detected changes"
-    @Published var tolerance = 12.0
-    @Published var opacity = 0.55
-    @Published var zoom = 1.0
-    @Published var pan = CGSize.zero
-    @Published var showRed = true
-    @Published var nativeDetail = false
+    @Published private(set) var rendering = false
+    private var refreshID = UUID()
     private var operation: Task<Void, Never>?
     private var displayTask: Task<Void, Never>?
     private var cropTask: Task<Void, Never>?
@@ -38,7 +38,7 @@ final class ArenaStudio: ObservableObject {
     private var history: [([String: String], String?)] = []
     private var storage: URL?
     private var ingestionDirectory: URL?
-    var busy: Bool { [.ingesting, .aligning, .reviewing, .planning, .verifying].contains(phase) }
+    var busy: Bool { rendering || [.ingesting, .aligning, .reviewing, .planning, .verifying].contains(phase) }
     var region: ArenaRegion? { analysis?.regions.first { $0.id == regionID } }
     var selectedReview: ArenaReviewRecord? { records.last { $0.id == (regionID ?? "overview") } }
     var changeRegions: [ArenaRegion] { analysis?.regions.filter(ArenaRecoveryPlanner.needsReview) ?? [] }
@@ -58,9 +58,11 @@ final class ArenaStudio: ObservableObject {
             return ArenaSource(id:id,url:source.url,seconds:source.seconds)
         }
         cancelTasks(); generation = UUID(); let token = generation
-        analysis = nil; plan = nil; records = []; previews = [:]; nativeCrops = [:]; resultImage = nil; redOverlay = nil; resultCrop = nil
+        rendering = false; refreshID = UUID()
+        admissionReason = nil; excludedSources = []
+        analysis = nil; plan = nil; records = []; previews = [:]; nativeCrops = [:]; output = nil
         overrides = [:]; preferredSource = nil; history = []; regionID = nil; storage = nil
-        difference = nil; zoom = 1; pan = .zero; nativeDetail = false
+        difference = nil; differenceScope = "Detected changes"
         if let ingestionDirectory { try? FileManager.default.removeItem(at: ingestionDirectory) }
         ingestionDirectory = nil
         phase = .ingesting; status = "Reading candidates…"
@@ -89,7 +91,10 @@ final class ArenaStudio: ObservableObject {
                 }
                 guard token == generation else { return }
                 phase = .aligning; status = "Aligning all candidates and finding native-pixel differences…"
-                let result = try await ArenaForensics.analyze(files, tileSize: 256)
+                let preparedFiles = files
+                let admission = try await background { try MergerPreprocessor.prepare(preparedFiles) }
+                let result = admission.analysis
+                admissionReason = admission.reason; excludedSources = admission.excluded
                 try Task.checkCancellation(); guard token == generation else { return }
                 analysis = result; sourceID = result.referenceID
                 regionID = result.regions.first(where: ArenaRecoveryPlanner.needsReview)?.id
@@ -115,13 +120,16 @@ final class ArenaStudio: ObservableObject {
                     }
                     return images
                 }
+                guard admissionReason == nil else {
+                    phase = .failed; status = admissionReason!; plan = nil; return
+                }
                 recomputePlan(); refreshDisplay(); loadRegion()
                 await runReview(previous: previous, token: token)
             } catch { fail(error, token: token) }
         }
     }
     func reviewMore() {
-        guard !busy, analysis != nil else { return }
+        guard !busy, admissionReason == nil, analysis != nil else { return }
         let token = generation
         operation = Task { await runReview(previous: records, token: token) }
     }
@@ -138,11 +146,15 @@ final class ArenaStudio: ObservableObject {
             let results = try await backend.review(analysis, jobs, previous, { [weak self] record in
                 Task { @MainActor in
                     guard let self, self.generation == token, self.phase == .reviewing else { return }
+                    guard record.result.review?.unresolved != nil else { return }
                     self.accept(record); self.recomputePlan(); self.persist()
                     self.status = "Reviewed \(self.records.count)/\(ArenaRecoveryPlanner.jobs(analysis).count) evidence packages across \(analysis.sources.count) candidates."
                 }
             })
             try Task.checkCancellation(); guard token == generation else { return }
+            guard results.allSatisfy({ $0.result.review?.unresolved != nil }) else {
+                throw ModelInstaller.fail("The inference worker did not return an explicit donor decision. Update its Super Merger runtime.")
+            }
             for record in results { accept(record) }
             phase = .planning; recomputePlan(); persist()
             phase = .verifying; status = "Checking recovery boundaries and source coverage…"
@@ -163,6 +175,7 @@ final class ArenaStudio: ObservableObject {
     }
     private func recomputePlan() {
         guard let analysis else { return }
+        displayGeneration = UUID()
         plan = ArenaRecoveryPlanner.plan(analysis, reviews: records, overrides: overrides, preferredSource: preferredSource)
     }
     func pickSource(_ id: String) {
@@ -175,46 +188,59 @@ final class ArenaStudio: ObservableObject {
         history.append((overrides,preferredSource)); overrides[regionID] = id
         recomputePlan(); persist(); refreshDisplay()
     }
+    func revertRegion() {
+        guard let regionID, !busy else { return }
+        history.append((overrides, preferredSource))
+        overrides.removeValue(forKey: regionID)
+        recomputePlan(); persist(); refreshDisplay()
+    }
     func undo() {
         guard !busy, let previous = history.popLast() else { return }
         overrides = previous.0; preferredSource = previous.1; recomputePlan(); persist(); refreshDisplay()
     }
     func cancel() { operation?.cancel(); displayTask?.cancel(); status = "Cancellation requested; completed evidence is retained." }
     func close() {
-        cancelTasks()
+        cancelTasks(); generation = UUID(); displayGeneration = UUID()
         if let ingestionDirectory { try? FileManager.default.removeItem(at: ingestionDirectory) }
         ingestionDirectory = nil
     }
     private func cancelTasks() { operation?.cancel(); displayTask?.cancel(); cropTask?.cancel() }
     func refreshDisplay() {
-        displayTask?.cancel(); let token = generation
-        displayTask = Task { await updateDisplay(token: token) }
+        displayTask?.cancel()
+        let token = generation
+        let request = UUID()
+        refreshID = request
+        rendering = true
+        displayTask = Task {
+            await updateDisplay(token: token)
+            if refreshID == request { rendering = false }
+        }
     }
     private func updateDisplay(token: UUID) async {
         guard let analysis, let plan else { return }
         displayGeneration = UUID(); let displayToken = displayGeneration
-        let selected = sourceID, threshold = Int(tolerance), alpha = opacity, scope = differenceScope
+        let selected = sourceID, scope = differenceScope
         do {
             let output = try await background {
                 let checked = try plan.verification == nil ? ArenaMergeVerifier.verify(analysis,plan:plan) : plan
                 let image = try ArenaReconstruction.preview(analysis, selections: checked.selections)
                 if scope == "Detected changes" {
-                    return (checked,image,Optional<ArenaOutputDifference>.none,Optional<CGImage>.none)
+                    return (checked,image,Optional<ArenaOutputDifference>.none)
                 }
                 let diff = try? ArenaOutputInspector.compare(analysis, selections: checked.selections, sourceID: selected,
-                    tolerance: threshold, opacity: alpha, heatmap: scope == "Heatmap")
-                return (checked,image,diff?.0,diff?.1)
+                    tolerance: 12, maxPixelSize: 256)
+                return (checked,image,diff?.0)
             }
             try Task.checkCancellation(); guard token == generation, displayToken == displayGeneration else { return }
             if phase != .reviewing { self.plan = output.0 }
-            resultImage = output.1; difference = output.2; redOverlay = output.3
-            if nativeDetail { loadRegion() }
+            self.output = Output(image: output.1, plan: output.0)
+            difference = output.2
         } catch { if !Task.isCancelled && token == generation { status = error.localizedDescription } }
     }
     func loadRegion() {
-        cropTask?.cancel(); nativeCrops = [:]; resultCrop = nil
+        cropTask?.cancel(); nativeCrops = [:]
         guard let analysis, let region else { return }
-        let token = generation, selections = plan?.selections ?? []
+        let token = generation
         cropTask = Task {
             do {
                 let crops = try await background {
@@ -222,10 +248,9 @@ final class ArenaStudio: ObservableObject {
                     for source in analysis.sources where source.accepted {
                         try Task.checkCancellation(); images[source.id] = try ArenaForensics.crop(source, rect: region.rect.cgRect)
                     }
-                    let result = selections.isEmpty ? nil : try ArenaOutputInspector.tile(analysis,selections:selections,rect:region.rect.cgRect)
-                    return (images,result)
+                    return images
                 }
-                try Task.checkCancellation(); if token == generation && region.id == regionID { nativeCrops = crops.0; resultCrop = crops.1 }
+                try Task.checkCancellation(); if token == generation && region.id == regionID { nativeCrops = crops }
             } catch { }
         }
     }
@@ -238,10 +263,10 @@ final class ArenaStudio: ObservableObject {
         } catch { status = "Could not save review: " + error.localizedDescription }
     }
     func export() {
-        guard !busy, let analysis, let plan else { return }
+        guard !busy, let analysis, let plan = output?.plan else { return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true; panel.prompt = "Export Here"
         guard panel.runModal() == .OK, let parent = panel.url else { return }
-        let directory = parent.appendingPathComponent("PhotoArena-" + UUID().uuidString.prefix(8))
+        let directory = parent.appendingPathComponent("Super-Merger-" + UUID().uuidString.prefix(8))
         let records = records, token = generation
         phase = .verifying; status = "Exporting source pixels, review evidence and provenance…"
         operation = Task {

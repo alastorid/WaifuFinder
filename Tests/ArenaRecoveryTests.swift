@@ -37,6 +37,26 @@ private func recoveryFixture(_ root: URL, count: Int = 3) throws -> ArenaAnalysi
     return ArenaAnalysis(referenceID: sources.last!.id, width: width, height: height, sources: sources, regions: [region], warnings: [], elapsedSeconds: 0)
 }
 func registerArenaRecoveryTests() {
+    Registry.shared.add(suite: "Super Merger", TestCase(name: "admission preserves masks and refuses excessive independent regions", knownBug: nil) {
+        let root = try Temporary.directory("merger-admission")
+        let fixture = try recoveryFixture(root)
+        let accepted = try MergerAdmission.assess(fixture)
+        check(accepted.admitted, "sparse differences admitted")
+        checkEqual(accepted.analysis.regions.compactMap(\.changeMask).reduce(0) { $0 + $1.pixelCount }, 7, "every measured pixel retained")
+        var excessive = fixture
+        let runs = (0..<8).map { ArenaMaskRun(y: ($0 / 4) * 20, x: ($0 % 4) * 10, length: 1) }
+        excessive.regions[0].changeMask = ArenaPixelMask(runs: runs)
+        let refused = try MergerAdmission.assess(excessive)
+        check(!refused.admitted, "eight separate edits stop before model review")
+        checkEqual(refused.analysis.regions.filter(ArenaRecoveryPlanner.needsReview).count, 8, "edits are not hidden")
+        var deferred = fixture
+        deferred.regions[0].maskDeferred = true
+        check(!(try MergerAdmission.assess(deferred)).admitted, "incomplete masks cannot pass admission")
+        var incompatible = fixture
+        for index in incompatible.sources.indices.dropFirst() { incompatible.sources[index].accepted = false }
+        check(!(try MergerAdmission.assess(incompatible)).admitted, "one aligned source is insufficient")
+    })
+
     Registry.shared.add(suite: "PhotoArena recovery", TestCase(name: "N-source contract rejects missing duplicated and invalid assessments", knownBug: nil) {
         try ArenaGroupAssessment(sources: (0..<16).map { recoveryFinding($0) }).validate(count: 16)
         for values in [[recoveryFinding(0),recoveryFinding(0)], [recoveryFinding(0)], [recoveryFinding(0,originality: 101),recoveryFinding(1)]] {

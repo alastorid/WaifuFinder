@@ -90,7 +90,7 @@ enum ArenaGroupEvidence {
         }
         let marked = region?.changeMask?.pixelCount ?? 0
         let total = job.overview ? analysis.regions.reduce(0) { $0+($1.changeMask?.pixelCount ?? 0) } : 0
-        let countEvidence = marked > 0 ? "This tile has \(marked) measured changed pixels (threshold: 12 RGB levels)." :
+        let countEvidence = marked > 0 ? "This region has \(marked) measured changed pixels." :
             "Exact mask count unavailable; inspect the source crops and measured residuals."
         let location = job.overview ? "Whole-image overview. At least \(total) pixels differ across the registered candidates. Shared defects can exist even when images agree." :
             "\(countEvidence) The second montage shows the corresponding focused source crops at reference x=\(Int(detailRect.minX)), y=\(Int(detailRect.minY)), \(Int(detailRect.width))×\(Int(detailRect.height)); crops may be magnified for readability. No guides or masks are drawn over the photos. Unaligned sources show overview only and must get low confidence and usable=false in regional review."

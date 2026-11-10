@@ -13,6 +13,8 @@ import UniformTypeIdentifiers
 /// and "what are the top ones?"; the first is legible from the group badges in the
 /// grid, and the second is what the order panel is for.
 struct RootView: View {
+    @State private var mergerSources: [ArenaSource]?
+    @State private var mergerPreviousFrame: FrameID?
     @StateObject private var session = WaifuSession()
     @StateObject private var processingErrorsWindow = VideoProcessingErrorsWindow()
     @StateObject private var orb = WaifuCrystalOrbModel()
@@ -113,6 +115,10 @@ struct RootView: View {
             if orb.isOpen {
                 WaifuCrystalOrbView(model: orb, session: session).transition(.identity)
             }
+            if let sources = mergerSources {
+                SuperMergerView(sources: sources, close: closeSuperMerger)
+                    .transition(.identity)
+            }
             // The east egg's light. Mounted for the life of the window rather than
             // while a beam exists: it costs one empty view until something is drawn,
             // and it keeps a light that moves sixty times a second out of the
@@ -122,8 +128,36 @@ struct RootView: View {
         }
     }
 
+    private func openSuperMerger(_ sources: [ArenaSource]) {
+        if mergerSources == nil {
+            mergerPreviousFrame = session.previewFrame?.id
+        }
+        preview.pause()
+        session.previewFrame = nil
+        mergerSources = sources
+    }
+
+    private func closeSuperMerger() {
+        mergerSources = nil
+        session.previewFrame = mergerPreviousFrame.flatMap { session.frame(id: $0) }
+        mergerPreviousFrame = nil
+    }
+
+    private var previewKeyboard: PreviewToggleKeyboard {
+        let closeOverlay: (() -> Void)?
+        if mergerSources == nil {
+            closeOverlay = nil
+        } else {
+            closeOverlay = { closeSuperMerger() }
+        }
+        return PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace,
+                                     orb: orb, closeOverlay: closeOverlay)
+    }
+
     private var routedWorkspace: some View {
         workspaceLayers
+        .environment(\.openSuperMerger, { sources in openSuperMerger(sources) })
+        .focusedSceneValue(\.openSuperMerger, { openSuperMerger([]) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         // The one drop registration for the whole window. A second nested
@@ -156,8 +190,7 @@ struct RootView: View {
             ToolbarDisplayPolicy().frame(width: 0, height: 0)
         }
         .background {
-            PreviewToggleKeyboard(session: session, isPhotosMode: showPhotosWorkspace, orb: orb)
-                .frame(width: 0, height: 0)
+            previewKeyboard.frame(width: 0, height: 0)
         }
         .background {
             thumbnailZoomShortcuts

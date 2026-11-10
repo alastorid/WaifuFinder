@@ -46,7 +46,7 @@ struct FrameGridView: View {
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
     @FocusState private var isFocused: Bool
     @StateObject private var thumbnailStage = GridThumbnailStage()
-    @State private var arenaWorkspace: ArenaWorkspace?
+    @Environment(\.openSuperMerger) private var openSuperMerger
     @StateObject private var clipExport = ClipExportController()
     @State private var committedNavigation: FrameID?
     @State private var verticalScrollPosition = ScrollPosition()
@@ -75,9 +75,6 @@ struct FrameGridView: View {
             Group {
                 gridWithNavigation(size: geometry.size)
             }
-        }
-        .sheet(item: $arenaWorkspace) { workspace in
-            PhotoArenaView(workspace: workspace)
         }
         .alert("Clip Export Failed", isPresented: Binding(
             get: { clipExport.error != nil }, set: { if !$0 { clipExport.error = nil } }
@@ -590,13 +587,13 @@ struct FrameGridView: View {
         }
 
         if let video = session.video, isSelected, session.selectedFrameIDs.count >= 2 {
-            Button("Find Best in PhotoArena") {
+            Button("Super Merger") {
                 let sources = session.frames.filter { session.selectedFrameIDs.contains($0.id) }.map {
                     let photo = PhotosMedia.shared.photoItemURL(for: video.url, seconds: $0.timeSeconds)
                     return ArenaSource(id: String(describing: $0.id), url: photo ?? video.url,
                                        seconds: photo == nil ? $0.timeSeconds : 0)
                 }
-                if sources.count >= 2 { arenaWorkspace = ArenaWorkspace(sources: sources) }
+                if sources.count >= 2 { openSuperMerger(sources) }
             }
             Divider()
         }

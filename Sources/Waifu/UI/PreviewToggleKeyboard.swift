@@ -6,10 +6,12 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
     let session: WaifuSession
     let isPhotosMode: Bool
     var orb: WaifuCrystalOrbModel? = nil
+    var closeOverlay: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> KeyboardView {
         let view = KeyboardView()
         view.orb = orb
+        view.closeOverlay = closeOverlay
         view.session = session
         view.isPhotosMode = isPhotosMode
         return view
@@ -17,6 +19,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
 
     func updateNSView(_ view: KeyboardView, context: Context) {
         view.orb = orb
+        view.closeOverlay = closeOverlay
         view.session = session
         view.isPhotosMode = isPhotosMode
     }
@@ -29,6 +32,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
         var session: WaifuSession?
         var isPhotosMode = false
         var orb: WaifuCrystalOrbModel?
+        var closeOverlay: (() -> Void)?
         private var monitor: Any?
         private var resignObserver: NSObjectProtocol?
         private var router = PreviewToggleKeyRouter()
@@ -53,7 +57,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                         let hasTextFocus = window.firstResponder is NSTextView
                             || (window.firstResponder as? NSTextField)?.isEditable == true
                         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                        if !hasTextFocus, window.attachedSheet == nil, !session.showExportSheet, !session.showPreviewExportSheet,
+                        if self.closeOverlay == nil, !hasTextFocus, window.attachedSheet == nil, !session.showExportSheet, !session.showPreviewExportSheet,
                            session.errorMessage == nil {
                             if event.type == .keyDown, modifiers == .command,
                                event.charactersIgnoringModifiers?.lowercased() == "v",
@@ -62,8 +66,8 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                             }
                             if let orb = self.orb, orb.isOpen { return orb.handleKey(event) }
                         }
-                        if self.orb?.isOpen == true { return false }
-                        if event.type == .keyDown, (event.keyCode == 51 || event.keyCode == 117),
+                        if self.closeOverlay == nil, self.orb?.isOpen == true { return false }
+                        if self.closeOverlay == nil, event.type == .keyDown, (event.keyCode == 51 || event.keyCode == 117),
                            (modifiers.isEmpty || modifiers == .command),
                            session.photosAlbumURL != nil, !hasTextFocus,
                            session.uncover == nil,
@@ -79,7 +83,7 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                         let outcome = self.router.route(
                             code: event.keyCode, isUp: event.type == .keyUp,
                             isRepeat: event.isARepeat,
-                            previewIsUp: session.previewFrame != nil,
+                            previewIsUp: self.closeOverlay != nil || session.previewFrame != nil,
                             canOpen: session.focusedFrameID.flatMap { session.frame(id: $0) } != nil,
                             blocked: session.isPreviewInteractionBlocked || window.attachedSheet != nil,
                             hasTextFocus: hasTextFocus,
@@ -88,10 +92,12 @@ struct PreviewToggleKeyboard: NSViewRepresentable {
                         case .passThrough: return false
                         case .consume: return true
                         case .toggle:
-                            session.togglePreview()
+                            if let closeOverlay = self.closeOverlay { closeOverlay() }
+                            else { session.togglePreview() }
                             return true
                         case .close:
-                            session.previewFrame = nil
+                            if let closeOverlay = self.closeOverlay { closeOverlay() }
+                            else { session.previewFrame = nil }
                             return true
                         }
                     }

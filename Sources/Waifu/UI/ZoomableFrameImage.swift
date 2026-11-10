@@ -10,6 +10,10 @@ struct ZoomableFrameImage: NSViewRepresentable {
     @Binding var center: CGPoint
     @Binding var displayedScale: CGFloat
 
+    var regions: [PreviewRegion] = []
+    var selectedRegion: String? = nil
+    var onRegionSelection: ((String?) -> Void)? = nil
+
     func makeCoordinator() -> Coordinator {
         Coordinator(zoomRatio: $zoomRatio, center: $center, displayedScale: $displayedScale)
     }
@@ -35,6 +39,7 @@ struct ZoomableFrameImage: NSViewRepresentable {
         view.onScaleChange = { [weak coordinator = context.coordinator] scale in
             coordinator?.store(scale: scale)
         }
+        view.setRegions(regions, selected: selectedRegion, onSelection: onRegionSelection)
         view.show(image, id: frameID, zoomRatio: zoomRatio, center: center)
     }
 
@@ -215,13 +220,13 @@ struct FrameZoomGeometry: Equatable {
 /// size stays the real viewport, and `FrameZoomGeometry` does the arithmetic. The
 /// document view is a plain canvas — the image view inside it is the only thing that
 /// draws, and its frame is the fitted rectangle.
-final class FrameZoomScrollView: NSScrollView {
+final class FrameZoomScrollView: NSScrollView, NSGestureRecognizerDelegate {
     var onStateChange: ((CGFloat, CGPoint) -> Void)?
     var onScaleChange: ((CGFloat) -> Void)?
 
     /// Never smaller than the viewport, so a frame that fits has room to be centred.
     private let canvas = NSView()
-    private let frameImageView = NSImageView()
+    private let frameImageView = RegionPreviewImageView()
     private var displayedID: FrameID?
     /// The frame's own size in points — what the geometry scales, and therefore what the
     /// ratio is a multiple of.
@@ -233,6 +238,13 @@ final class FrameZoomScrollView: NSScrollView {
     private var lastViewportSize = CGSize.zero
     private var applyingLayout = false
     nonisolated(unsafe) private var boundsObserver: NSObjectProtocol?
+
+    func setRegions(_ regions: [PreviewRegion], selected: String?, onSelection: ((String?) -> Void)?) {
+        frameImageView.regions = regions
+        frameImageView.selected = selected
+        frameImageView.onSelection = onSelection
+        frameImageView.needsDisplay = true
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -271,6 +283,9 @@ final class FrameZoomScrollView: NSScrollView {
         let doubleClick = NSClickGestureRecognizer(target: self, action: #selector(toggleZoom(_:)))
         doubleClick.numberOfClicksRequired = 2
         addGestureRecognizer(doubleClick)
+        let singleClick = NSClickGestureRecognizer(target: self, action: #selector(selectRegion(_:)))
+        singleClick.delegate = self
+        frameImageView.addGestureRecognizer(singleClick)
 
         contentView.postsBoundsChangedNotifications = true
         boundsObserver = NotificationCenter.default.addObserver(
@@ -373,9 +388,26 @@ final class FrameZoomScrollView: NSScrollView {
 
     @objc private func toggleZoom(_ gesture: NSClickGestureRecognizer) {
         let anchor = gesture.location(in: contentView)
-        let isFit = abs(requestedRatio - 1) <= 0.01
+        let isFit = abs(requestedRatio - 1) <= 0.000001
         let targetRatio = isFit ? 1 / max(currentGeometry.fitScale, .leastNonzeroMagnitude) : 1
         zoom(to: targetRatio, atClipPoint: anchor)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
+        frameImageView.onSelection != nil
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer,
+                           shouldRequireFailureOf otherGestureRecognizer: NSGestureRecognizer) -> Bool {
+        (otherGestureRecognizer as? NSClickGestureRecognizer)?.numberOfClicksRequired == 2
+    }
+
+    @objc private func selectRegion(_ gesture: NSClickGestureRecognizer) {
+        let bounds = frameImageView.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let point = gesture.location(in: frameImageView)
+        let normalized = CGPoint(x: point.x / bounds.width, y: point.y / bounds.height)
+        frameImageView.onSelection?(frameImageView.regions.first { $0.rect.contains(normalized) }?.id)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -403,4 +435,40 @@ final class FrameZoomScrollView: NSScrollView {
 
 private extension NSRect {
     var center: NSPoint { NSPoint(x: midX, y: midY) }
+}
+
+
+struct PreviewRegion: Identifiable {
+    let id: String
+    /// Normalized bottom-left image coordinates.
+    let rect: CGRect
+}
+
+private final class RegionPreviewImageView: NSImageView {
+    var regions: [PreviewRegion] = []
+    var selected: String?
+    var onSelection: ((String?) -> Void)?
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        for region in regions {
+            let rect = CGRect(x: region.rect.minX * bounds.width, y: region.rect.minY * bounds.height,
+                              width: region.rect.width * bounds.width, height: region.rect.height * bounds.height)
+            (region.id == selected ? NSColor.systemYellow : NSColor.systemRed).setStroke()
+            let path = NSBezierPath(rect: rect)
+            path.lineWidth = region.id == selected ? 2.5 : 1.5
+            path.stroke()
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard onSelection != nil, let scroll = enclosingScrollView else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let origin = scroll.contentView.bounds.origin
+        scroll.contentView.scroll(to: CGPoint(x: origin.x - event.deltaX, y: origin.y + event.deltaY))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+
 }

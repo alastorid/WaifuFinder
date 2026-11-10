@@ -75,7 +75,7 @@ enum ArenaForensics {
     static func pixelBytes(_ image: CGImage) -> [UInt8] {
         bytes(CIImage(cgImage: image), rect: CGRect(x: 0,y: 0,width: image.width,height: image.height))
     }
-    private static func bytes(_ image: CIImage, rect: CGRect) -> [UInt8] {
+    static func bytes(_ image: CIImage, rect: CGRect) -> [UInt8] {
         let width = Int(rect.width), height = Int(rect.height)
         var result = [UInt8](repeating: 0, count: width * height * 4)
         result.withUnsafeMutableBytes { raw in

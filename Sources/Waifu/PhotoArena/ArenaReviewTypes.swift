@@ -22,7 +22,24 @@ struct ArenaCandidateFinding: Codable, Sendable {
 }
 struct ArenaGroupAssessment: Codable, Sendable {
     let sources: [ArenaCandidateFinding]
+    var selected_source: Int? = nil
+    var unresolved: Bool? = nil
+    var reason: String? = nil
     func validate(count: Int) throws {
+        if let unresolved {
+            guard let reason, !reason.isEmpty, reason.utf8.count <= 2048,
+                  unresolved == (selected_source == nil) else {
+                throw ModelInstaller.fail("Inconsistent Super Merger donor decision")
+            }
+            if let selected_source {
+                guard let selected = sources.first(where: { $0.source == selected_source }),
+                      selected.usable, selected.confidence != .low else {
+                    throw ModelInstaller.fail("Selected donor lacks usable, confident evidence")
+                }
+            }
+        } else if selected_source != nil || reason != nil {
+            throw ModelInstaller.fail("Incomplete Super Merger donor decision")
+        }
         guard (2...16).contains(count), sources.count == count,
               Set(sources.map(\.source)) == Set(0..<count),
               sources.allSatisfy({ finding in
@@ -41,7 +58,7 @@ struct ArenaReviewJob: Codable, Identifiable, Sendable {
     var detailRect: ArenaPixelRect? = nil
 }
 struct ArenaGroupPayload: Codable, Sendable {
-    static let revision = "arena-n-source-forensics-v4"
+    static let revision = "super-merger-review-v1"
     let revision: String
     let sourceIDs: [String]
     let images: [Data]
@@ -165,7 +182,14 @@ enum ArenaRecoveryPlanner {
                   !candidates.contains(where: { $0.sourceID != top.sourceID && score - ($0.originality ?? -1) < 3 }) else { return nil }
             return top.sourceID
         }
-        let best = uniqueBest(ranks)
+        func selectedSource(_ record: ArenaReviewRecord?) -> String? {
+            guard let record, record.result.review?.unresolved == false,
+                  let ordinal = record.result.review?.selected_source,
+                  record.sourceIDs.indices.contains(ordinal) else { return nil }
+            return record.sourceIDs[ordinal]
+        }
+        let overview = latest["overview"]
+        let best = overview?.result.review?.unresolved != nil ? selectedSource(overview) : uniqueBest(ranks)
         let reference = analysis.sources.first { $0.id == analysis.referenceID }!
         let requested = preferredSource.flatMap { id in analysis.sources.first { $0.id == id && $0.accepted && $0.width > 0 } }
         // A backbone must cover the complete reference canvas. Cropped candidates remain eligible as patches.
@@ -180,7 +204,16 @@ enum ArenaRecoveryPlanner {
         }
         let eligible = ranks.filter { rank in
             pending.isEmpty && (rank.originality ?? 0) >= 60 && (rank.detail ?? 0) >= 45 && (rank.degradation ?? 100) <= 40
-                && allJobs.allSatisfy { finding(latest[$0.id],rank.sourceID).map(clean) == true }
+                && allJobs.allSatisfy {
+                    let record = latest[$0.id]
+                    let decisionSupportsSource: Bool
+                    if $0.overview {
+                        decisionSupportsSource = record?.result.review?.unresolved == nil || selectedSource(record) == rank.sourceID
+                    } else {
+                        decisionSupportsSource = record?.result.review?.unresolved != true
+                    }
+                    return decisionSupportsSource && finding(record, rank.sourceID).map(clean) == true
+                }
                 && analysis.sources.contains { $0.id == rank.sourceID && $0.accepted }
                 && analysis.regions.allSatisfy { region in region.measurements.contains { $0.sourceID == rank.sourceID && $0.validFraction >= 0.9999 } }
         }
@@ -207,6 +240,7 @@ enum ArenaRecoveryPlanner {
                 source.accepted && source.id != backbone.id && region.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 }
             }.filter { source in
                 if let manual { return source.id == manual }
+                if review.result.review?.unresolved != nil && selectedSource(review) != source.id { return false }
                 guard let finding = finding(review,source.id) else { return false }
                 return !clean(baseFinding) && clean(finding) && finding.originality >= baseFinding.originality
                     && finding.cleanliness >= baseFinding.cleanliness + 10
