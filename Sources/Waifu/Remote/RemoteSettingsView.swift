@@ -205,7 +205,7 @@ private struct RemoteClientSettingsView: View {
             discoveredServers
             manualAddress
             if !client.status.isConnected {
-                Text(client.status.label).font(.caption).foregroundStyle(.secondary)
+                RemoteConnectionStatusLabel(status: client.status)
             }
         }
         .onChange(of: client.status) { _, status in
@@ -290,6 +290,30 @@ private struct RemoteClientSettingsView: View {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+struct RemoteConnectionStatusLabel: View {
+    let status: RemoteClient.Status
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(status.label).foregroundStyle(.secondary)
+            if status == .localNetworkDenied {
+                Button("Open System Settings") {
+                    let privacy = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension"
+                    if let localNetworkURL = URL(string: privacy + "?privacy-localnetwork"),
+                       NSWorkspace.shared.open(localNetworkURL) { return }
+                    if let privacyURL = URL(string: privacy) {
+                        NSWorkspace.shared.open(privacyURL)
+                    }
+                }
+                .controlSize(.small)
+                .help("Allow WaifuFinder under Privacy & Security → Local Network. If it is already allowed, remove its stale entry and allow it again.")
+                .fixedSize()
+            }
+        }
+        .font(.caption)
     }
 }
 

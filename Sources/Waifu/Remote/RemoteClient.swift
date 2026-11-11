@@ -16,6 +16,7 @@ final class RemoteClient: ObservableObject {
         case connecting(String)
         case authenticating(String)
         case connected(String)
+        case localNetworkDenied
         /// The server refused the connection; the user has to act.
         case refused(String)
         /// Transient. `retryAfter` is when the next attempt is due.
@@ -30,6 +31,7 @@ final class RemoteClient: ObservableObject {
             case .connecting(let host): "Connecting to \(host)…"
             case .authenticating(let host): "Verifying the access key with \(host)…"
             case .connected(let host): "Connected to \(host)"
+            case .localNetworkDenied: "Local network access is blocked."
             case .refused(let reason): reason
             case .retrying(let reason, let when):
                 "Reconnecting to \(reason) at \(Self.clock(when))"
@@ -40,7 +42,12 @@ final class RemoteClient: ObservableObject {
         var shouldRetry: Date? { if case .retrying(_, let when) = self { return when } else { return nil } }
 
         /// A failure the user has to resolve. These never retry on their own.
-        var needsAttention: Bool { if case .refused = self { return true } else { return false } }
+        var needsAttention: Bool {
+            switch self {
+            case .refused, .localNetworkDenied: true
+            default: false
+            }
+        }
 
         private static func clock(_ date: Date) -> String {
             let formatter = DateFormatter()
@@ -275,7 +282,7 @@ final class RemoteClient: ObservableObject {
                 Task { @MainActor in
                     guard let self, self.generation == token,
                           case .connecting = self.status else { return }
-                    self.status = .refused("Local network access is blocked. Allow WaifuFinder in System Settings → Privacy & Security → Local Network. If it is already allowed, remove its stale entry and allow it again.")
+                    self.status = .localNetworkDenied
                 }
             })
             let timeout = Task {
@@ -492,7 +499,7 @@ final class RemoteClient: ObservableObject {
             capabilities = nil
             remoteVocabulary = nil
             publishIdentity(nil)
-            if case .refused = status { return }
+            if status.needsAttention { return }
             if case .retrying = status { return }
             let display = endpoint?.display ?? "the server"
             let delay = backoff

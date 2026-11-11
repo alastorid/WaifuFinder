@@ -141,6 +141,38 @@ func registerTagSummaryTests() {
                    "a frame can explain multiple independent winning tags")
     })
 
+    Registry.shared.add(suite: suite, TestCase(name: "tag matches reach the grid while visual ordering is pending", knownBug: nil) {
+        let vocabulary = try summaryVocabulary()
+        let directory = try Temporary.directory("tag-filter-visual-order")
+        let frames = (0..<24).map { index in
+            summaryFrame(index, index < 12 ? [4: 0.9, 5: 0.9] : [4: 0.9, 6: 0.9])
+        }
+        try await Task { @MainActor in
+            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"), vocabulary: vocabulary)
+            session.tagFilter = TagFilter(requiredTags: ["tag_0", "tag_3"])
+            session.updateAnalyzedFrames(frames)
+            check(session.displayOrderFrames.isEmpty, "the initial tag combination has no matches")
+            let emptyRevision = session.gridRevision
+
+            session.tagFilter.requiredTags = ["tag_0", "tag_1"]
+            check(session.isComputingVisualDistance, "the twelve matches are waiting for visual ordering")
+            checkEqual(session.displayOrderFrames.map(\.id), frames.prefix(12).map(\.id), "matches replace the empty grid immediately")
+            check(session.gridRevision > emptyRevision, "the new membership is delivered to the grid")
+
+            session.tagFilter.requiredTags = ["tag_0", "tag_2"]
+            let expected = frames.suffix(12).map(\.id)
+            checkEqual(session.displayOrderFrames.map(\.id), expected, "switching tags immediately replaces the previous matches")
+            for _ in 0..<250 {
+                if !session.isComputingVisualDistance { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            check(!session.isComputingVisualDistance, "the latest route completes")
+            checkEqual(session.displayOrderFrames.map(\.id), expected, "obsolete work cannot restore previous tag matches")
+            session.frameOrder.toggleDirection(of: .minimalVisualDistance)
+            checkEqual(session.displayOrderFrames.map(\.id), Array(expected.reversed()), "reversing the completed route keeps the same matches")
+        }.value
+    })
+
     Registry.shared.add(suite: suite, TestCase(name: "Top always applies regardless of legacy Basic mode", knownBug: nil) {
         let vocabulary = try summaryVocabulary()
         let directory = try Temporary.directory("tag-advanced-session")

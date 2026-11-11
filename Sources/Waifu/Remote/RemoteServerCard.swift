@@ -46,8 +46,11 @@ struct RemoteServerCard: View {
                     HStack(spacing: 6) {
                         Circle().fill(client.status.isConnected ? Color.green : Color.secondary)
                             .frame(width: 6, height: 6)
-                        Text(client.isEnabled ? client.status.label : "Off")
-                            .font(.caption).foregroundStyle(.secondary)
+                        if client.isEnabled {
+                            RemoteConnectionStatusLabel(status: client.status)
+                        } else {
+                            Text("Off").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     if let capabilities {
                         capability("Tagging", available: capabilities.offersRemoteTagging)

@@ -3117,10 +3117,11 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let baseFrames = uniqueFramesByID(arrangement.visible)
         visualOrderBaseFrames = baseFrames
         let orderedFrames = visuallyOrderedFrames(baseFrames)
-        // Keep the last complete grid until the route is ready. Publishing a
-        // provisional subset/order here makes every thumbnail move twice.
-        if pendingVisualOrderInput == nil {
-            displayedFrames = orderedFrames
+        // Keep the existing order while sorting the same photos. A changed
+        // result set needs to reach the grid even if its route is still pending.
+        if orderedFrames != nil || baseFrames.count != displayedFrames.count
+            || Set(baseFrames.lazy.map(\.id)) != Set(displayedFrames.lazy.map(\.id)) {
+            displayedFrames = orderedFrames ?? baseFrames
             scheduleTagSummary()
             rebuildDisplayedLayout()
         }
@@ -3175,8 +3176,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             recomputeDisplayedFrames()
             return
         }
-        let ordered = visuallyOrderedFrames(baseFrames)
-        guard pendingVisualOrderInput == nil else { return }
+        guard let ordered = visuallyOrderedFrames(baseFrames) else { return }
         let orderChanged = ordered.map(\.id) != displayedFrames.map(\.id)
         displayedFrames = ordered
         scheduleTagSummary()
@@ -3207,7 +3207,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// Cache by the actual shown set, its seed order and feature payloads. Metadata
     /// refreshes reuse the route but still display the newest frame values. Flipping
     /// direction reverses the cached route without recalculating any distances.
-    private func visuallyOrderedFrames(_ shown: [AnalyzedFrame]) -> [AnalyzedFrame] {
+    private func visuallyOrderedFrames(_ shown: [AnalyzedFrame]) -> [AnalyzedFrame]? {
         guard frameOrder.minimalVisualDistance.enabled, !defersVisualOrder, shown.count > 1 else {
             visualOrderTask?.cancel()
             visualOrderTask = nil
@@ -3269,8 +3269,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             isSortingVisualDistance = false
         }
 
-        // A pending route has no displayable intermediate order.
-        if pendingVisualOrderInput != nil { return displayedFrames }
+        guard pendingVisualOrderInput == nil else { return nil }
         let byID = Dictionary(uniqueKeysWithValues: shown.map { ($0.id, $0) })
         let cachedIDs = Set(visualOrderIDs)
         let ordered = visualOrderIDs.compactMap { byID[$0] } + shown.filter { !cachedIDs.contains($0.id) }
