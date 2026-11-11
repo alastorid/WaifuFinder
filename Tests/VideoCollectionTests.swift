@@ -20,8 +20,40 @@ private actor VideoIssueRecorder {
     func append(_ issue: VideoProcessingIssue) { issues.append(issue) }
 }
 
+private actor ReaderActivity {
+    private var active = 0
+    private(set) var peak = 0
+
+    func start() {
+        active += 1
+        peak = max(peak, active)
+    }
+
+    func finish() { active -= 1 }
+}
+
 func registerVideoCollectionTests() {
     let suite = "video collection"
+    Registry.shared.add(suite: suite, TestCase(name: "video reader cap follows published chip capabilities", knownBug: nil) {
+        for chip in ["Apple M1", "Apple M3", "Apple M4 Max", "Apple M6", "Unknown"] {
+            checkEqual(CollectionVideoAnalysis.readerLimit(for: chip), 1, "single or unverified decoder count")
+        }
+        for chip in ["Apple M1 Ultra", "Apple M2 Ultra", "Apple M3 Ultra", "Apple M5 Ultra"] {
+            checkEqual(CollectionVideoAnalysis.readerLimit(for: chip), 2, "two published decode engines")
+        }
+        let activity = ReaderActivity()
+        let run = CollectionVideoAnalysis.schedule(count: 6, limit: 2) { index, emit in
+            await activity.start()
+            try await Task.sleep(for: .milliseconds(30))
+            await emit(collectionFrame(index: index, time: Double(index)))
+            await activity.finish()
+        }
+        var indices: [Int] = []
+        for try await frame in run.frames { indices.append(frame.id.sampleIndex) }
+        await run.task.value
+        checkEqual(indices.sorted(), Array(0..<6), "all sources complete")
+        checkEqual(await activity.peak, 2, "queued sources never exceed the hardware cap")
+    })
     Registry.shared.add(suite: suite, TestCase(name: "original videos share a timeline without creating media or resampling", knownBug: nil) {
         let directory = try Temporary.directory("video-collection")
         let first = try VideoFixture.makeMP4(in: directory, durationSeconds: 1, width: 64, height: 48, frameRate: 4)

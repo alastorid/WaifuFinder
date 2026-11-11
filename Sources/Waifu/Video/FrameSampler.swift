@@ -270,6 +270,13 @@ struct FrameSampleIndexMap: Sendable {
 // An actor because the pipeline may pull from more than one task, and the reader
 // is a single mutable resource. `next()` returning `nil` ends the stream.
 private actor FrameSamplingProducer {
+    // AVAssetReader may block on hardware decode. Keep each reader serial
+    // without occupying a cooperative Swift executor thread during that wait.
+    private let decodeQueue = DispatchSerialQueue(label: "waifu.video.decode", qos: .userInitiated)
+    nonisolated var unownedExecutor: UnownedSerialExecutor {
+        decodeQueue.asUnownedSerialExecutor()
+    }
+
     private let url: URL
     private let analysisWidth: Int
     private let mode: AnalysisMode
@@ -345,9 +352,7 @@ private actor FrameSamplingProducer {
     /// A failure here is not a failure of the pass. The index is simply
     /// left empty, which the producer reads as "this file does not
     /// expose sync flags" and answers by analysing every frame.
-    nonisolated private static func readSyncSamples(track: AVAssetTrack,
-                                                    asset: AVAsset,
-                                                    frameRate: Double) -> SyncSampleIndex {
+    private func readSyncSamples(track: AVAssetTrack, asset: AVAsset, frameRate: Double) -> SyncSampleIndex {
         let tolerance = max(1.0 / max(frameRate, 1) / 2, 0.0005)
         let empty = SyncSampleIndex(times: [], toleranceSeconds: tolerance)
         guard let reader = try? AVAssetReader(asset: asset) else { return empty }
@@ -358,8 +363,8 @@ private actor FrameSamplingProducer {
         guard reader.startReading() else { return empty }
         defer { reader.cancelReading() }
         var times: [CMTime] = []
-        while let buffer = output.copyNextSampleBuffer() {
-            guard isSyncSample(buffer) else { continue }
+        while !Task.isCancelled, let buffer = output.copyNextSampleBuffer() {
+            guard Self.isSyncSample(buffer) else { continue }
             let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
             guard pts.isNumeric else { continue }
             times.append(pts)
@@ -476,7 +481,8 @@ private actor FrameSamplingProducer {
         // quick select by ordinal and must not pay for a pass they
         // never read.
         if mode == .keyframe {
-            syncSamples = Self.readSyncSamples(track: track, asset: asset, frameRate: videoInfo.frameRate)
+            syncSamples = readSyncSamples(track: track, asset: asset, frameRate: videoInfo.frameRate)
+            try Task.checkCancellation()
         }
 
         let reader: AVAssetReader

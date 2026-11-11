@@ -2325,26 +2325,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 let sourceFrames = existingFrames.filter {
                     VideoCollection.sourceIndex($0.id.sampleIndex) == sourceIndex
                 }
-                let localCenter: Double = (localRange.lowerBound + localRange.upperBound) / 2
-                let localCandidates: [AnalyzedFrame] = sourceFrames.filter { frame in
-                    let localTime: Double = frame.timeSeconds - member.offset
-                    return localRange.contains(localTime)
-                }
-                let localAnchor: AnalyzedFrame? = localCandidates.min { left, right in
-                    let leftDistance: Double = abs(left.timeSeconds - member.offset - localCenter)
-                    let rightDistance: Double = abs(right.timeSeconds - member.offset - localCenter)
-                    return leftDistance < rightDistance
-                }
-                let timeline = try await SourceFrameTimeline.load(source: member.video.url, around: localRange)
-                let ordinalOffset: Int
-                if let localAnchor {
-                    ordinalOffset = VideoCollection.localIndex(localAnchor.id.sampleIndex)
-                        - timeline.index(at: localAnchor.timeSeconds - member.offset)
-                } else {
-                    ordinalOffset = Int((localRange.lowerBound * max(1, member.video.frameRate)).rounded())
-                        - timeline.index(at: localRange.lowerBound)
-                }
-                maps[sourceIndex] = FrameSampleIndexMap(timeline: timeline, ordinalOffset: ordinalOffset)
+                maps[sourceIndex] = try await Self.focusedMemberIndexMap(member: member, range: localRange,
+                                                                        frames: sourceFrames)
             }
             return maps
         }
@@ -2360,6 +2342,21 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             ?? (Int((timeRange.lowerBound * max(1, video.frameRate)).rounded())
                 - timeline.index(at: timeRange.lowerBound))
         return [0: FrameSampleIndexMap(timeline: timeline, ordinalOffset: ordinalOffset)]
+    }
+
+    private nonisolated static func focusedMemberIndexMap(member: VideoCollection.Member,
+                                                        range: ClosedRange<Double>,
+                                                        frames: [AnalyzedFrame]) async throws -> FrameSampleIndexMap {
+        let center = (range.lowerBound + range.upperBound) / 2
+        let anchor = frames.filter { range.contains($0.timeSeconds - member.offset) }.min {
+            abs($0.timeSeconds - member.offset - center) < abs($1.timeSeconds - member.offset - center)
+        }
+        let timeline = try await SourceFrameTimeline.load(source: member.video.url, around: range)
+        let ordinalOffset = anchor.map {
+            VideoCollection.localIndex($0.id.sampleIndex) - timeline.index(at: $0.timeSeconds - member.offset)
+        } ?? (Int((range.lowerBound * max(1, member.video.frameRate)).rounded())
+              - timeline.index(at: range.lowerBound))
+        return FrameSampleIndexMap(timeline: timeline, ordinalOffset: ordinalOffset)
     }
 
     /// Score missing frames in a bounded timeline range while retaining the
@@ -2382,26 +2379,31 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             await acceptProgress(progress, token: token)
             try Task.checkCancellation()
             var excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
+            let jobs: [(index: Int, member: VideoCollection.Member, ranges: [ClosedRange<Double>])] =
+                CollectionVideoAnalysis.readerLimit > 1
+                ? VideoCollection.get(video.url)?.members.enumerated().compactMap { index, member in
+                    let ranges = timeRanges.compactMap { range -> ClosedRange<Double>? in
+                        let start = max(0, range.lowerBound - member.offset)
+                        let end = min(member.video.durationSeconds, range.upperBound - member.offset)
+                        return start <= min(end, member.video.durationSeconds - 0.000001) ? start...end : nil
+                    }
+                    return ranges.isEmpty ? nil : (index: index, member: member, ranges: ranges)
+                } ?? []
+                : []
+            let reportIssue: @Sendable (VideoProcessingIssue) async -> Void = { [weak self] issue in
+                await self?.acceptVideoIssue(issue, token: token)
+            }
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                 videoStem: video.url.deletingPathExtension().lastPathComponent)
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(
                     minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
                 thumbnailStore: writer, analysisWidth: settings.analysisWidth,
-                workerCount: FrameProcessingConcurrency(width: video.width, height: video.height,
+                workerCount: jobs.count > 1 ? 2 : FrameProcessingConcurrency(width: video.width, height: video.height,
                                                         analysisWidth: settings.analysisWidth).scoringWorkers,
                 cacheSuffix: "-\(token.uuidString)")
             var additions: [AnalyzedFrame] = []
             var lastPulse = started
-            for timeRange in timeRanges {
-                try Task.checkCancellation()
-                let sampleIndexMaps = try await focusedRangeSampleIndexMaps(video: video, timeRange: timeRange,
-                                                                             existingFrames: existingFrames)
-                let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
-                    mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
-                    sampleIndexMaps: sampleIndexMaps, onProgress: { _ in },
-                    onIssue: { [weak self] issue in await self?.acceptVideoIssue(issue, token: token) })
-                let scoring = pipeline.start(frames: sampled,
-                    minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in })
+            func consume(_ scoring: FrameScorePipeline.Run) async throws {
                 scoringTask = scoring.task
                 for try await frame in scoring.frames {
                     try Task.checkCancellation()
@@ -2416,6 +2418,41 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                         await acceptProgress(progress, token: token)
                         lastPulse = now
                     }
+                }
+            }
+            if jobs.count > 1 {
+                let framesBySource = Dictionary(grouping: existingFrames) {
+                    VideoCollection.sourceIndex($0.id.sampleIndex)
+                }
+                let scoring = CollectionVideoAnalysis.schedule(count: jobs.count) { jobIndex, emit in
+                    let job = jobs[jobIndex]
+                    let sourceFrames = framesBySource[job.index] ?? []
+                    var localExclusions = Set(sourceFrames.map { VideoCollection.localIndex($0.id.sampleIndex) })
+                    for range in job.ranges {
+                        try Task.checkCancellation()
+                        let indexMap = try await Self.focusedMemberIndexMap(member: job.member, range: range,
+                                                                          frames: sourceFrames)
+                        let sampleRange = range.lowerBound...min(range.upperBound, job.member.video.durationSeconds - 0.000001)
+                        try await CollectionVideoAnalysis.analyze(job.member, index: job.index,
+                            width: settings.analysisWidth, pipeline: pipeline,
+                            minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onIssue: reportIssue,
+                            mode: .full, timeRange: sampleRange, exclusions: localExclusions, indexMap: indexMap) { frame in
+                            localExclusions.insert(VideoCollection.localIndex(frame.id.sampleIndex))
+                            await emit(frame)
+                        }
+                    }
+                }
+                try await consume(scoring)
+            } else {
+                for timeRange in timeRanges {
+                    try Task.checkCancellation()
+                    let sampleIndexMaps = try await focusedRangeSampleIndexMaps(video: video, timeRange: timeRange,
+                                                                                 existingFrames: existingFrames)
+                    let sampled = AVFoundationFrameSampler().sample(video.url, analysisWidth: settings.analysisWidth,
+                        mode: .full, timeRange: timeRange, excludingSampleIndices: excludedIndices,
+                        sampleIndexMaps: sampleIndexMaps, onProgress: { _ in }, onIssue: reportIssue)
+                    try await consume(pipeline.start(frames: sampled,
+                        minimumFaceAreaFraction: settings.minimumFaceAreaFraction, onProgress: { _ in }))
                 }
             }
             try Task.checkCancellation()
@@ -2528,23 +2565,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 PhotosAlbumSampler(album: $0, width: analysisWidth, mode: mode,
                                    completedIndices: Set(retained.map { $0.id.sampleIndex }), allowNetwork: allowNetwork)
             }
-            let sampled: AsyncThrowingStream<SampledFrame, Error>
-            if let photosSampler {
-                sampled = AsyncThrowingStream(unfolding: { try await photosSampler.next() })
-            } else {
-                sampled = AVFoundationFrameSampler().sample(videoInfo.url, analysisWidth: analysisWidth,
-                                                           mode: mode, timeRange: nil, excludingSampleIndices: [], onProgress: { _ in },
-                    onIssue: { [weak self] issue in
-                        let original = sourceURLs?.count == 1 ? sourceURLs?.first : nil
-                        await self?.acceptVideoIssue(VideoProcessingIssue(source: original ?? issue.source,
-                            stage: issue.stage, reason: issue.reason, framesRetained: issue.framesRetained), token: token)
-                    })
+            let parallelCollection = mode == .keyframe && CollectionVideoAnalysis.readerLimit > 1
+                ? VideoCollection.get(videoInfo.url).flatMap { $0.members.count > 1 ? $0 : nil }
+                : nil
+            let reportIssue: @Sendable (VideoProcessingIssue) async -> Void = { [weak self] issue in
+                let original = sourceURLs?.count == 1 ? sourceURLs?.first : nil
+                await self?.acceptVideoIssue(VideoProcessingIssue(source: original ?? issue.source,
+                    stage: issue.stage, reason: issue.reason, framesRetained: issue.framesRetained), token: token)
             }
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                                                 videoStem: videoInfo.url.deletingPathExtension().lastPathComponent)
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
                                               thumbnailStore: writer, analysisWidth: analysisWidth,
-                                              workerCount: FrameProcessingConcurrency(
+                                              workerCount: parallelCollection != nil ? 2 : FrameProcessingConcurrency(
                                                 width: album?.items.allSatisfy(\.isStill) == true ? analysisWidth : videoInfo.width,
                                                 height: album?.items.allSatisfy(\.isStill) == true ? analysisWidth : videoInfo.height,
                                                 analysisWidth: analysisWidth).scoringWorkers,
@@ -2555,8 +2588,24 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             } else {
                 checkpointFrame = nil
             }
-            let scoring = pipeline.start(frames: sampled, minimumFaceAreaFraction: settings.minimumFaceAreaFraction,
+            let scoring: FrameScorePipeline.Run
+            if let parallelCollection {
+                scoring = CollectionVideoAnalysis.schedule(count: parallelCollection.members.count) { index, emit in
+                    try await CollectionVideoAnalysis.analyze(parallelCollection.members[index], index: index,
+                        width: analysisWidth, pipeline: pipeline, minimumFaceAreaFraction: settings.minimumFaceAreaFraction,
+                        onIssue: reportIssue, mode: .keyframe, emit: emit)
+                }
+            } else {
+                let sampled: AsyncThrowingStream<SampledFrame, Error>
+                if let photosSampler {
+                    sampled = AsyncThrowingStream(unfolding: { try await photosSampler.next() })
+                } else {
+                    sampled = AVFoundationFrameSampler().sample(videoInfo.url, analysisWidth: analysisWidth,
+                        mode: mode, timeRange: nil, excludingSampleIndices: [], onProgress: { _ in }, onIssue: reportIssue)
+                }
+                scoring = pipeline.start(frames: sampled, minimumFaceAreaFraction: settings.minimumFaceAreaFraction,
                                          onProgress: { _ in }, onFrame: checkpointFrame)
+            }
             scoringTask = scoring.task
             let scoredFrames = retained.isEmpty ? scoring.frames : PhotosAnalysisCheckpoint.merging(retained, with: scoring.frames)
             let grouping = IncrementalFrameGrouper(settings: settings.grouping)
@@ -2565,9 +2614,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             for try await frame in scoredFrames {
                 try Task.checkCancellation()
                 analyzed.append(frame)
-                // The scoring producer continues its bounded Vision workers
-                // while this background consumer groups each ordered result.
-                try grouping.append(frame)
+                // Collection results can arrive from any source, so group
+                // them after sorting. Other passes group as they score.
+                if parallelCollection == nil { try grouping.append(frame) }
                 progress.processed += 1
                 progress.groupedFrames = grouping.processed
                 progress.groupsIdentified = grouping.linkedGroups
@@ -2602,6 +2651,20 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.elapsed = Date().timeIntervalSince(started)
             progress.message = "Finishing groups…"
             await acceptProgress(progress, token: token)
+            if parallelCollection != nil {
+                analyzed.sort { ($0.timeSeconds, $0.id.raw) < ($1.timeSeconds, $1.id.raw) }
+                for frame in analyzed {
+                    try grouping.append(frame)
+                    let now = Date()
+                    if now.timeIntervalSince(lastPulse) >= 0.25 {
+                        progress.groupedFrames = grouping.processed
+                        progress.groupsIdentified = grouping.linkedGroups
+                        progress.elapsed = now.timeIntervalSince(started)
+                        await acceptProgress(progress, token: token)
+                        lastPulse = now
+                    }
+                }
+            }
             let groups = try grouping.finish()
             try Task.checkCancellation()
             var groupByMember: [String: FrameGroupID] = [:]

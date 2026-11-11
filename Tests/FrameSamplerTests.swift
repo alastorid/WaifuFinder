@@ -48,40 +48,45 @@ func registerFrameSamplerTests() {
         let directory = try Temporary.directory("focused-multiple-windows")
         let clip = try VideoFixture.makeMP4(in: directory, durationSeconds: 22,
                                             width: 64, height: 48, frameRate: 2)
-        var full: [SampledFrame] = []
-        for try await frame in AVFoundationFrameSampler().sample(
-            clip, analysisWidth: 64, mode: .full, onProgress: { _ in }
-        ) { full.append(frame) }
+        for sources in [[clip], [clip, clip]] {
+            let prepared = try await MediaImport.prepare(sources)
+            let secondTime = sources.count == 1 ? 18.0 : 40.0
+            let selectedRanges = [0.0...5.0, (secondTime - 3)...(secondTime + 3)]
+            var expectedIDs: Set<FrameID> = []
+            for try await frame in AVFoundationFrameSampler().sample(
+                prepared.url, analysisWidth: 64, mode: .full, onProgress: { _ in }
+            ) where selectedRanges.contains(where: { $0.contains(frame.timeSeconds) }) {
+                expectedIDs.insert(FrameID(sampleIndex: frame.sampleIndex))
+            }
+            let expected = expectedIDs
 
-        try await Task { @MainActor in
-            let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
-            session.settings.analysisMode = .quick
-            session.settings.analysisWidth = 64
-            session.loadVideo(at: clip)
-            for _ in 0..<600 where session.progress.isRunning {
-                try await Task.sleep(for: .milliseconds(100))
-            }
-            checkEqual(session.progress.phase, .complete, "initial quick analysis completes")
-            guard session.progress.phase == .complete,
-                  let first = session.frames.first(where: { abs($0.timeSeconds - 2) < 0.01 }),
-                  let second = session.frames.first(where: { abs($0.timeSeconds - 18) < 0.01 }) else {
-                check(false, "quick analysis contains both selected frames")
-                return
-            }
-            let before = Set(session.frames.map(\.id))
-            session.selectFrame(first.id)
-            session.selectFrame(second.id, command: true)
-            session.analyzeFocusedRange(around: second)
-            for _ in 0..<600 where session.progress.isRunning {
-                try await Task.sleep(for: .milliseconds(100))
-            }
-            checkEqual(session.progress.phase, .complete, "focused analysis completes")
-            let expected = Set(full.filter { (0.0...5.0).contains($0.timeSeconds)
-                                             || (15.0...21.0).contains($0.timeSeconds) }
-                .map { FrameID(sampleIndex: $0.sampleIndex) }).union(before)
-            checkEqual(Set(session.frames.map(\.id)), expected,
-                       "both selected ranges gain all frames without adding frames in the gap")
-        }.value
+            try await Task { @MainActor in
+                let session = WaifuSession(settingsURL: directory.appendingPathComponent("settings.json"))
+                session.settings.analysisMode = .quick
+                session.settings.analysisWidth = 64
+                session.loadVideos(at: sources)
+                for _ in 0..<600 where session.progress.isRunning {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                checkEqual(session.progress.phase, .complete, "initial quick analysis completes")
+                guard session.progress.phase == .complete,
+                      let first = session.frames.first(where: { abs($0.timeSeconds - 2) < 0.01 }),
+                      let second = session.frames.first(where: { abs($0.timeSeconds - secondTime) < 0.01 }) else {
+                    check(false, "quick analysis contains both selected frames")
+                    return
+                }
+                let before = Set(session.frames.map(\.id))
+                session.selectFrame(first.id)
+                session.selectFrame(second.id, command: true)
+                session.analyzeFocusedRange(around: second)
+                for _ in 0..<600 where session.progress.isRunning {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                checkEqual(session.progress.phase, .complete, "focused analysis completes")
+                checkEqual(Set(session.frames.map(\.id)), expected.union(before),
+                           "both ranges gain all frames without adding frames in the gap")
+            }.value
+        }
     })
 
     Registry.shared.add(suite: suite, TestCase(
