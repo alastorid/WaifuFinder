@@ -15,7 +15,8 @@ struct ArenaOutputDifference: Codable, Sendable {
 /// Replays the actual source selections in reference coordinates. Output/source masks
 /// are always recomputed, never borrowed from original source-to-source masks.
 enum ArenaOutputInspector {
-    static func detectedOverlay(_ analysis: ArenaAnalysis, tolerance: Int = 12, opacity: Double = 0.55, maxPixelSize: Int = 1600) throws -> CGImage {
+    static func detectedOverlay(_ analysis: ArenaAnalysis, tolerance requestedTolerance: Int? = nil, opacity: Double = 0.55, maxPixelSize: Int = 1600) throws -> CGImage {
+        let tolerance = requestedTolerance ?? analysis.differenceTolerance ?? 12
         let scale = min(1,Double(maxPixelSize)/Double(max(analysis.width,analysis.height)))
         let width = max(1,Int((Double(analysis.width)*scale).rounded())), height = max(1,Int((Double(analysis.height)*scale).rounded()))
         guard let overlay = CGContext(data:nil,width:width,height:height,bitsPerComponent:8,bytesPerRow:width*4,
@@ -23,7 +24,7 @@ enum ArenaOutputInspector {
         overlay.scaleBy(x:scale,y:scale); overlay.setFillColor(red:1,green:0,blue:0,alpha:opacity)
         for region in analysis.regions {
             try Task.checkCancellation()
-            if tolerance == 12, let mask = region.changeMask {
+            if tolerance == (analysis.differenceTolerance ?? 12), let mask = region.changeMask {
                 let spans = mask.runs.map { CGRect(x:$0.x,y:$0.y,width:$0.length,height:1) }
                 overlay.fill(spans); continue
             }

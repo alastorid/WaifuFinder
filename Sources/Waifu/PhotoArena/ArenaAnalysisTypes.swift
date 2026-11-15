@@ -105,4 +105,6 @@ struct ArenaAnalysis: Codable, Sendable {
     var regions: [ArenaRegion]
     var warnings: [String]
     var elapsedSeconds: Double
+    /// Nil in older reports, which used a fixed 12/255 residual tolerance.
+    var differenceTolerance: Int? = nil
 }

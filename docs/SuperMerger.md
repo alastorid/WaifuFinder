@@ -1,19 +1,35 @@
 # Super Merger
 
 Open **File → Super Merger** or select related frames and choose **Super Merger**
-from their context menu. Import 2–16 versions of one photograph. The result opens
-inside the main window using the shared Preview image surface. Select a red region
-on the image or in the inspector to inspect aligned crops, read the model's
-explanation and see the source actually used in the rendered result. The selected
-region is outlined in yellow. Region overrides can be undone or restored to the
-automatic decision.
+from their context menu. Choose or drop 2–16 versions of one photograph. Analysis
+starts automatically. **Replace Sources** starts a new set when the current work
+has stopped. The persistent toolbar keeps Undo, Export and Done available without
+scrolling; progress, cancellation and resume live in the bottom status bar.
 
-Select a source to inspect it in the same viewport. **Audit differences** measures
-the rendered result against that source. Double-click the image to switch between
-**Fit** and **Preview 100%**. Press Space to return to the previous view. Exports
-use full resolution. The export folder contains
-the image, original sources, review records, source map, and output differences.
-The inspector and export both use the published, verified reconstruction plan.
+The workspace puts the photograph on the left and the region review on the right.
+The source strip shows aligned previews, the base source and excluded inputs.
+Selecting a thumbnail inspects that source without changing the result. **Result**,
+**Source** and **Compare** are always-visible choices; Compare places the result
+and selected aligned source side by side with shared zoom and pan. Browsing remains
+available during review. Excluded sources can be inspected but cannot be compared
+in reference coordinates or chosen as replacement pixels.
+
+Select a red region on the image or a numbered region in the inspector. The selected
+region is outlined in yellow. Previous/next buttons navigate regions; **Locate**
+centers and enlarges the selected area. Aligned source crops appear in an adaptive
+grid with model evidence, confidence and the source actually used in the published
+result. **Use Source** changes only that region; **Reset** restores its automatic
+choice. Undo reverses an earlier choice. These actions are disabled while a result
+is being rendered. Uncertain and unreviewed regions remain explicitly labelled.
+
+Use **Fit**, **100%**, or double-click the image to change the preview scale. The
+region-outline toggle leaves the underlying image unobscured. Preview 100% refers
+to preview pixels; exports use full resolution. **Output verification** in the
+inspector checks the rendered plan against the selected source without rebuilding
+the displayed preview. Switching sources or changing the result clears stale audit
+results. Export creates a folder containing the image, original sources, review
+records, source map and output differences. The inspector and export use the
+published, verified reconstruction plan.
 
 ## Review pipeline
 

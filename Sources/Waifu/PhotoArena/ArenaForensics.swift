@@ -217,6 +217,35 @@ enum ArenaForensics {
         let text = accepted.map(textBoxes)
         var seen: Set<String> = []
         let distinct = accepted.map { seen.insert($0.fileSHA256 ?? $0.id).inserted }
+        // Sample native-resolution residuals across the entire canvas. Resizing
+        // before measuring would erase small edits and change compression noise.
+        var histogram = [Int](repeating: 0, count: 256)
+        let sampleStep = max(1, Int(ceil(sqrt(Double(reference.width) * Double(reference.height) / 262_144))))
+        for y in stride(from: 0, to: reference.height, by: tileSize) {
+            for x in stride(from: 0, to: reference.width, by: tileSize) {
+                try Task.checkCancellation()
+                let rect = CGRect(x: x, y: y, width: min(tileSize, reference.width-x), height: min(tileSize, reference.height-y))
+                let buffers = images.map { bytes($0, rect: rect) }
+                let width = Int(rect.width)
+                for row in stride(from: 0, to: Int(rect.height), by: sampleStep) {
+                    for column in stride(from: 0, to: width, by: sampleStep) {
+                        let offset = (row * width + column) * 4
+                        var low = SIMD3<Int>(repeating: 255), high = SIMD3<Int>(repeating: 0)
+                        var covered = 0
+                        for index in buffers.indices where distinct[index] && buffers[index][offset+3] > 250 {
+                            covered += 1
+                            for channel in 0..<3 {
+                                let value = Int(buffers[index][offset+channel])
+                                low[channel] = min(low[channel], value)
+                                high[channel] = max(high[channel], value)
+                            }
+                        }
+                        if covered >= 2 { histogram[max(high.x-low.x, high.y-low.y, high.z-low.z)] += 1 }
+                    }
+                }
+            }
+        }
+        let tolerance = ArenaDifferenceThreshold.select(histogram: histogram)
         var regions: [ArenaRegion] = []
         var retainedRuns = 0
         var deferredMasks = 0
@@ -240,7 +269,8 @@ enum ArenaForensics {
                         channelValues.removeAll(keepingCapacity: true)
                         for index in available where distinct[index] { channelValues.append(Double(buffers[index][offset+c])) }
                         channelValues.sort()
-                        if channelValues.count >= 2 && channelValues.last! - channelValues.first! > 12 { changed[pixel] = true }
+                        if channelValues.count >= 2 && channelValues.last! - channelValues.first! > Double(tolerance) { changed[pixel] = true }
+                        guard !channelValues.isEmpty else { continue }
                         let middle = channelValues.count/2
                         median[c] = channelValues.count%2 == 0 ? (channelValues[middle-1]+channelValues[middle])/2 : channelValues[middle]
                     }
@@ -280,7 +310,8 @@ enum ArenaForensics {
         }
         return ArenaAnalysis(referenceID: reference.id,width: reference.width,height: reference.height,sources: sources,regions: regions,
             warnings: ["Authenticity and watermark classification remain unverified. OCR and residuals are candidate evidence only.","Global homography cannot validate parallax or local deformation. Tile boundaries group exact changed-pixel runs; they are not object segmentation."] +
-                (deferredMasks == 0 ? [] : ["\(deferredMasks) precise masks deferred by the memory budget; measurements remain available and these regions cannot be automatically patched."]),elapsedSeconds: Date().timeIntervalSince(start))
+                ["Adaptive RGB difference tolerance: \(tolerance)/255 (Otsu with background noise floor)."] +
+                (deferredMasks == 0 ? [] : ["\(deferredMasks) precise masks deferred by the memory budget; measurements remain available and these regions cannot be automatically patched."]),elapsedSeconds: Date().timeIntervalSince(start), differenceTolerance: tolerance)
     }
     static func differenceOverlay(_ analysis: ArenaAnalysis, sourceID: String, maxPixelSize: Int = 1600) throws -> CGImage {
         guard let source = analysis.sources.first(where: { $0.id == sourceID && $0.accepted }), let reference = analysis.sources.first(where: { $0.id == analysis.referenceID }) else { throw failure("Registered source unavailable") }

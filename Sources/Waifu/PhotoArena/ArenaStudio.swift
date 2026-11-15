@@ -31,14 +31,19 @@ final class ArenaStudio: ObservableObject {
     private var operation: Task<Void, Never>?
     private var displayTask: Task<Void, Never>?
     private var cropTask: Task<Void, Never>?
+    private var auditTask: Task<Void, Never>?
+    private var auditID = UUID()
+    @Published private(set) var auditing = false
     private var generation = UUID()
     private var displayGeneration = UUID()
-    private var overrides: [String: String] = [:]
+    @Published private var overrides: [String: String] = [:]
     private var preferredSource: String?
-    private var history: [([String: String], String?)] = []
+    @Published private var history: [([String: String], String?)] = []
     private var storage: URL?
     private var ingestionDirectory: URL?
     var busy: Bool { rendering || [.ingesting, .aligning, .reviewing, .planning, .verifying].contains(phase) }
+    var canUndo: Bool { !busy && !history.isEmpty }
+    var hasRegionOverride: Bool { regionID.map { overrides[$0] != nil } ?? false }
     var region: ArenaRegion? { analysis?.regions.first { $0.id == regionID } }
     var selectedReview: ArenaReviewRecord? { records.last { $0.id == (regionID ?? "overview") } }
     var changeRegions: [ArenaRegion] { analysis?.regions.filter(ArenaRecoveryPlanner.needsReview) ?? [] }
@@ -204,8 +209,36 @@ final class ArenaStudio: ObservableObject {
         if let ingestionDirectory { try? FileManager.default.removeItem(at: ingestionDirectory) }
         ingestionDirectory = nil
     }
-    private func cancelTasks() { operation?.cancel(); displayTask?.cancel(); cropTask?.cancel() }
+    private func cancelTasks() {
+        operation?.cancel(); displayTask?.cancel(); cropTask?.cancel(); clearAudit()
+    }
+    func clearAudit() {
+        auditTask?.cancel(); auditID = UUID(); auditing = false; difference = nil
+    }
+    /// Auditing an already-published plan must not reconstruct the preview again.
+    func auditOutput() {
+        guard !busy, !auditing, let analysis, let output,
+              analysis.sources.contains(where: { $0.id == sourceID && $0.accepted }) else { return }
+        clearAudit()
+        let request = auditID, token = generation, selected = sourceID
+        auditing = true
+        auditTask = Task {
+            defer { if auditID == request { auditing = false } }
+            do {
+                let report = try await background {
+                    try ArenaOutputInspector.compare(analysis, selections: output.plan.selections,
+                        sourceID: selected, tolerance: 12, maxPixelSize: 256).0
+                }
+                try Task.checkCancellation()
+                guard generation == token, auditID == request, sourceID == selected else { return }
+                difference = report
+            } catch {
+                if !Task.isCancelled, generation == token, auditID == request { status = error.localizedDescription }
+            }
+        }
+    }
     func refreshDisplay() {
+        clearAudit()
         displayTask?.cancel()
         let token = generation
         let request = UUID()

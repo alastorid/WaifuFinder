@@ -76,7 +76,7 @@ struct RootView: View {
             if showWelcomeScreen {
                 DropZone(session: session, isPrimary: true, isTargeted: isDropTargeted, openPhotos: openPhotosWorkspace)
             } else if showPhotosWorkspace {
-                PhotosWorkspaceView(session: session, onBack: navigateBack) {
+                PhotosWorkspaceView(session: session, showsToolbar: mergerSources == nil, onBack: navigateBack) {
                     mainContent
                 }
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
@@ -138,6 +138,7 @@ struct RootView: View {
     }
 
     private func closeSuperMerger() {
+        guard mergerSources != nil else { return }
         mergerSources = nil
         session.previewFrame = mergerPreviousFrame.flatMap { session.frame(id: $0) }
         mergerPreviousFrame = nil
@@ -160,11 +161,11 @@ struct RootView: View {
         .focusedSceneValue(\.openSuperMerger, { openSuperMerger([]) })
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        // The one drop registration for the whole window. A second nested
-        // registration over the same pixels races two loads on the same drag
-        // providers; one drop must be handled exactly once.
+        // Super Merger owns its source drops. Falling through to the workspace
+        // importer could replace the media waiting underneath it.
         .onDrop(of: CrystalOrbImport.dropTypes, isTargeted: $isDropTargeted) { providers in
-            CrystalOrbImport.accept(providers, model: orb, session: session)
+            guard mergerSources == nil else { return false }
+            return CrystalOrbImport.accept(providers, model: orb, session: session)
         }
         .onDisappear { if orb.isOpen { orb.close() } }
         .onChange(of: session.thumbnailGeneration) { _, _ in
@@ -249,8 +250,9 @@ struct RootView: View {
                     PhotosKeywordJobView(status: session.photosKeywordJob, cancel: session.cancelPhotosKeywordJob)
                 }
             }
-            // Back pops one workspace level: the orb, then Photos, then ranked, then welcome.
-            if !showPhotosWorkspace && (orb.isOpen || (!showWelcomeScreen && (session.video != nil || session.progress.isRunning))) {
+            // Photos owns its toolbar until Super Merger covers the workspace.
+            if mergerSources != nil || (!showPhotosWorkspace &&
+                (orb.isOpen || (!showWelcomeScreen && (session.video != nil || session.progress.isRunning)))) {
                 ToolbarItem(placement: .navigation) {
                     Button(action: navigateBack) {
                         Label("Back", systemImage: "chevron.left")
@@ -259,7 +261,8 @@ struct RootView: View {
                     .accessibilityLabel(backAccessibilityLabel)
                 }
             }
-            if showPhotosWorkspace || orb.isOpen || (!showWelcomeScreen && session.video != nil) {
+            if mergerSources == nil,
+               showPhotosWorkspace || orb.isOpen || (!showWelcomeScreen && session.video != nil) {
                 ToolbarItem(placement: .primaryAction) { workspaceToolbarControls }
             }
         }
@@ -289,14 +292,17 @@ struct RootView: View {
     }
 
     private var backAccessibilityLabel: String {
+        if mergerSources != nil { return "Close Super Merger and go back" }
         if orb.isOpen { return "Close Crystal Orb and go back" }
         return "Back to welcome screen"
     }
 
-    /// Back pops one workspace level: the orb closes onto the workspace beneath
-    /// it, Photos returns to the ranked workspace it was opened from, and the
-    /// ranked workspace returns to welcome.
+    /// Close the topmost overlay before navigating the workspace underneath it.
     private func navigateBack() {
+        if mergerSources != nil {
+            closeSuperMerger()
+            return
+        }
         if orb.isOpen {
             orb.close()
             return

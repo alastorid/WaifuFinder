@@ -5,13 +5,15 @@ import SwiftUI
 /// result grid continue to use the same session as ordinary video imports.
 struct PhotosWorkspaceView<RankedContent: View>: View {
     @ObservedObject var session: WaifuSession
+    let showsToolbar: Bool
     private let rankedContent: () -> RankedContent
     private let onBack: () -> Void
     @State private var sidebarExpanded = true
 
-    init(session: WaifuSession, onBack: @escaping () -> Void,
+    init(session: WaifuSession, showsToolbar: Bool, onBack: @escaping () -> Void,
          @ViewBuilder rankedContent: @escaping () -> RankedContent) {
         self.session = session
+        self.showsToolbar = showsToolbar
         self.onBack = onBack
         self.rankedContent = rankedContent
     }
@@ -45,23 +47,23 @@ struct PhotosWorkspaceView<RankedContent: View>: View {
         // reflow commit ride its own marked transaction through.
         .transaction { if !$0[GridZoomTransactionKey.self] { $0.animation = nil } }
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                // Back pops a workspace level (orb, then the ranked workspace the
-                // album was opened from, then welcome), not always the main menu.
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                }
-                .accessibilityLabel("Back")
+            if showsToolbar {
+                ToolbarItemGroup(placement: .navigation) {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Back")
 
-                Button { sidebarExpanded.toggle() } label: {
-                    Image(systemName: "sidebar.left")
+                    Button { sidebarExpanded.toggle() } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .accessibilityLabel(sidebarExpanded ? "Collapse albums" : "Expand albums")
+                    Label("Photos", systemImage: "photo.on.rectangle.angled")
+                        .font(.headline)
+                        .labelStyle(.titleAndIcon)
                 }
-                .accessibilityLabel(sidebarExpanded ? "Collapse albums" : "Expand albums")
-                Label("Photos", systemImage: "photo.on.rectangle.angled")
-                    .font(.headline)
-                    .labelStyle(.titleAndIcon)
+                ToolbarItem(placement: .principal) { albumTitle }
             }
-            ToolbarItem(placement: .principal) { albumTitle }
         }
         .task { await loadAlbums() }
         .onChange(of: selectedAlbum) { _, selection in openAlbum(selection) }
