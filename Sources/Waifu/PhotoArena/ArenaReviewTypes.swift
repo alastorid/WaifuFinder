@@ -126,7 +126,8 @@ enum ArenaRecoveryPlanner {
             let a = $0.measurements.map(\.difference).max() ?? 0, b = $1.measurements.map(\.difference).max() ?? 0
             return a == b ? $0.id < $1.id : a > b
         }.map { region in
-            let focus = region.changeMask?.bounds.insetBy(dx:-12,dy:-12).intersection(region.rect.cgRect).integral
+            let canvas = CGRect(x: 0, y: 0, width: analysis.width, height: analysis.height)
+            let focus = region.changeMask?.bounds.insetBy(dx:-12,dy:-12).intersection(canvas).integral
             let detail = focus.flatMap { !$0.isNull && !$0.isEmpty ? ArenaPixelRect($0) : nil }
             return ArenaReviewJob(id:region.id,rect:region.rect,overview:false,detailRect:detail)
         }
@@ -242,7 +243,7 @@ enum ArenaRecoveryPlanner {
                 if let manual { return source.id == manual }
                 if review.result.review?.unresolved != nil && selectedSource(review) != source.id { return false }
                 guard let finding = finding(review,source.id) else { return false }
-                return !clean(baseFinding) && clean(finding) && finding.originality >= baseFinding.originality
+                return !clean(baseFinding) && clean(finding)
                     && finding.cleanliness >= baseFinding.cleanliness + 10
             }.sorted {
                 let a = review.finding($0.id)?.originality ?? 0, b = review.finding($1.id)?.originality ?? 0

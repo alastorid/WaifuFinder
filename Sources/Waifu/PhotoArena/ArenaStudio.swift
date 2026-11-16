@@ -148,7 +148,18 @@ final class ArenaStudio: ObservableObject {
         if !backend.isRemote { ModelLibrary.shared.inUseArena(true) }
         defer { if !backend.isRemote { ModelLibrary.shared.inUseArena(false) } }
         do {
-            let results = try await backend.review(analysis, jobs, previous, { [weak self] record in
+            status = "Checking difference regions for text with Apple Vision…"
+            let textRecords = try await background {
+                try jobs.compactMap { job in try MergerTextReview.review(analysis, job: job) }
+            }
+            try Task.checkCancellation(); guard token == generation else { return }
+            for record in textRecords { accept(record) }
+            recomputePlan(); persist()
+            let textReviewed = Set(textRecords.map(\.id))
+            let localizedRecovery = !textRecords.isEmpty && analysis.regions.contains { $0.textRecoveryRegion == true }
+            let remaining = jobs.filter { !textReviewed.contains($0.id) && !localizedRecovery }
+            status = "Text review resolved \(textRecords.count) regions · \(remaining.count) packages need \(backend.label)…"
+            let results = try await backend.review(analysis, remaining, previous, { [weak self] record in
                 Task { @MainActor in
                     guard let self, self.generation == token, self.phase == .reviewing else { return }
                     guard record.result.review?.unresolved != nil else { return }
@@ -167,7 +178,12 @@ final class ArenaStudio: ObservableObject {
             await updateDisplay(token: token)
             try Task.checkCancellation(); guard token == generation else { return }
             phase = plan?.pendingRegionIDs.isEmpty == true ? .ready : .partial
-            status = "\(records.count) packages reviewed · \(plan?.pendingRegionIDs.count ?? 0) pending · \(plan?.unresolvedRegionIDs.count ?? 0) regions retain uncertainty."
+            if localizedRecovery {
+                let patches = max(0, (output?.plan.selections.count ?? 0) - 1)
+                status = "\(patches) text patches recovered · global differences remain unreviewed."
+            } else {
+                status = "\(records.count) packages reviewed · \(plan?.pendingRegionIDs.count ?? 0) pending · \(plan?.unresolvedRegionIDs.count ?? 0) regions retain uncertainty."
+            }
         } catch { fail(error, token: token); recomputePlan(); refreshDisplay() }
     }
     private func accept(_ record: ArenaReviewRecord) {
@@ -227,7 +243,7 @@ final class ArenaStudio: ObservableObject {
             do {
                 let report = try await background {
                     try ArenaOutputInspector.compare(analysis, selections: output.plan.selections,
-                        sourceID: selected, tolerance: 12, maxPixelSize: 256).0
+                        sourceID: selected, maxPixelSize: 256).0
                 }
                 try Task.checkCancellation()
                 guard generation == token, auditID == request, sourceID == selected else { return }
@@ -261,7 +277,7 @@ final class ArenaStudio: ObservableObject {
                     return (checked,image,Optional<ArenaOutputDifference>.none)
                 }
                 let diff = try? ArenaOutputInspector.compare(analysis, selections: checked.selections, sourceID: selected,
-                    tolerance: 12, maxPixelSize: 256)
+                    maxPixelSize: 256)
                 return (checked,image,diff?.0)
             }
             try Task.checkCancellation(); guard token == generation, displayToken == displayGeneration else { return }

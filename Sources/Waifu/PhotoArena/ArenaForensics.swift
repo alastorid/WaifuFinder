@@ -217,18 +217,17 @@ enum ArenaForensics {
         let text = accepted.map(textBoxes)
         var seen: Set<String> = []
         let distinct = accepted.map { seen.insert($0.fileSHA256 ?? $0.id).inserted }
-        // Sample native-resolution residuals across the entire canvas. Resizing
-        // before measuring would erase small edits and change compression noise.
+        // Measure every native-resolution residual. Sparse sampling can miss
+        // small edits entirely; tiles bound memory during this histogram pass.
         var histogram = [Int](repeating: 0, count: 256)
-        let sampleStep = max(1, Int(ceil(sqrt(Double(reference.width) * Double(reference.height) / 262_144))))
         for y in stride(from: 0, to: reference.height, by: tileSize) {
             for x in stride(from: 0, to: reference.width, by: tileSize) {
                 try Task.checkCancellation()
                 let rect = CGRect(x: x, y: y, width: min(tileSize, reference.width-x), height: min(tileSize, reference.height-y))
                 let buffers = images.map { bytes($0, rect: rect) }
                 let width = Int(rect.width)
-                for row in stride(from: 0, to: Int(rect.height), by: sampleStep) {
-                    for column in stride(from: 0, to: width, by: sampleStep) {
+                for row in 0..<Int(rect.height) {
+                    for column in 0..<width {
                         let offset = (row * width + column) * 4
                         var low = SIMD3<Int>(repeating: 255), high = SIMD3<Int>(repeating: 0)
                         var covered = 0

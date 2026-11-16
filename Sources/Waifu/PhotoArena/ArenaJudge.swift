@@ -260,6 +260,7 @@ enum ArenaJudge {
     }
     static func review(analysis: ArenaAnalysis, jobs: [ArenaReviewJob], previous: [ArenaReviewRecord] = [],
                        onResult: @escaping @Sendable (ArenaReviewRecord) -> Void) async throws -> [ArenaReviewRecord] {
+        guard !jobs.isEmpty else { return [] }
         guard jobs.count <= 17, let directory = ArenaJudgeConfiguration.directory, let executable = ArenaJudgeConfiguration.executable else {
             throw ModelInstaller.fail("Install PhotoArena MiniCPM-V 4.7 in Settings → Models on the inference Mac")
         }
@@ -268,6 +269,7 @@ enum ArenaJudge {
     static func review(analysis: ArenaAnalysis, jobs: [ArenaReviewJob], previous: [ArenaReviewRecord],
                        directory: URL, executable: URL,
                        onResult: @escaping @Sendable (ArenaReviewRecord) -> Void) async throws -> [ArenaReviewRecord] {
+        guard !jobs.isEmpty else { return [] }
         let process = ArenaProcess()
         let result = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

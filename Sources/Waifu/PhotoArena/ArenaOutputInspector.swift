@@ -87,7 +87,7 @@ enum ArenaOutputInspector {
         ArenaForensics.pixelBytes(image)
     }
     static func compare(_ analysis: ArenaAnalysis, selections: [ArenaSourceSelection], sourceID: String,
-                        tolerance: Int = 12, opacity: Double = 0.55, maxPixelSize: Int = 1600,
+                        tolerance: Int? = nil, opacity: Double = 0.55, maxPixelSize: Int = 1600,
                         heatmap: Bool = false,
                         renderedOutput: CIImage? = nil) throws -> (ArenaOutputDifference, CGImage) {
         guard let source = analysis.sources.first(where: { $0.id == sourceID && $0.accepted }), maxPixelSize > 0 else {
@@ -100,7 +100,7 @@ enum ArenaOutputInspector {
             space: color, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw ModelInstaller.fail("Cannot allocate PhotoArena overlay") }
         overlay.scaleBy(x: scale, y: scale)
         var compared = 0, changed = 0, selected = 0, uncovered = 0, total = 0.0, maximum = 0
-        let threshold = max(0, min(255, tolerance)), alpha = UInt8(max(0, min(1, opacity))*255)
+        let threshold = max(0, min(255, tolerance ?? analysis.differenceTolerance ?? 12)), alpha = UInt8(max(0, min(1, opacity))*255)
         let comparedImage = try ArenaForensics.alignedImage(source)
         let images: [String:CIImage] = renderedOutput != nil ? [:] : try Dictionary(uniqueKeysWithValues: analysis.sources.filter { candidate in
             selections.contains { $0.sourceID == candidate.id }

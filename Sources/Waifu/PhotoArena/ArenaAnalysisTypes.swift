@@ -28,6 +28,10 @@ struct ArenaAnalyzedSource: Codable, Identifiable, Sendable {
     var accepted: Bool
     var issues: [String]
     var fileSHA256: String? = nil
+    /// Detection-only calibration; reconstruction retains original source pixels.
+    var residualOffset: [Double]? = nil
+    var residualLowThreshold: Double? = nil
+    var residualHighThreshold: Double? = nil
 }
 struct ArenaRegionMeasurement: Codable, Sendable {
     let sourceID: String
@@ -47,6 +51,7 @@ struct ArenaRegion: Codable, Identifiable, Sendable {
     /// Native reference-pixel runs. Nil means this older analysis has no mask.
     var changeMask: ArenaPixelMask? = nil
     var maskDeferred: Bool? = nil
+    var textRecoveryRegion: Bool? = nil
 }
 
 struct ArenaMaskRun: Codable, Hashable, Sendable {
@@ -82,6 +87,12 @@ struct ArenaPixelMask: Codable, Sendable {
             let run = runs[i]
             if run.y != row {
                 previous = run.y == row + 1 ? current : []; current = []; row = run.y
+            }
+            // Adjacent spans can come from opposite sides of an analysis tile.
+            // They are one horizontal component even without a row above them.
+            if let j = current.last, runs[j].x + runs[j].length >= run.x {
+                let a = root(i), b = root(j)
+                if a != b { parent[a] = b }
             }
             for j in previous where runs[j].x < run.x + run.length && run.x < runs[j].x + runs[j].length {
                 let a = root(i), b = root(j)

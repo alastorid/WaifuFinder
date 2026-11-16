@@ -26,7 +26,7 @@ enum MergerPreprocessor {
             try Task.checkCancellation()
             let source = measured.sources[index]
             if source.fileSHA256 == reference.fileSHA256 {
-                calibrations[source.id] = Calibration(offset: [0, 0, 0], threshold: 12, support: 1)
+                calibrations[source.id] = Calibration(offset: [0, 0, 0], threshold: 0, lowThreshold: 0, support: 1)
                 continue
             }
             let calibration = try calibrate(ArenaForensics.alignedImage(source), reference: referenceImage, tiles: tiles)
@@ -38,35 +38,57 @@ enum MergerPreprocessor {
                 measured.sources[index].issues.append("Local structure support \(Int(calibration.support * 100))%; calibrated residual threshold \(Int(calibration.threshold))/255.")
             }
         }
+        for index in measured.sources.indices {
+            guard let calibration = calibrations[measured.sources[index].id] else { continue }
+            measured.sources[index].residualOffset = calibration.offset
+            measured.sources[index].residualLowThreshold = calibration.lowThreshold
+            measured.sources[index].residualHighThreshold = calibration.threshold
+        }
         let accepted = measured.sources.filter(\.accepted)
         guard accepted.count >= 2 else { return try MergerAdmission.assess(measured) }
         let images = try accepted.map(ArenaForensics.alignedImage)
         let orderedCalibrations = accepted.map { calibrations[$0.id]! }
         var retainedRuns = 0
+        var seeds: [ArenaMaskRun] = []
+        var seedCount = 0
         for index in measured.regions.indices {
             try Task.checkCancellation()
             let rect = measured.regions[index].rect.cgRect
             let buffers = images.map { ArenaForensics.bytes($0, rect: rect) }
             let width = Int(rect.width), height = Int(rect.height)
             var runs: [ArenaMaskRun] = []
+            var strongRuns: [ArenaMaskRun] = []
             for y in 0..<height {
                 var start: Int?
+                var strongStart: Int?
                 for x in 0...width {
                     var changed = false
+                    var strong = false
                     if x < width {
                         let pixel = (y * width + x) * 4
                         for channel in 0..<3 {
-                            var minimum = Double.infinity, maximum = -Double.infinity
-                            var threshold = 12.0, covered = 0
+                            var lower = -Double.infinity, upper = Double.infinity
+                            var weakLower = -Double.infinity, weakUpper = Double.infinity
+                            var covered = 0
                             for sourceIndex in accepted.indices where buffers[sourceIndex][pixel + 3] > 250 {
                                 let calibration = orderedCalibrations[sourceIndex]
                                 let value = Double(buffers[sourceIndex][pixel + channel]) - calibration.offset[channel]
-                                minimum = min(minimum, value); maximum = max(maximum, value)
-                                threshold = max(threshold, calibration.threshold)
+                                lower = max(lower, value - calibration.threshold)
+                                upper = min(upper, value + calibration.threshold)
+                                weakLower = max(weakLower, value - calibration.lowThreshold)
+                                weakUpper = min(weakUpper, value + calibration.lowThreshold)
                                 covered += 1
                             }
-                            if covered >= 2 && maximum - minimum > threshold { changed = true }
+                            if covered >= 2 {
+                                changed = changed || weakLower > weakUpper
+                                strong = strong || lower > upper
+                            }
                         }
+                    }
+                    if strong && strongStart == nil { strongStart = x }
+                    if !strong, let first = strongStart {
+                        strongRuns.append(ArenaMaskRun(y: Int(rect.minY) + y, x: Int(rect.minX) + first, length: x - first))
+                        strongStart = nil
                     }
                     if changed && start == nil { start = x }
                     if !changed, let first = start {
@@ -76,16 +98,55 @@ enum MergerPreprocessor {
                 }
             }
             retainedRuns += runs.count
+            seedCount += strongRuns.count
+            if seedCount <= 500_000 { seeds.append(contentsOf: strongRuns) }
             measured.regions[index].changeMask = retainedRuns <= 500_000 ? ArenaPixelMask(runs: runs) : nil
             measured.regions[index].maskDeferred = retainedRuns > 500_000 ? true : nil
         }
+        // Connect weak pixels to strong evidence across tile boundaries, retaining
+        // antialiased edges without accepting isolated background noise.
+        if retainedRuns <= 500_000 && seedCount <= 500_000 {
+            var weakRuns: [ArenaMaskRun] = measured.regions.flatMap { $0.changeMask?.runs ?? [] }
+            weakRuns.sort { lhs, rhs in
+                if lhs.y != rhs.y { return lhs.y < rhs.y }
+                return lhs.x < rhs.x
+            }
+            let seedsByRow = Dictionary(grouping: seeds, by: \.y)
+            var retained = Set<ArenaMaskRun>()
+            for component in ArenaPixelMask(runs: weakRuns).components {
+                try Task.checkCancellation()
+                let hasSeed = component.runs.contains { run in
+                    guard let rowSeeds = seedsByRow[run.y] else { return false }
+                    let runEnd = run.x + run.length
+                    return rowSeeds.contains { seed in
+                        let seedEnd = seed.x + seed.length
+                        return seed.x < runEnd && run.x < seedEnd
+                    }
+                }
+                if hasSeed { retained.formUnion(component.runs) }
+            }
+            for index in measured.regions.indices {
+                measured.regions[index].changeMask?.runs.removeAll { !retained.contains($0) }
+            }
+        } else {
+            // Preserve the processing-budget failure instead of silently dropping evidence.
+            measured.regions[0].maskDeferred = true
+        }
+        measured.warnings.append("Per-source calibrated residual intervals and cross-tile hysteresis select difference regions. A noisy source cannot suppress disagreement between cleaner sources.")
         measured.warnings.append("Difference detection compensates robust global RGB offsets and measured low-amplitude residual noise. Reconstruction always uses the original source pixels.")
-        return try MergerAdmission.assess(measured)
+        let assessment = try MergerAdmission.assess(measured)
+        if let reason = assessment.reason, var localized = try MergerTextReview.localizedAnalysis(measured) {
+            localized.warnings.append(reason)
+            localized.warnings.append("Localized text recovery is available; global differences remain unresolved.")
+            return MergerAdmission.Assessment(analysis: localized, excluded: assessment.excluded, reason: nil)
+        }
+        return assessment
     }
 
     private struct Calibration {
         let offset: [Double]
         let threshold: Double
+        let lowThreshold: Double
         let support: Double
     }
 
@@ -111,7 +172,7 @@ enum MergerPreprocessor {
             }
             if pairs >= 64 { sampled.append((a, b)) }
         }
-        guard !sampled.isEmpty else { return Calibration(offset: [0, 0, 0], threshold: 12, support: 0) }
+        guard !sampled.isEmpty else { return Calibration(offset: [0, 0, 0], threshold: 0, lowThreshold: 0, support: 0) }
         let offset = differences.map { median($0) }
         var residuals: [Double] = []
         var supported = 0
@@ -126,7 +187,11 @@ enum MergerPreprocessor {
         }
         let noise = median(residuals)
         let deviation = median(residuals.map { abs($0 - noise) })
-        return Calibration(offset: offset, threshold: min(32, max(12, noise + 6 * deviation)),
+        var histogram = [Int](repeating: 0, count: 256)
+        for residual in residuals { histogram[min(255, max(0, Int(residual.rounded())))] += 1 }
+        let low = min(255, max(1, ceil(noise + 3 * 1.4826 * deviation)))
+        let high = max(low, Double(ArenaDifferenceThreshold.select(histogram: histogram)))
+        return Calibration(offset: offset, threshold: high, lowThreshold: low,
                            support: Double(supported) / Double(sampled.count))
     }
 

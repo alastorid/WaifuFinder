@@ -15,6 +15,13 @@ set(MTMD_VIDEO OFF CACHE BOOL "" FORCE)
 set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
 set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "" FORCE)
 set(GGML_BLAS OFF CACHE BOOL "" FORCE)
+# Keep the bundled worker independent of an external OpenMP runtime. Ninja
+# already handles incremental builds without requiring a compiler cache.
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_CCACHE OFF CACHE BOOL "" FORCE)
+# Use Apple's arm64 target defaults so the CPU backend also runs on Macs older
+# than the build host. Metal and Accelerate remain enabled.
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 add_subdirectory("${PHOTOARENA_LLAMA_SOURCE}" llama)
 add_executable(waifu-photoarena main.mm)
 target_link_libraries(waifu-photoarena PRIVATE mtmd llama "-framework Foundation" "-framework ImageIO" "-framework CoreGraphics")
