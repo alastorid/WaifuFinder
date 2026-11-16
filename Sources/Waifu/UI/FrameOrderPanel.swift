@@ -303,6 +303,7 @@ struct FrameOrderPanel: View {
                         )
                         .accessibilityLabel("Similarity")
                         .accessibilityValue(String(format: "%.2f", session.groupingThreshold))
+                        .disabled(session.isAnalyzingFocusedRange)
                     }
                 } else {
                     Text("Frames are shown together. Per-group limits and group rows are paused.")

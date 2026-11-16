@@ -173,6 +173,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             schedulePhotoRarity()
         }
     }
+    @Published private(set) var isAnalyzingFocusedRange = false
+    @Published private(set) var focusedRangeWarning: String?
+    var isForegroundAnalysisRunning: Bool { progress.isRunning && !isAnalyzingFocusedRange }
     @Published private(set) var isRegrouping = false
     let regroupProgress = RegroupProgress()
 
@@ -1539,6 +1542,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         offersFocusedRangeAnalysis && !frames.isEmpty
             && [.complete, .failed, .cancelled].contains(progress.phase)
             && !isRegrouping && !taggingProgress.isRunning && !restoringTagMemory
+            && !tagMemoryCancellationFlushPending
     }
 
     /// Scores missing frames in the union of the selected thumbnails' ±3-second windows.
@@ -1552,6 +1556,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         analysisGeneration = UUID()
         let token = analysisGeneration
         let config = settings.validated()
+        let autoTag = UserDefaults.standard.object(forKey: FocusedFrameTagging.preferenceKey) as? Bool
+            ?? FocusedFrameTagging.defaultEnabled
+        let taggingPlan = autoTag ? focusedTaggingPlan() : nil
         let existingFrames = frames
         let existingGroups = groups
         let expected = max(1, Int(ceil(timeRanges.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
@@ -1559,6 +1566,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let presentInRange = existingFrames.reduce(into: 0) { count, existing in
             if timeRanges.contains(where: { $0.contains(existing.timeSeconds) }) { count += 1 }
         }
+        isAnalyzingFocusedRange = true
+        focusedRangeWarning = nil
         progress = AnalysisProgress(phase: .sampling, processed: 0,
                                     total: max(1, expected - presentInRange), elapsed: 0,
                                     message: "Finding missing frames in the ±3-second ranges…")
@@ -1566,8 +1575,27 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         analysisTask = Task.detached { [weak self] in
             await self?.runFocusedRangePipeline(video: video, settings: config, timeRanges: timeRanges,
                                                 existingFrames: existingFrames, existingGroups: existingGroups,
-                                                token: token)
+                                                taggingPlan: taggingPlan, token: token)
         }
+    }
+
+    func dismissFocusedRangeWarning() { focusedRangeWarning = nil }
+
+    private func focusedTaggingPlan() -> FocusedTaggingPlan? {
+        let activeFingerprint = taggedFrameCount > 0 ? tagVocabulary?.cacheFingerprint : nil
+        let clients = RemoteInferencePool.shared.taggingClients.filter { client in
+            activeFingerprint == nil || client.remoteVocabulary?.cacheFingerprint == activeFingerprint
+        }
+        if let vocabulary = clients.first?.remoteVocabulary {
+            return FocusedTaggingPlan(vocabulary: vocabulary, local: nil, clients: clients.filter {
+                $0.remoteVocabulary?.cacheFingerprint == vocabulary.cacheFingerprint
+            })
+        }
+        guard let local = WDTaggerConfiguration.load(),
+              let executable = WDTaggerWorker.executableURL, FileManager.default.isExecutableFile(atPath: executable.path),
+              let vocabulary = try? TagVocabulary.load(from: local.labelsURL),
+              activeFingerprint == nil || vocabulary.cacheFingerprint == activeFingerprint else { return nil }
+        return FocusedTaggingPlan(vocabulary: vocabulary, local: local, clients: [])
     }
 
     private func resumeMissingPhotosAfterLocalPass(token: UUID) {
@@ -1628,6 +1656,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.phase = .cancelled
             progress.message = "Cancelled"
         }
+        isAnalyzingFocusedRange = false
+        focusedRangeWarning = nil
         if defersVisualOrder {
             defersVisualOrder = false
             recomputeVisualOrder()
@@ -1639,8 +1669,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private var taggingIncludesLocal = false
 
     func startTagging(from panel: TaggingPanel, includeLocal: Bool = false) async {
-        guard !taggingProgress.isRunning, !restoringTagMemory,
+        guard !isAnalyzingFocusedRange, !taggingProgress.isRunning, !restoringTagMemory,
               !tagMemoryCancellationFlushPending, let video else { return }
+        let analysisToken = analysisGeneration
         // A connected server supplies both the weights and the labels, so neither
         // a local installation nor a local vocabulary is required. This gate used
         // to be the only way in, and it would otherwise make a remote tagger
@@ -1649,6 +1680,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         let configuration = WDTaggerConfiguration.load()
         let localVocabulary = configuration.flatMap { try? TagVocabulary.load(from: $0.labelsURL) }
         let remoteVocabulary = await remote.loadVocabularyIfNeeded()
+        guard analysisToken == analysisGeneration, !isAnalyzingFocusedRange,
+              !taggingProgress.isRunning, !restoringTagMemory, !tagMemoryCancellationFlushPending else { return }
         guard configuration != nil || remoteVocabulary != nil else {
             errorMessage = "Install WD Tagger in Settings, or connect to a server that has it."
             return
@@ -1707,6 +1740,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
         }
 
+        guard analysisToken == analysisGeneration, !isAnalyzingFocusedRange,
+              !taggingProgress.isRunning, !restoringTagMemory, !tagMemoryCancellationFlushPending else { return }
         let candidates = taggingCandidates().frames
         let newCandidates = candidates.filter { !$0.hasTaggingResult }
         guard !newCandidates.isEmpty else { return }
@@ -1818,21 +1853,9 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                     throw ModelInstaller.fail("The tagger returned an unexpected frame count.")
                 }
 
-                var updates: [AnalyzedFrame] = []
-                updates.reserveCapacity(batch.count)
-                for (item, result) in zip(batch, results) {
-                    guard let encoded = result.encodedProbabilities ?? TagProbabilityCodec.encode(result.probabilities) else {
-                        throw ModelInstaller.fail("The tagger returned invalid probabilities.")
-                    }
-                    var frame = item.frame
-                    frame.tagProbabilities = encoded
-                    frame.tagVocabularyFingerprint = vocabularyFingerprint
-                    frame.tagRating = result.rating
-                    frame.topTags = result.topTags
-                    frame.tagGeneralScore = result.generalScore
-                    updates.append(frame)
+                return try zip(batch, results).map { item, result in
+                    try result.applying(to: item.frame, fingerprint: vocabularyFingerprint)
                 }
-                return updates
             }
             let commit: @Sendable ([AnalyzedFrame]) async -> Void = { updates in
                 await self.acceptTaggedFrames(updates, token: token, elapsed: Date().timeIntervalSince(started),
@@ -2083,7 +2106,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     }
 
     private func appendTaggingCandidates(_ additions: [AnalyzedFrame]) {
-        guard taggingDemandActive, let sourceURL = video?.url else { return }
+        guard !isAnalyzingFocusedRange, taggingDemandActive, let sourceURL = video?.url else { return }
         let newFrames = additions.filter { frame in
             !frame.hasTaggingResult && taggingQueuedIDs.insert(frame.id).inserted
         }
@@ -2365,7 +2388,8 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private nonisolated func runFocusedRangePipeline(video: VideoInfo, settings: WaifuSettings,
                                                     timeRanges: [ClosedRange<Double>],
                                                     existingFrames: [AnalyzedFrame],
-                                                    existingGroups: [FrameGroup], token: UUID) async {
+                                                    existingGroups: [FrameGroup],
+                                                    taggingPlan: FocusedTaggingPlan?, token: UUID) async {
         let started = Date()
         let rangeSeconds = timeRanges.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
         let expected = max(1, Int(ceil(rangeSeconds * max(1, video.frameRate)))
@@ -2375,8 +2399,35 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         var progress = AnalysisProgress(phase: .scoring, total: expected,
                                        message: "Analyzing missing frames in the ±3-second ranges…")
         var scoringTask: Task<Void, Never>?
+        var focusedTagger: FocusedFrameTagging?
+        var taggingWarning: String?
+        var acquiredLocalTagger = false
         do {
             await acceptProgress(progress, token: token)
+            try Task.checkCancellation()
+            if let taggingPlan {
+                do {
+                    let fingerprint = taggingPlan.vocabulary.cacheFingerprint
+                    let backend: any TaggerBackend
+                    if let local = taggingPlan.local {
+                        await ModelLibrary.shared.acquireTagger()
+                        acquiredLocalTagger = true
+                        backend = try WDTaggerBackend(directory: local.directory, generalThreshold: settings.taggerThreshold)
+                    } else {
+                        backend = BalancedTaggerBackend(lanes: taggingPlan.clients.map {
+                            .init(backend: RemoteTaggerBackend(client: $0, threshold: settings.taggerThreshold,
+                                                              vocabularyFingerprint: fingerprint),
+                                  capacity: RemoteLimits.taggingBatchWindow)
+                        })
+                    }
+                    focusedTagger = await FocusedFrameTagging(backend: backend, vocabulary: taggingPlan.vocabulary,
+                        threshold: settings.taggerThreshold, videoURL: video.url, analysisWidth: settings.analysisWidth)
+                    progress.message = "Scoring and tagging nearby frames…"
+                    await acceptProgress(progress, token: token)
+                } catch {
+                    taggingWarning = error.localizedDescription
+                }
+            }
             try Task.checkCancellation()
             var excludedIndices = Set(existingFrames.map { $0.id.sampleIndex })
             let jobs: [(index: Int, member: VideoCollection.Member, ranges: [ClosedRange<Double>])] =
@@ -2395,12 +2446,18 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             let writer = ThumbnailWriterBridge(cache: thumbnailCache,
                 videoStem: video.url.deletingPathExtension().lastPathComponent)
+            let onScoredImage: (@Sendable (AnalyzedFrame, CGImage) async -> Void)?
+            if let focusedTagger {
+                onScoredImage = { frame, image in await focusedTagger.collect(frame, image: image) }
+            } else {
+                onScoredImage = nil
+            }
             let pipeline = FrameScorePipeline(scorer: VisionFrameScorer(
                     minimumFaceAreaFraction: settings.minimumFaceAreaFraction),
                 thumbnailStore: writer, analysisWidth: settings.analysisWidth,
                 workerCount: jobs.count > 1 ? 2 : FrameProcessingConcurrency(width: video.width, height: video.height,
                                                         analysisWidth: settings.analysisWidth).scoringWorkers,
-                cacheSuffix: "-\(token.uuidString)")
+                cacheSuffix: "-\(token.uuidString)", onScoredImage: onScoredImage)
             var additions: [AnalyzedFrame] = []
             var lastPulse = started
             func consume(_ scoring: FrameScorePipeline.Run) async throws {
@@ -2457,6 +2514,26 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             }
             try Task.checkCancellation()
 
+            var taggingVocabulary: TagVocabulary?
+            if let focusedTagger, !additions.isEmpty {
+                progress.isIndeterminate = true
+                progress.message = "Finishing auto-tagging…"
+                await acceptProgress(progress, token: token)
+                let tagged = await focusedTagger.finish()
+                try Task.checkCancellation()
+                progress.isIndeterminate = false
+                if !tagged.frames.isEmpty {
+                    additions = additions.map { tagged.frames[$0.id] ?? $0 }
+                    taggingVocabulary = taggingPlan?.vocabulary
+                }
+                taggingWarning = tagged.warning
+            }
+            if acquiredLocalTagger {
+                await ModelLibrary.shared.releaseTagger()
+                acquiredLocalTagger = false
+            }
+            try Task.checkCancellation()
+
             guard !additions.isEmpty else {
                 progress.phase = .complete
                 progress.total = 0
@@ -2465,7 +2542,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
                 progress.groupsIdentified = existingGroups.count
                 progress.message = "Complete · no missing frames in these ranges"
                 await completeFocusedRangeAnalysis(frames: existingFrames, groups: existingGroups,
-                                                   progress: progress, token: token)
+                                                   progress: progress, settings: settings, token: token)
                 return
             }
 
@@ -2502,10 +2579,13 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
             progress.groupsIdentified = groups.count
             progress.message = "Complete · added \(combined.count - existingFrames.count) frames"
             await completeFocusedRangeAnalysis(frames: groupedFrames, groups: groups,
-                                               progress: progress, token: token)
+                progress: progress, settings: settings, taggingVocabulary: taggingVocabulary,
+                taggingWarning: taggingWarning, autoTagging: taggingPlan != nil, token: token)
         } catch {
             scoringTask?.cancel()
+            await focusedTagger?.cancel()
             await scoringTask?.value
+            if acquiredLocalTagger { await ModelLibrary.shared.releaseTagger() }
             progress.phase = error is CancellationError ? .cancelled : .failed
             progress.elapsed = Date().timeIntervalSince(started)
             progress.message = error is CancellationError ? "Cancelled" : "Failed: \(error.localizedDescription)"
@@ -2790,13 +2870,19 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
         photosLocalPassRunning = running
     }
     private func completeFocusedRangeAnalysis(frames incoming: [AnalyzedFrame], groups: [FrameGroup],
-                                              progress: AnalysisProgress, token: UUID) async {
+                                              progress: AnalysisProgress, settings: WaifuSettings,
+                                              taggingVocabulary: TagVocabulary? = nil, taggingWarning: String? = nil,
+                                              autoTagging: Bool = false, token: UUID) async {
         guard analysisGeneration == token else { return }
+        self.progress = progress
+        if !autoTagging { isAnalyzingFocusedRange = false }
+        if let taggingVocabulary { tagVocabulary = taggingVocabulary }
         if incoming.count != frames.count {
             self.groups = groups
             updateAnalyzedFrames(incoming)
         }
-        self.progress = progress
+        isAnalyzingFocusedRange = false
+        focusedRangeWarning = taggingWarning.map { "Couldn’t finish auto-tagging. \($0)" }
         analysisTask = nil
         isRegrouping = false
 
@@ -2849,8 +2935,12 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     private func failAnalysis(progress: AnalysisProgress, error: Error, token: UUID) {
         guard analysisGeneration == token else { return }
         photosLocalPassRunning = false
-        if !(error is CancellationError) { errorMessage = error.localizedDescription }
+        if !(error is CancellationError) {
+            if isAnalyzingFocusedRange { focusedRangeWarning = "Couldn’t add nearby frames. \(error.localizedDescription)" }
+            else { errorMessage = error.localizedDescription }
+        }
         self.progress = progress
+        isAnalyzingFocusedRange = false
         analysisTask = nil
         isRegrouping = false
         if defersVisualOrder {
@@ -3422,7 +3512,7 @@ final class WaifuSession: ObservableObject, ThumbnailStore {
     /// passes through dozens of values and each one would run thousands of distance
     /// computations for a result that is thrown away.
     func regroup() {
-        guard !frames.isEmpty else { return }
+        guard !isAnalyzingFocusedRange, !frames.isEmpty else { return }
         regroupPending = false
         if settings.similarityThreshold != groupingThreshold {
             // Persisting goes through `settings`, which also recomputes the grid.
@@ -3686,6 +3776,12 @@ private enum AnalysisError: Error, LocalizedError {
 private struct PendingTagFrame: Sendable {
     let frame: AnalyzedFrame
     let source: TaggingImageSource
+}
+
+private struct FocusedTaggingPlan: Sendable {
+    let vocabulary: TagVocabulary
+    let local: WDTaggerConfiguration?
+    let clients: [RemoteClient]
 }
 
 // MARK: - Thumbnail bridge

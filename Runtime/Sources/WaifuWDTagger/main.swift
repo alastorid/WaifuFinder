@@ -3,29 +3,26 @@ import Foundation
 import MLX
 import WDTaggerMLX
 
-// Protocol v4: WDT4 ready marker; count 1...8 requests raw Float32 validation
-// rows; count | 0x80 requests CPU-quantized rows (10,861 UInt8 scores). Input
-// is a shared fixed-size RGBA UInt8 [8,448,448,4] mapping, owned by the app.
-// A response acknowledges completion before the app may overwrite the mapping.
+// WDT5 sends one command byte followed by a fixed-size RGBA UInt8 batch
+// [8,448,448,4] on stdin. The low seven bits give the real row count.
+// The high bit selects quantized output instead of Float32 validation rows.
 let inputBytes = 8 * 448 * 448 * 4
 
-/// The Metal buffer's finalizer retains this owner until its last GPU use has
-/// completed, including error paths. Closing the file does not unmap its pages.
-private final class SharedInputMapping {
-    let pointer: UnsafeMutableRawPointer
-    init(path: String) throws {
-        let file = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
-        defer { try? file.close() }
-        guard try file.seekToEnd() == UInt64(inputBytes) else {
-            throw WDNativeError.invalid("Incorrect shared input size")
+/// Fill the same heap buffer for every request, including when the pipe
+/// splits a batch into multiple reads.
+private func readInput(into input: inout Data) throws {
+    try input.withUnsafeMutableBytes { buffer in
+        guard let destination = buffer.baseAddress else {
+            throw WDNativeError.invalid("Missing input buffer")
         }
-        guard let mapped = mmap(nil, inputBytes, PROT_READ, MAP_SHARED, file.fileDescriptor, 0),
-              mapped != MAP_FAILED else {
-            throw WDNativeError.invalid("Cannot map shared input")
+        var offset = 0
+        while offset < buffer.count {
+            let received = Darwin.read(STDIN_FILENO, destination.advanced(by: offset), buffer.count - offset)
+            if received < 0, errno == EINTR { continue }
+            guard received > 0 else { throw WDNativeError.invalid("Incomplete RGBA batch on stdin") }
+            offset += received
         }
-        pointer = mapped
     }
-    deinit { munmap(pointer, inputBytes) }
 }
 
 func option(_ name: String) -> String? {
@@ -107,38 +104,15 @@ do {
         }
         print("Native WDTagger ready: \(WDNativeTagger.implementationVersion)")
     } else {
-        guard let path = option("--input") else { throw WDNativeError.invalid("Missing --input") }
-        let mapping = try SharedInputMapping(path: path)
-        defer { withExtendedLifetime(mapping) {} }
-        let data = Data(bytesNoCopy: mapping.pointer, count: inputBytes, deallocator: .none)
-        let sharedInput: MLXArray?
-        let requestsSharedInput = CommandLine.arguments.contains("--shared-input")
-            || ProcessInfo.processInfo.environment["WAIFU_WD_SHARED_INPUT"] == "1"
-        if !requestsSharedInput || CommandLine.arguments.contains("--copy-input") {
-            // Retain the released copy path by default. External-buffer memory
-            // savings did not reproduce consistently across tested GPU models.
-            sharedInput = nil
-        } else {
-            let candidate = MLXArray(rawPointer: mapping.pointer, [8, 448, 448, 4], dtype: .uint8) {
-                [mapping] in withExtendedLifetime(mapping) {}
-            }
-            // MLX can fall back to copying an unsupported external allocation.
-            // Such a snapshot cannot be reused after the app writes a new batch.
-            let aliasesMapping = candidate.asData(access: .noCopy).data.withUnsafeBytes {
-                $0.baseAddress == UnsafeRawPointer(mapping.pointer)
-            }
-            sharedInput = aliasesMapping ? candidate : nil
-        }
-        FileHandle.standardError.write(Data("WDTagger input: \(sharedInput == nil ? "copy" : "shared")\n".utf8))
-        try FileHandle.standardOutput.write(contentsOf: Data("WDT4".utf8))
+        var input = Data(count: inputBytes)
+        try FileHandle.standardOutput.write(contentsOf: Data("WDT5".utf8))
         while let command = try FileHandle.standardInput.read(upToCount: 1), !command.isEmpty {
             try autoreleasepool {
                 let quantized = command[0] & 0x80 != 0
                 let count = Int(command[0] & 0x7f)
                 guard (1...8).contains(count) else { throw WDNativeError.invalid("Invalid batch size") }
-                // The app only overwrites the mapping after receiving a complete
-                // response. eval/asArray finish GPU reads before that response.
-                let x = sharedInput ?? MLXArray(data, [8, 448, 448, 4], type: UInt8.self)
+                try readInput(into: &input)
+                let x = MLXArray(input, [8, 448, 448, 4], type: UInt8.self)
                 let output = tagger.predict(x)
                 guard output.shape == [8, 10_861] else { throw WDNativeError.invalid("Invalid output shape") }
                 eval(output)

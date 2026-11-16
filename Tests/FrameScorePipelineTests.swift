@@ -58,6 +58,20 @@ private struct DiscardingThumbnailWriter: ThumbnailWriter {
     func write(_ image: CGImage, key: String) async throws {}
 }
 
+private actor ScoredImageTagger: TaggerBackend {
+    private(set) var batches: [[ObjectIdentifier]] = []
+
+    func tag(batch: [CGImage]) async throws -> [TagResult] {
+        batches.append(batch.map(ObjectIdentifier.init))
+        try await Task.sleep(for: .milliseconds(5))
+        var probabilities = [Float](repeating: 0, count: TagVocabulary.headCount)
+        probabilities[TagRating.general.index] = 1
+        return batch.map { _ in
+            TagResult(probabilities: probabilities, rating: .general, topTags: [], generalScore: 0)
+        }
+    }
+}
+
 /// `count` frames in ascending sample order, each with a distinct image so no two
 /// are interchangeable.
 private func makeSampledFrames(_ count: Int) throws -> [SampledFrame] {
@@ -85,6 +99,31 @@ private func stream(of frames: [SampledFrame]) -> AsyncThrowingStream<SampledFra
 
 func registerFrameScorePipelineTests() {
     let suite = "frame score pipeline"
+
+    Registry.shared.add(suite: suite, TestCase(name: "focused auto-tagging batches the original scoring images and flushes the tail", knownBug: nil) {
+        let sampled = try makeSampledFrames(19)
+        let vocabulary = try tagVocabularyFixture()
+        let backend = ScoredImageTagger()
+        let tagger = await FocusedFrameTagging(backend: backend, vocabulary: vocabulary, threshold: 0.35,
+                                              videoURL: URL(fileURLWithPath: "/nonexistent-focused-tag-test"), analysisWidth: 16)
+        let pipeline = FrameScorePipeline(scorer: IndexScorer(), thumbnailStore: DiscardingThumbnailWriter(),
+                                          analysisWidth: 16, workerCount: 4,
+                                          onScoredImage: { frame, image in await tagger.collect(frame, image: image) })
+        var output: [FrameID] = []
+        for try await frame in pipeline.run(frames: stream(of: sampled), minimumFaceAreaFraction: 0.01, onProgress: { _ in }) {
+            output.append(frame.id)
+        }
+        let completion = await tagger.finish()
+        let batches = await backend.batches
+        checkEqual(batches.map(\.count), [8, 8, 3], "full batches and a short tail use the same backend")
+        checkEqual(Set(batches.flatMap { $0 }), Set(sampled.map { ObjectIdentifier($0.image) }),
+                   "the backend receives the exact decoded images used for scoring")
+        checkEqual(output.map(\.raw), expectedIDs(sampled.count), "visual scores still arrive in source order")
+        checkEqual(Set(completion.frames.keys), Set(output), "every newly scored frame gets its result")
+        check(completion.frames.values.allSatisfy { $0.tagRating == .general &&
+            $0.tagVocabularyFingerprint == vocabulary.cacheFingerprint }, "ratings use the selected vocabulary")
+        checkNil(completion.warning, "successful auto-tagging has no warning")
+    })
 
     Registry.shared.add(suite: suite, TestCase(name: "portrait crop aspect is retained before thumbnail loading", knownBug: nil) {
         let image = try ImageFixture.cgImage(width: 140, height: 200, gray: 0.5)

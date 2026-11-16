@@ -8,9 +8,6 @@ final class WDTaggerWorker: @unchecked Sendable {
     static var executableURL: URL? {
         Bundle.main.url(forResource: "waifu-wdtagger", withExtension: nil, subdirectory: "Runtime")
     }
-    let pointer: UnsafeMutableRawPointer
-    private let directory: URL
-    private let inputURL: URL
     private let weights: URL
     private let executable: URL
     private let lock = NSLock()
@@ -18,39 +15,16 @@ final class WDTaggerWorker: @unchecked Sendable {
     private var cancelled = false
     private var request: FileHandle?
     private var response: FileHandle?
-    private var log: FileHandle?
 
-    init(weights: URL, executable: URL) throws {
+    init(weights: URL, executable: URL) {
         self.weights = weights
         self.executable = executable
-        directory = FileManager.default.temporaryDirectory.appendingPathComponent("wd-tagger-\(UUID().uuidString)")
-        inputURL = directory.appendingPathComponent("input.bin")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        do {
-            guard FileManager.default.createFile(atPath: inputURL.path, contents: nil,
-                                                  attributes: [.posixPermissions: 0o600]) else {
-                throw TaggerError.preprocessing
-            }
-            let file = try FileHandle(forUpdating: inputURL)
-            defer { try? file.close() }
-            try file.truncate(atOffset: UInt64(Self.inputBytes))
-            guard let mapped = mmap(nil, Self.inputBytes, PROT_READ | PROT_WRITE, MAP_SHARED, file.fileDescriptor, 0),
-                  mapped != MAP_FAILED else { throw TaggerError.preprocessing }
-            pointer = mapped
-        } catch {
-            try? FileManager.default.removeItem(at: directory)
-            throw error
-        }
     }
 
     deinit {
         cancel()
         try? request?.close()
         try? response?.close()
-        try? log?.close()
-        munmap(pointer, Self.inputBytes)
-        try? FileManager.default.removeItem(at: directory)
     }
 
     func cancel() {
@@ -63,33 +37,35 @@ final class WDTaggerWorker: @unchecked Sendable {
     private func start() throws {
         if process != nil { return }
         let child = Process(), incoming = Pipe(), outgoing = Pipe()
-        let logURL = directory.appendingPathComponent("worker.log")
-        _ = FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        let logging = try FileHandle(forWritingTo: logURL)
+        let writer = incoming.fileHandleForWriting
+        // A cancellation or a worker exit during a large write must surface
+        // as a pipe error in the app.
+        guard fcntl(writer.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw TaggerError.invalidModel("Unable to configure the native tagger input pipe.")
+        }
         child.executableURL = executable
-        child.arguments = ["--weights", weights.path, "--input", inputURL.path]
+        child.arguments = ["--weights", weights.path]
         child.standardInput = incoming
         child.standardOutput = outgoing
-        child.standardError = logging
+        child.standardError = FileHandle.standardError
         try lock.withLock {
             guard !cancelled else { throw CancellationError() }
             process = child
             try child.run()
         }
-        request = incoming.fileHandleForWriting
+        request = writer
         response = outgoing.fileHandleForReading
-        log = logging
         // Close parent copies of the child's endpoints so crashes produce EOF.
         try incoming.fileHandleForReading.close()
         try outgoing.fileHandleForWriting.close()
-        guard try readExactly(4) == Data("WDT4".utf8) else { throw failure() }
+        guard try readExactly(4) == Data("WDT5".utf8) else {
+            throw TaggerError.invalidModel("Incompatible native tagger. Rebuild WaifuFinder with its matching worker.")
+        }
     }
 
     private func failure() -> Error {
         if lock.withLock({ cancelled }) { return CancellationError() }
-        let url = directory.appendingPathComponent("worker.log")
-        let detail = (try? String(contentsOf: url, encoding: .utf8))?.suffix(3000) ?? ""
-        return TaggerError.invalidModel("Native tagger stopped. \(detail)")
+        return TaggerError.invalidModel("The native tagger stopped before returning a complete response.")
     }
 
     private func readExactly(_ count: Int) throws -> Data {
@@ -102,30 +78,33 @@ final class WDTaggerWorker: @unchecked Sendable {
         return data
     }
 
-    func predict(count: Int) throws -> [[Float]] {
-        do {
-            try start()
-            guard let request else { throw failure() }
-            try request.write(contentsOf: Data([UInt8(count)]))
-            let bytes = try readExactly(count * TagVocabulary.headCount * 4)
-            try Task.checkCancellation()
-            return try Self.decodeProbabilities(bytes, count: count)
-        } catch {
-            cancel()
-            throw error
-        }
+    func predict(input: Data, count: Int) throws -> [[Float]] {
+        let bytes = try requestRows(input: input, count: count, quantized: false)
+        return try Self.decodeProbabilities(bytes, count: count)
     }
 
-    func predictQuantized(count: Int) throws -> [QuantizedTagRow] {
+    func predictQuantized(input: Data, count: Int) throws -> [QuantizedTagRow] {
+        let bytes = try requestRows(input: input, count: count, quantized: true)
+        return try Self.decodeQuantized(bytes, count: count)
+    }
+
+    private func requestRows(input: Data, count: Int, quantized: Bool) throws -> Data {
+        guard (1...8).contains(count), input.count == Self.inputBytes else { throw TaggerError.invalidBatch }
         do {
-            try start()
-            guard (1...8).contains(count), let request else { throw TaggerError.invalidBatch }
-            try request.write(contentsOf: Data([UInt8(count) | 0x80]))
-            let bytes = try readExactly(count * TagVocabulary.headCount)
             try Task.checkCancellation()
-            return try Self.decodeQuantized(bytes, count: count)
+            try start()
+            guard let request else { throw failure() }
+            let command = UInt8(count) | (quantized ? 0x80 : 0)
+            try request.write(contentsOf: Data([command]))
+            try request.write(contentsOf: input)
+            let rowBytes = TagVocabulary.headCount * (quantized ? 1 : MemoryLayout<Float>.stride)
+            let bytes = try readExactly(count * rowBytes)
+            try Task.checkCancellation()
+            return bytes
         } catch {
+            let wasCancelled = Task.isCancelled || lock.withLock { cancelled }
             cancel()
+            if wasCancelled { throw CancellationError() }
             throw error
         }
     }

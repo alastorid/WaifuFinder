@@ -58,6 +58,7 @@ final class FrameScorePipeline: Sendable {
     /// Width the thumbnails are encoded at (the analysis width).
     private let analysisWidth: Int
     private let cacheSuffix: String
+    private let onScoredImage: (@Sendable (AnalyzedFrame, CGImage) async -> Void)?
     /// Creates a pipeline with the given scorer and thumbnail store.
     ///
     /// - Parameters:
@@ -71,12 +72,14 @@ final class FrameScorePipeline: Sendable {
         thumbnailStore: ThumbnailWriter,
         analysisWidth: Int,
         workerCount: Int? = nil,
-        cacheSuffix: String = ""
+        cacheSuffix: String = "",
+        onScoredImage: (@Sendable (AnalyzedFrame, CGImage) async -> Void)? = nil
     ) {
         self.scorer = scorer
         self.thumbnailStore = thumbnailStore
         self.analysisWidth = analysisWidth
         self.cacheSuffix = cacheSuffix
+        self.onScoredImage = onScoredImage
         self.workerCount = workerCount ?? min(4, ProcessInfo.processInfo.activeProcessorCount)
     }
 
@@ -206,7 +209,7 @@ final class FrameScorePipeline: Sendable {
             key: thumbnailKey
         )
 
-        return AnalyzedFrame(
+        let analyzed = AnalyzedFrame(
             sampleIndex: frame.sampleIndex,
             timeSeconds: frame.timeSeconds,
             artScore: result.artScore,
@@ -218,6 +221,8 @@ final class FrameScorePipeline: Sendable {
             faceDefinitionScore: result.faceDefinitionScore,
             thumbnailAspectRatio: Double(frame.image.width) / Double(frame.image.height)
         )
+        await onScoredImage?(analyzed, frame.image)
+        return analyzed
     }
 }
 

@@ -79,10 +79,13 @@ func registerFrameSamplerTests() {
                 session.selectFrame(first.id)
                 session.selectFrame(second.id, command: true)
                 session.analyzeFocusedRange(around: second)
+                check(session.isAnalyzingFocusedRange, "focused analysis exposes badge progress")
+                check(!session.isForegroundAnalysisRunning, "focused analysis keeps the workspace mounted")
                 for _ in 0..<600 where session.progress.isRunning {
                     try await Task.sleep(for: .milliseconds(100))
                 }
                 checkEqual(session.progress.phase, .complete, "focused analysis completes")
+                check(!session.isAnalyzingFocusedRange, "the badge clears after completion")
                 checkEqual(Set(session.frames.map(\.id)), expected.union(before),
                            "both ranges gain all frames without adding frames in the gap")
             }.value

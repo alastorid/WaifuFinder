@@ -82,7 +82,7 @@ struct RootView: View {
                 .opacity(session.previewFrame == nil && !orb.isOpen ? 1 : 0)
                 .allowsHitTesting(session.previewFrame == nil && session.uncover == nil && !orb.isOpen)
                 .accessibilityHidden(session.previewFrame != nil || session.uncover != nil || orb.isOpen)
-            } else if session.progress.isRunning && session.photosAlbumURL == nil {
+            } else if session.isForegroundAnalysisRunning && session.photosAlbumURL == nil {
                 AnalysisProgressView(progress: session.progress, video: session.video, cancel: session.cancel)
             } else if session.video != nil {
                 // Keep the grid and AVPlayer view mounted while frame preview is
@@ -125,6 +125,13 @@ struct RootView: View {
             // hierarchy that draws the grid. See ChiaroscuroLink.
             ChiaroscuroWindowLayer(link: link)
                 .frame(width: 0, height: 0)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if session.isAnalyzingFocusedRange || session.focusedRangeWarning != nil {
+                FocusedRangeProgressBadge(progress: session.progress, warning: session.focusedRangeWarning,
+                                          cancel: session.cancel, dismiss: session.dismissFocusedRangeWarning)
+                    .padding(16)
+            }
         }
     }
 
@@ -219,6 +226,8 @@ struct RootView: View {
         .onChange(of: session.previewFrame != nil) { _, active in if active { preview.pause() } }
         .onChange(of: session.progress.isRunning) { _, running in
             if !running, orb.isOpen, orb.query != nil { orb.search() }
+        }
+        .onChange(of: session.isForegroundAnalysisRunning) { _, running in
             if running {
                 showWelcomeScreen = false
                 preview.pause()

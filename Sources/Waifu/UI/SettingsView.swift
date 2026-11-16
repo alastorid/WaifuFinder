@@ -21,6 +21,7 @@ private struct GeneralSettingsView: View {
     @State private var exportFolderError: String?
     @State private var showingDeleteTagResults = false
     @AppStorage(GoogleLensSearch.enabledKey) private var googleLensEnabled = false
+    @AppStorage(FocusedFrameTagging.preferenceKey) private var autoTagFocusedFrames = FocusedFrameTagging.defaultEnabled
 
     var body: some View {
         Form {
@@ -55,6 +56,13 @@ private struct GeneralSettingsView: View {
                 Toggle("Google Lens", isOn: $googleLensEnabled)
                     .toggleStyle(.switch)
                 Text("Send an image to Google when you choose Search with Google Lens from its right-click menu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Tagging") {
+                Toggle("Auto-tag newly added frames", isOn: $autoTagFocusedFrames)
+                Text("When you analyze a ±3-second range, tag new frames as they are scored if a local or connected remote WD Tagger is ready.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

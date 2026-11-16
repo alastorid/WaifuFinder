@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Run on the isolated M4 test host; bin-shared contains worker-benchmark,
-// waifu-wdtagger, mlx.metallib and the WDTaggerMLX resource bundle.
+// Historical WDT4 comparison. bin-shared requires the matching archived
+// worker-benchmark and waifu-wdtagger, with mlx.metallib and WDTaggerMLX resources.
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";

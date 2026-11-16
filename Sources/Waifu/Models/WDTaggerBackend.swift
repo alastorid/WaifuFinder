@@ -83,7 +83,7 @@ actor WDTaggerBackend: TaggerBackend {
             throw TaggerError.invalidModel("The native WD Tagger runtime requires the Apple Silicon app build.")
         }
         context = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: true])
-        let native = try WDTaggerWorker(weights: config.modelURL, executable: executable)
+        let native = WDTaggerWorker(weights: config.modelURL, executable: executable)
         worker = native
         inference = WDTaggerInference(worker: native)
     }
@@ -93,8 +93,7 @@ actor WDTaggerBackend: TaggerBackend {
         guard batch.count <= Self.batchSize else { throw TaggerError.invalidBatch }
         return try await withTaskCancellationHandler {
             // Staging belongs to this request. While the serial inference actor
-            // waits for its worker, this actor can render the next batch without
-            // overwriting the worker's live shared input mapping.
+            // waits for its worker, this actor can render the next batch.
             let input = try preparedInput(batch: batch)
             let rows = try await inference.quantized(input: input, count: batch.count)
             try Task.checkCancellation()
@@ -225,23 +224,15 @@ actor WDTaggerBackend: TaggerBackend {
     }
 }
 
-/// Exactly one inference owns the mapped input at a time. The separate actor
+/// Exactly one inference owns the pipe at a time. The separate actor
 /// allows the backend to prepare another request during blocking worker IPC.
 private actor WDTaggerInference {
     let worker: WDTaggerWorker
     init(worker: WDTaggerWorker) { self.worker = worker }
-    private func upload(_ input: Data) throws {
-        try Task.checkCancellation()
-        guard input.count == WDTaggerWorker.inputBytes else { throw TaggerError.invalidBatch }
-        let destination = worker.pointer
-        input.withUnsafeBytes { destination.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
-    }
     func quantized(input: Data, count: Int) throws -> [QuantizedTagRow] {
-        try upload(input)
-        return try worker.predictQuantized(count: count)
+        try worker.predictQuantized(input: input, count: count)
     }
     func probabilities(input: Data, count: Int) throws -> [[Float]] {
-        try upload(input)
-        return try worker.predict(count: count)
+        try worker.predict(input: input, count: count)
     }
 }

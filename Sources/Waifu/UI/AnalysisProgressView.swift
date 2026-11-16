@@ -1,5 +1,52 @@
 import SwiftUI
 
+struct FocusedRangeProgressBadge: View {
+    let progress: AnalysisProgress
+    let warning: String?
+    let cancel: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                if warning != nil {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                }
+                Text(warning ?? progress.message)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(warning == nil ? 2 : 3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(warning ?? progress.message)
+                Button(action: warning == nil ? cancel : dismiss) {
+                    Label(warning == nil ? "Cancel nearby frame analysis" : "Dismiss",
+                          systemImage: "xmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            if warning == nil {
+                if progress.isIndeterminate || progress.phase == .grouping {
+                    ProgressView().progressViewStyle(.linear)
+                } else {
+                    ProgressView(value: progress.fraction)
+                    Text("\(progress.processed.formatted()) frames scored")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .controlSize(.small)
+        .frame(width: 230)
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.12)) }
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+    }
+}
+
 /// The indeterminate bar for a pass that cannot know its own frame
 /// total — the keyframe pass, whose kept frames are the encoder's
 /// sync samples and are not countable in advance.

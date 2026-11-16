@@ -101,7 +101,7 @@ private actor Results {
             "medianFPS": 64 / seconds.sorted()[seconds.count / 2], "outputSHA256": hashes[0],
             "gpuUtilizationSamples": samples, "gpuUtilizationMean": samples.isEmpty ? 0 : Double(samples.reduce(0,+)) / Double(samples.count),
             "thermalBefore": thermalBefore, "thermalAfter": ProcessInfo.processInfo.thermalState.rawValue,
-            "scope": "Native synthetic portrait/landscape images; real production Core Image preparation, WDT4 worker, quantized results and ordered commit. ioreg samples describe whole-device GPU activity, not this process alone. No interactive UI." ]
+            "scope": "Native synthetic portrait/landscape images with production Core Image preparation, piped WDT5 worker, quantized results and ordered commit. ioreg samples describe whole-device GPU activity. No interactive UI." ]
         try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: report))
         print("depth \(depth): \(result["medianFPS"]!) fps, GPU mean \(result["gpuUtilizationMean"]!)%")
     }

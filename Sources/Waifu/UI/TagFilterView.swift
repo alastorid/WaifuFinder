@@ -22,7 +22,7 @@ struct TagFilterView: View {
     }
 
     private var enabled: Bool {
-        session.previewFrame == nil && session.uncover == nil && !session.progress.isRunning
+        session.previewFrame == nil && session.uncover == nil && !session.isForegroundAnalysisRunning
     }
 
     private var hasActiveTags: Bool {

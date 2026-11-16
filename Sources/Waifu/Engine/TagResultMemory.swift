@@ -233,8 +233,11 @@ final class TagResultMemory: ObservableObject {
     }
 
     func cachedResults(for keys: TagResultCacheKeys) async -> [TagResultCacheIdentity: [Int: Data]] {
+        await cachedResults(for: keys.identities)
+    }
+
+    func cachedResults(for identities: [TagResultCacheIdentity]) async -> [TagResultCacheIdentity: [Int: Data]] {
         guard rememberTaggingResults else { return [:] }
-        let identities = keys.identities
         guard !identities.isEmpty else { return [:] }
         do {
             let result = try await disk.results(for: identities, retentionDays: retentionDays)
@@ -292,24 +295,24 @@ final class TagResultMemory: ObservableObject {
                 // frame carrying probabilities alone is unfinished here even
                 // though `hasTaggingResult` counts it for re-tagging purposes.
                 guard let identity = keys.key(for: original),
+                      identity.vocabularyFingerprint == vocabulary.cacheFingerprint,
                       original.tagRating == nil,
                       let encoded = cached[identity]?[keys.recordIndex(for: original)],
-                      let probabilities = TagResultCacheProbabilityCodec.decode(encoded),
-                      let runtimeProbabilities = TagProbabilityCodec.encode(probabilities),
-                      let result = try? vocabulary.result(probabilities: probabilities, threshold: threshold) else {
+                      let frame = Self.restoring(original, from: encoded, vocabulary: vocabulary, threshold: threshold) else {
                     return original
                 }
-                var frame = original
-                frame.tagProbabilities = runtimeProbabilities
-                frame.tagVocabularyFingerprint = identity.vocabularyFingerprint
-                frame.tagRating = result.rating
-                frame.topTags = result.topTags
-                frame.tagGeneralScore = result.generalScore
                 restoredCount += 1
                 return frame
             }
             return RestoredTagResults(frames: restoredFrames, restoredCount: restoredCount)
         }.value
+    }
+
+    nonisolated static func restoring(_ frame: AnalyzedFrame, from encoded: Data,
+                                      vocabulary: TagVocabulary, threshold: Float) -> AnalyzedFrame? {
+        guard let probabilities = TagResultCacheProbabilityCodec.decode(encoded),
+              let result = try? vocabulary.result(probabilities: probabilities, threshold: threshold) else { return nil }
+        return try? result.applying(to: frame, fingerprint: vocabulary.cacheFingerprint)
     }
 
     private func apply(_ stats: TagResultCacheStats) {

@@ -56,6 +56,7 @@ struct TaggingPanelStatus: View {
                                            serverNames: remote.serverNames)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(session.isAnalyzingFocusedRange)
                     Text(session.photosAlbumURL == nil
                          ? "Tag \(session.untaggedFrameCountForTagging) matching frames"
                          : "Tag all \(session.untaggedFrameCountForTagging) untagged photos using thumbnails")
@@ -139,6 +140,7 @@ struct TaggingStartButton: View {
                                            serverNames: remote.serverNames)
                     }
                     .buttonStyle(.borderless)
+                    .disabled(session.isAnalyzingFocusedRange)
                     Spacer(minLength: 0)
                 }
                 .padding(.top, 4)

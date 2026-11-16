@@ -1,4 +1,4 @@
-// Native WDT4 protocol benchmark. Timings include IPC, input upload, completed
+// Native WDT5 protocol benchmark. Timings include IPC, input upload, completed
 // inference, output validation/transfer and receipt of every probability row.
 import CryptoKit
 import Darwin
@@ -50,27 +50,16 @@ private final class PeakChildMemory: @unchecked Sendable {
             throw NSError(domain: "Expected the retained 64-frame corpus", code: 1)
         }
         let reportURL = URL(fileURLWithPath: try option("--report"))
-        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("wd-worker-bench-\(UUID())")
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let inputURL = scratch.appendingPathComponent("input.bin")
-        FileManager.default.createFile(atPath: inputURL.path, contents: nil)
-        let file = try FileHandle(forUpdating: inputURL)
-        defer { try? file.close() }
-        try file.truncate(atOffset: UInt64(inputBytes))
-        guard let mapping = mmap(nil, inputBytes, PROT_READ | PROT_WRITE, MAP_SHARED, file.fileDescriptor, 0),
-              mapping != MAP_FAILED else { throw NSError(domain: "mmap", code: 1) }
-        defer { munmap(mapping, inputBytes) }
         let child = Process(), incoming = Pipe(), outgoing = Pipe()
+        guard fcntl(incoming.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw NSError(domain: "Unable to configure worker pipe", code: 1)
+        }
         let logURL = reportURL.deletingPathExtension().appendingPathExtension("worker.log")
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
         let log = try FileHandle(forWritingTo: logURL)
         defer { try? log.close() }
         child.executableURL = URL(fileURLWithPath: try option("--worker"))
-        child.arguments = ["--weights", try option("--weights"), "--input", inputURL.path]
-            + (args.contains("--copy-input") ? ["--copy-input"] : [])
-            + (args.contains("--shared-input") ? ["--shared-input"] : [])
+        child.arguments = ["--weights", try option("--weights")]
         child.standardInput = incoming; child.standardOutput = outgoing; child.standardError = log
         try child.run()
         defer { if child.isRunning { child.terminate() } }
@@ -86,13 +75,12 @@ private final class PeakChildMemory: @unchecked Sendable {
             }
             return data
         }
-        guard try read(4) == Data("WDT4".utf8) else { throw NSError(domain: "Invalid protocol", code: 1) }
+        guard try read(4) == Data("WDT5".utf8) else { throw NSError(domain: "Invalid protocol", code: 1) }
         func predict(batch: Int, count: Int = 8) throws -> (Double, Data) {
-            corpus.withUnsafeBytes { source in
-                mapping.copyMemory(from: source.baseAddress!.advanced(by: batch * inputBytes), byteCount: inputBytes)
-            }
+            let input = corpus[(batch * inputBytes)..<((batch + 1) * inputBytes)]
             let tick = ProcessInfo.processInfo.systemUptime
             try incoming.fileHandleForWriting.write(contentsOf: Data([UInt8(count)]))
+            try incoming.fileHandleForWriting.write(contentsOf: input)
             let values = try read(count * rowBytes)
             let seconds = ProcessInfo.processInfo.systemUptime - tick
             let reference = expected.subdata(in: (batch * 8 * rowBytes)..<((batch * 8 + count) * rowBytes))
@@ -114,7 +102,7 @@ private final class PeakChildMemory: @unchecked Sendable {
             }
             sweeps.append(total)
         }
-        // Exercise tails after many overwrites of the same persistent GPU input.
+        // Exercise short responses after many uploads to the warm worker.
         for count in [1, 5, 8] { _ = try predict(batch: 6, count: count) }
         let peak = memory.bytes
         try incoming.fileHandleForWriting.close()
@@ -122,7 +110,7 @@ private final class PeakChildMemory: @unchecked Sendable {
         guard child.terminationStatus == 0 else { throw NSError(domain: "Worker failed", code: Int(child.terminationStatus)) }
         let result: [String: Any] = [
             "frames": 64, "batch": 8, "rounds": 3,
-            "worker": child.executableURL!.path, "copyInput": args.contains("--copy-input"),
+            "worker": child.executableURL!.path, "inputTransport": "anonymous pipe",
             "sweepSeconds": sweeps, "predictionAndIPCFPS": 64 / sweeps.sorted()[1],
             "batches": batches, "peakWorkerPhysicalFootprintBytes": peak,
             "exactAllOutputs": true, "tailCountsExact": [1, 5, 8],

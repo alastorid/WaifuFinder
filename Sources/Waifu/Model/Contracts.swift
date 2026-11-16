@@ -284,15 +284,9 @@ struct AnalysisProgress: Sendable, Equatable {
     var phase: Phase = .idle
     var processed: Int = 0
     var total: Int = 0
-    /// `true` when the pass cannot know its own frame total, so
-    /// `total` carries no meaning and `fraction` must not be drawn
-    /// as a ratio. The UI shows a looping bar instead.
-    ///
-    /// Only the keyframe pass sets this. Its kept frames are the
-    /// encoder's sync samples, and how many of those a file holds is
-    /// a property of the encode — unknowable until the file has been
-    /// read. Full and Quick derive their totals exactly from the
-    /// probe, so a ratio is honest for them and this stays `false`.
+    /// Whether to show activity instead of a frame-count ratio. Keyframe
+    /// analysis cannot count sync samples in advance. A focused pass also
+    /// sets this while waiting for its final auto-tagging batches.
     var isIndeterminate: Bool = false
     /// Seconds of wall clock spent in the current pass, for an ETA readout.
     var elapsed: Double = 0

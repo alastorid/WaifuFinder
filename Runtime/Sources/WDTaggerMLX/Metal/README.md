@@ -150,8 +150,9 @@ removing 47,040 bytes of duplicate payload. Configuration capture eliminates
 per-block policy evaluation. Neither change claims a measured throughput gain.
 Flash32's split K/V staging (Round 4) is also universal: byte-identical output,
 −4.3% isolated attention dispatch time, end-to-end within session noise.
-The 448 MiB allocation and 64 MiB cache budgets, checkpoint format, WDT4 worker
-protocol, FP16 rounding boundaries and FP32 reduction order remain unchanged.
+The 448 MiB allocation and 64 MiB cache budgets, checkpoint format, FP16
+rounding boundaries and FP32 reduction order remain unchanged. WDT5 transfers
+worker inputs through an anonymous pipe.
 
 The Round 2 exact base-M3 entry remains the only measured tuning profile. All
 other modern selections are provisional. Register occupancy and pipeline-specific

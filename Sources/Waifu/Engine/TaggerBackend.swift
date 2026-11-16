@@ -40,6 +40,19 @@ struct TagResult: Sendable {
     let topTags: [String]
     let generalScore: Float
     var encodedProbabilities: Data? = nil
+
+    func applying(to original: AnalyzedFrame, fingerprint: UInt64?) throws -> AnalyzedFrame {
+        guard let encoded = encodedProbabilities ?? TagProbabilityCodec.encode(probabilities) else {
+            throw TaggerError.invalidProbabilities
+        }
+        var frame = original
+        frame.tagProbabilities = encoded
+        frame.tagVocabularyFingerprint = fingerprint
+        frame.tagRating = rating
+        frame.topTags = topTags
+        frame.tagGeneralScore = generalScore
+        return frame
+    }
 }
 
 /// Shared native-worker and network result with four UInt8 rating scores.

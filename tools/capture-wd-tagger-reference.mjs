@@ -2,7 +2,6 @@
 // Capture full-precision outputs from the selected WD Tagger worker for a fixed
 // RGBA corpus. The result can be passed to wd-tagger-worker-benchmark.swift.
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
@@ -26,16 +25,17 @@ if (input.length === 0 || input.length % batchBytes !== 0) {
   throw new Error(`Input corpus must contain whole batches of ${batchSize} RGBA frames`);
 }
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wd-tagger-reference-"));
-const inputPath = path.join(scratch, "input.bin");
-const fd = fs.openSync(inputPath, "w+");
-fs.ftruncateSync(fd, batchBytes);
-const child = spawn(options.get("--worker"), [
-  "--weights", options.get("--weights"), "--input", inputPath, "--copy-input",
-], { stdio: ["pipe", "pipe", "inherit"] });
+const child = spawn(options.get("--worker"), ["--weights", options.get("--weights")],
+  { stdio: ["pipe", "pipe", "inherit"] });
+const closed = new Promise((resolve) => child.once("close", resolve));
 
 let buffer = Buffer.alloc(0);
 const waiters = [];
+let workerError;
+function fail(error) {
+  workerError ??= error;
+  while (waiters.length) waiters.shift().reject(workerError);
+}
 child.stdout.on("data", (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
   while (waiters.length && buffer.length >= waiters[0].size) {
@@ -45,16 +45,11 @@ child.stdout.on("data", (chunk) => {
     waiter.resolve(value);
   }
 });
-child.on("error", (error) => {
-  while (waiters.length) waiters.shift().reject(error);
-});
-child.on("exit", (code) => {
-  if (code !== 0) {
-    const error = new Error(`WD Tagger worker exited with ${code}`);
-    while (waiters.length) waiters.shift().reject(error);
-  }
-});
+child.on("error", fail);
+child.stdin.on("error", fail);
+child.stdout.on("end", () => fail(new Error("WD Tagger worker closed stdout")));
 const read = (size) => new Promise((resolve, reject) => {
+  if (buffer.length < size && workerError) return reject(workerError);
   waiters.push({ size, resolve, reject });
   while (waiters.length && buffer.length >= waiters[0].size) {
     const waiter = waiters.shift();
@@ -63,26 +58,28 @@ const read = (size) => new Promise((resolve, reject) => {
     waiter.resolve(value);
   }
 });
+const write = (bytes) => new Promise((resolve, reject) => {
+  child.stdin.write(bytes, (error) => error ? reject(error) : resolve());
+});
 
 try {
   const magic = await read(4);
-  if (magic.toString("ascii") !== "WDT4") throw new Error("Unexpected worker protocol header");
+  if (magic.toString("ascii") !== "WDT5") throw new Error("Unexpected worker protocol header");
   const outputs = [];
   const batches = input.length / batchBytes;
   for (let batch = 0; batch < batches; batch += 1) {
     const bytes = input.subarray(batch * batchBytes, (batch + 1) * batchBytes);
-    fs.writeSync(fd, bytes, 0, bytes.length, 0);
-    child.stdin.write(Buffer.from([batchSize]));
+    await write(Buffer.from([batchSize]));
+    await write(bytes);
     outputs.push(await read(batchSize * rowBytes));
   }
   child.stdin.end();
-  const status = await new Promise((resolve) => child.once("close", resolve));
+  const status = await closed;
   if (status !== 0) throw new Error(`WD Tagger worker exited with ${status}`);
   const outputPath = path.resolve(options.get("--output"));
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, Buffer.concat(outputs));
   console.log(`Captured ${input.length / frameBytes} WD Tagger reference rows to ${outputPath}`);
 } finally {
-  fs.closeSync(fd);
-  fs.rmSync(scratch, { recursive: true, force: true });
+  if (child.exitCode === null && child.signalCode === null) child.kill();
 }
