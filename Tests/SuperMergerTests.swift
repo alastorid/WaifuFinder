@@ -37,8 +37,10 @@ func registerSuperMergerTests() {
         let compressed = try MergerPreprocessor.prepare([clean, try source("compressed", boxes: [], jpeg: true)])
         check(compressed.analysis.regions.filter(ArenaRecoveryPlanner.needsReview).count <= 7 || !compressed.admitted,
               "compression cannot dispatch excessive review jobs")
-        let boxes = (0..<8).map { index in
-            CGRect(x: 60 + (index % 4) * 210, y: 200 + (index / 4) * 550, width: 30, height: 30)
+        let boxes = (0..<8).map { index -> CGRect in
+            let x = 60 + (index % 4) * 210
+            let y = 200 + (index / 4) * 550
+            return CGRect(x: x, y: y, width: 30, height: 30)
         }
         let complex = try MergerPreprocessor.prepare([clean, try source("eight-edits", boxes: boxes)])
         check(!complex.admitted, "eight genuine alterations stop admission")
