@@ -103,17 +103,15 @@ then drag **WaifuFinder** onto **Applications** in the disk image window.
 
 Open **Start Here.html** in that window for instructions to copy the command and paste it into Terminal.
 The developer does not have an Apple Developer ID certificate. This release needs
-a one-time local signature on your Mac; read the guide’s explanation before running
-this command in Terminal after copying the app:
+a one-time local signature on your Mac. Read the guide, then run the command in
+Terminal after copying the app.
 
 ```sh
-xattr -dr com.apple.quarantine "/Applications/WaifuFinder.app" && codesign --force --deep --sign - "/Applications/WaifuFinder.app"
+codesign --force --deep --sign - "/Applications/WaifuFinder.app"
 ```
 
-This removes only the app’s download quarantine flag and applies an ad-hoc local
-signature. It does not download scripts, upload files, or launch the app. Local
-signing removes a protection; it does not verify the app’s safety. Release builds
-are not Apple-notarized. Continue only if you trust the official download.
+This applies an ad-hoc local signature to WaifuFinder and its bundled components.
+Continue only if you trust the official download.
 After setup, open WaifuFinder from Applications as usual and eject the disk image.
 
 WaifuFinder takes one or more video files, decodes it frame by frame, asks Apple's Vision models

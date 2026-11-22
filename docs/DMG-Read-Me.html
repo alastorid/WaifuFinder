@@ -44,19 +44,18 @@
         <p>This one-time setup uses tools already on your Mac to apply a <strong>local signature</strong> to your installed copy. It needs no Apple developer account.</p>
         <div class="explanation">
           <strong>What you are allowing</strong>
-          <p><code>xattr</code> removes the download quarantine flag from WaifuFinder. <code>codesign</code> replaces its existing signature with a local one, including its bundled components. Both target only <code>/Applications/WaifuFinder.app</code>.</p>
-          <p>These commands do not download a script, upload your files, or open the app. They do remove this app’s download protection. <strong>A local signature is not a safety check or approval from Apple.</strong> Continue only if you trust the <a href="https://github.com/alastorid/WaifuFinder/releases/latest">official download</a>; you can also inspect the <a href="https://github.com/alastorid/WaifuFinder">source code</a>.</p>
+          <p><code>codesign</code> applies a local signature to <code>/Applications/WaifuFinder.app</code> and its bundled components. Continue only if you trust the <a href="https://github.com/alastorid/WaifuFinder/releases/latest">official download</a>. You can also inspect the <a href="https://github.com/alastorid/WaifuFinder">source code</a>.</p>
         </div>
         <p><strong>Copy the command:</strong> drag across all the text in the dark command block below to select it, then press <strong>⌘C</strong> (Command-C).</p>
         <div class="command">
           <div class="command-label">TERMINAL COMMAND</div>
-          <pre aria-label="Command to paste into Terminal"><code class="language-bash" id="command" tabindex="0">xattr -dr com.apple.quarantine "/Applications/WaifuFinder.app" &amp;&amp; codesign --force --deep --sign - "/Applications/WaifuFinder.app"</code></pre>
+          <pre aria-label="Command to paste into Terminal"><code class="language-bash" id="command" tabindex="0">codesign --force --deep --sign - "/Applications/WaifuFinder.app"</code></pre>
           <p class="copy-help">Copy the entire command, even if it wraps onto several lines in this window.</p>
         </div>
         <p style="margin-top: 16px"><strong>Paste into Terminal:</strong> press <strong>⌘ Space</strong>, type <strong>Terminal</strong>, and press <strong>Return</strong>. In the Terminal window, press <strong>⌘V</strong> (Command-V) to paste the command, then press <strong>Return</strong> to run it.</p>
       </li>
       <li><h2>Open WaifuFinder</h2><p>When Terminal finishes without an error, open <strong>Applications</strong> and double-click <strong>WaifuFinder</strong>. You can now eject the disk image. Next time, open the app as usual.</p>
-        <details><summary>If setup shows an error</summary><p>“No such file” means the app has not finished copying to Applications. A missing quarantine attribute can mean that flag is already cleared; you can run just the <code>codesign</code> part. For other errors, <a href="https://github.com/alastorid/WaifuFinder/issues">report the message</a> rather than adding extra commands or administrator access.</p></details>
+        <details><summary>If setup shows an error</summary><p>If Terminal says “No such file,” make sure WaifuFinder has finished copying to Applications. For other errors, <a href="https://github.com/alastorid/WaifuFinder/issues">report the message</a>.</p></details>
       </li>
     </ol>
     <footer>This release is not signed with Apple Developer ID or notarized by Apple. <a href="https://support.apple.com/en-us/102445">Apple explains these protections</a>. If macOS reports malware, do not use these steps to override that warning.</footer>
