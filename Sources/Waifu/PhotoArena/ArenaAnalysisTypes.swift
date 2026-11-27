@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import UniformTypeIdentifiers
 
 /// All geometry uses EXIF-oriented native pixel edges with a bottom-left origin.
 struct ArenaPixelRect: Codable, Hashable, Sendable {
@@ -28,6 +29,9 @@ struct ArenaAnalyzedSource: Codable, Identifiable, Sendable {
     var accepted: Bool
     var issues: [String]
     var fileSHA256: String? = nil
+    var imageType: String? = nil
+    var isJPEG: Bool { imageType == UTType.jpeg.identifier }
+    var isWebP: Bool { imageType == UTType.webP.identifier }
     /// Detection-only calibration; reconstruction retains original source pixels.
     var residualOffset: [Double]? = nil
     var residualLowThreshold: Double? = nil
@@ -118,4 +122,5 @@ struct ArenaAnalysis: Codable, Sendable {
     var elapsedSeconds: Double
     /// Nil in older reports, which used a fixed 12/255 residual tolerance.
     var differenceTolerance: Int? = nil
+    var manualReviewReason: String? = nil
 }

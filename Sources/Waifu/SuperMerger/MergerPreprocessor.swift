@@ -140,7 +140,7 @@ enum MergerPreprocessor {
             localized.warnings.append("Localized text recovery is available; global differences remain unresolved.")
             return MergerAdmission.Assessment(analysis: localized, excluded: assessment.excluded, reason: nil)
         }
-        return assessment
+        return assessment.manualReview ?? assessment
     }
 
     private struct Calibration {

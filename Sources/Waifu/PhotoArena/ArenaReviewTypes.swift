@@ -121,7 +121,8 @@ enum ArenaRecoveryPlanner {
         return region.measurements.contains { $0.difference > 0.001 }
     }
     static func jobs(_ analysis: ArenaAnalysis) -> [ArenaReviewJob] {
-        [ArenaReviewJob(id: "overview", rect: ArenaPixelRect(CGRect(x: 0, y: 0, width: analysis.width, height: analysis.height)), overview: true)] +
+        guard analysis.manualReviewReason == nil else { return [] }
+        return [ArenaReviewJob(id: "overview", rect: ArenaPixelRect(CGRect(x: 0, y: 0, width: analysis.width, height: analysis.height)), overview: true)] +
         analysis.regions.filter(needsReview).sorted {
             let a = $0.measurements.map(\.difference).max() ?? 0, b = $1.measurements.map(\.difference).max() ?? 0
             return a == b ? $0.id < $1.id : a > b
@@ -133,7 +134,8 @@ enum ArenaRecoveryPlanner {
         }
     }
     static func plan(_ analysis: ArenaAnalysis, reviews: [ArenaReviewRecord], overrides: [String: String] = [:], preferredSource: String? = nil) -> ArenaRecoveryPlan {
-        let latest = Dictionary(reviews.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+        let latest = analysis.manualReviewReason == nil
+            ? Dictionary(reviews.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new }) : [:]
         let regions = analysis.regions.filter(needsReview)
         let allJobs = jobs(analysis)
         let pending = allJobs.filter { latest[$0.id] == nil }.map(\.id)
@@ -172,15 +174,28 @@ enum ArenaRecoveryPlanner {
                 coverage: coverage, confidence: low || !pending.isEmpty || weight == 0 ? .low : .medium,
                 defects: defects.sorted { $0.rawValue < $1.rawValue }, reasons: reasons)
         }
+        let sourcesByID = Dictionary(uniqueKeysWithValues: analysis.sources.map { ($0.id, $0) })
+        let originalityMargin = 3.0
         func strongest(_ candidates: [ArenaCandidateAssessment]) -> ArenaCandidateAssessment? {
             candidates.max {
                 let a = $0.originality ?? -1, b = $1.originality ?? -1
                 return a == b ? $0.sourceID > $1.sourceID : a < b
             }
         }
+        func prefersJPEG(_ jpeg: ArenaCandidateAssessment, over webP: ArenaCandidateAssessment) -> Bool {
+            sourcesByID[jpeg.sourceID]?.isJPEG == true && sourcesByID[webP.sourceID]?.isWebP == true
+                && (webP.originality ?? -1) - (jpeg.originality ?? -1) < originalityMargin
+        }
+        func preferredWholeSource(_ candidates: [ArenaCandidateAssessment]) -> ArenaCandidateAssessment? {
+            guard let leader = strongest(candidates) else { return nil }
+            return strongest(candidates.filter { prefersJPEG($0, over: leader) }) ?? leader
+        }
         func uniqueBest(_ candidates: [ArenaCandidateAssessment]) -> String? {
-            guard let top = strongest(candidates), let score = top.originality,
-                  !candidates.contains(where: { $0.sourceID != top.sourceID && score - ($0.originality ?? -1) < 3 }) else { return nil }
+            guard let top = preferredWholeSource(candidates), let score = top.originality,
+                  !candidates.contains(where: {
+                      $0.sourceID != top.sourceID && score - ($0.originality ?? -1) < originalityMargin
+                          && !prefersJPEG(top, over: $0)
+                  }) else { return nil }
             return top.sourceID
         }
         func selectedSource(_ record: ArenaReviewRecord?) -> String? {
@@ -190,38 +205,41 @@ enum ArenaRecoveryPlanner {
             return record.sourceIDs[ordinal]
         }
         let overview = latest["overview"]
-        let best = overview?.result.review?.unresolved != nil ? selectedSource(overview) : uniqueBest(ranks)
-        let reference = analysis.sources.first { $0.id == analysis.referenceID }!
-        let requested = preferredSource.flatMap { id in analysis.sources.first { $0.id == id && $0.accepted && $0.width > 0 } }
+        let overviewSelection = selectedSource(overview)
+        let overviewRank = ranks.first { $0.sourceID == overviewSelection }
+        let best = overview?.result.review?.unresolved != nil ? overviewSelection : uniqueBest(ranks)
+        let reference = sourcesByID[analysis.referenceID]!
         // A backbone must cover the complete reference canvas. Cropped candidates remain eligible as patches.
-        let backbone = requested.flatMap { source in
-            analysis.regions.allSatisfy { $0.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 } } ? source : nil
-        } ?? strongest(ranks.filter { rank in
-            analysis.sources.contains { source in source.id == rank.sourceID && source.accepted && analysis.regions.allSatisfy { $0.measurements.contains { $0.sourceID == source.id && $0.validFraction >= 0.9999 } } }
-        }).flatMap { rank in analysis.sources.first { $0.id == rank.sourceID } } ?? reference
+        let wholeSources = ranks.filter { rank in
+            sourcesByID[rank.sourceID]?.accepted == true && analysis.regions.allSatisfy { region in
+                region.measurements.contains { $0.sourceID == rank.sourceID && $0.validFraction >= 0.9999 }
+            }
+        }
+        let requested = wholeSources.first { $0.sourceID == preferredSource && (sourcesByID[$0.sourceID]?.width ?? 0) > 0 }
         func clean(_ f: ArenaCandidateFinding) -> Bool {
             f.usable && f.confidence != .low && f.cleanliness >= 90 && f.alteration <= 10 && f.enhancement <= 10
                 && f.defects.allSatisfy { [.natural, .color, .geometry, .compression].contains($0) }
         }
-        let eligible = ranks.filter { rank in
+        let eligible = wholeSources.filter { rank in
             pending.isEmpty && (rank.originality ?? 0) >= 60 && (rank.detail ?? 0) >= 45 && (rank.degradation ?? 100) <= 40
                 && allJobs.allSatisfy {
                     let record = latest[$0.id]
                     let decisionSupportsSource: Bool
                     if $0.overview {
-                        decisionSupportsSource = record?.result.review?.unresolved == nil || selectedSource(record) == rank.sourceID
+                        decisionSupportsSource = record?.result.review?.unresolved == nil || overviewSelection == rank.sourceID
+                            || overviewRank.map { prefersJPEG(rank, over: $0) } == true
                     } else {
                         decisionSupportsSource = record?.result.review?.unresolved != true
                     }
                     return decisionSupportsSource && finding(record, rank.sourceID).map(clean) == true
                 }
-                && analysis.sources.contains { $0.id == rank.sourceID && $0.accepted }
-                && analysis.regions.allSatisfy { region in region.measurements.contains { $0.sourceID == rank.sourceID && $0.validFraction >= 0.9999 } }
         }
         let single = uniqueBest(eligible)
         let direct = single != nil && overrides.isEmpty && preferredSource == nil
-        let outputBase = direct ? analysis.sources.first { $0.id == single }! : backbone
-        let base = ArenaSourceSelection(regionID: "backbone", sourceID: outputBase.id,
+        // A region override keeps the clean whole-source winner as the base.
+        let backboneID = requested?.sourceID ?? single ?? preferredWholeSource(wholeSources)?.sourceID
+        let backbone = backboneID.flatMap { sourcesByID[$0] } ?? reference
+        let base = ArenaSourceSelection(regionID: "backbone", sourceID: backbone.id,
             rect: ArenaPixelRect(CGRect(x: 0, y: 0, width: analysis.width, height: analysis.height)), unresolved: true,
             reasons: ["Whole-source backbone; model assessment does not establish provenance."], manual: false)
         var selections = [base], unresolved: [String] = []
@@ -258,10 +276,12 @@ enum ArenaRecoveryPlanner {
             unresolved.append(region.id)
         }
         let kind: ArenaResultKind = direct ? .original : selections.count > 1 ? .composite : .unresolved
-        return ArenaRecoveryPlan(kind: kind, bestSourceID: direct ? single : best, backboneID: outputBase.id, rankings: ranks,
+        let reason = analysis.manualReviewReason ?? (kind == .original ? "One candidate satisfies the reviewed evidence; preserve its original file bytes." :
+            kind == .composite ? "No single clean candidate was established; recover only supported source patches." :
+            "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.")
+        return ArenaRecoveryPlan(kind: kind, bestSourceID: direct ? single : best, backboneID: backbone.id, rankings: ranks,
             selections: selections, pendingRegionIDs: pending, unresolvedRegionIDs: unresolved,
-            reasons: [kind == .original ? "One candidate satisfies the reviewed evidence; preserve its original file bytes." :
-                kind == .composite ? "No single clean candidate was established; recover only supported source patches." : "Evidence is insufficient for an automatic clean recovery; retain the best available source with unresolved findings.",
+            reasons: [reason,
                 "Scores compare supplied candidates and are not calibrated probabilities.",
                 "\(pending.count) review tasks pending; \(Int(area)) reference pixels measured."])
     }

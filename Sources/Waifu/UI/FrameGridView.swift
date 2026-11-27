@@ -643,9 +643,7 @@ struct FrameGridView: View {
         Divider()
         if let photoURL {
             Button("Copy File Name") {
-                guard let name = PhotoMetadataService.shared.filename(for: photoURL) else { return }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(name, forType: .string)
+                copyFileNames(for: frame, photoURL: photoURL)
             }
         } else {
             Button("Copy Timecode") {
@@ -654,6 +652,26 @@ struct FrameGridView: View {
                 NSPasteboard.general.setString(timecode(sourceTime), forType: .string)
             }
         }
+    }
+
+    private func copyFileNames(for frame: AnalyzedFrame, photoURL: URL) {
+        let selected = session.selectedFrameIDs
+        let text: String
+        if selected.count > 1, selected.contains(frame.id), let sourceURL = session.video?.url {
+            let names = session.frames.lazy.filter { selected.contains($0.id) }.compactMap { frame in
+                PhotosMedia.shared.photoItemURL(for: sourceURL, seconds: frame.timeSeconds)
+                    .flatMap { PhotoMetadataService.shared.filename(for: $0) }
+            }
+            text = names.map { name in
+                "\"\(name.replacingOccurrences(of: "\"", with: "\"\""))\""
+            }.joined(separator: ", ")
+        } else {
+            guard let name = PhotoMetadataService.shared.filename(for: photoURL) else { return }
+            text = name
+        }
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 

@@ -9,12 +9,14 @@ private func recoveryFinding(_ source: Int, originality: Int = 90, clean: Bool =
         detail: detail, alteration: clean ? 0 : 50, enhancement: 0, degradation: 0, consistency: 90,
         usable: clean, confidence: confidence, defects: clean ? [] : [.watermark], evidence: clean ? "Test assessment: no observed overlay." : "Test assessment: visible synthetic overlay.")
 }
-private func recoveryRecord(_ analysis: ArenaAnalysis, job: ArenaReviewJob, findings: [ArenaCandidateFinding]) -> ArenaReviewRecord {
+private func recoveryRecord(_ analysis: ArenaAnalysis, job: ArenaReviewJob, findings: [ArenaCandidateFinding],
+                            selected: Int? = nil) -> ArenaReviewRecord {
     ArenaReviewRecord(job: job, sourceIDs: analysis.sources.map(\.id), cacheKey: "fixture",
         result: ArenaJudgeResult(judgment: ArenaJudgment(watermark: .unknown, authenticity: .unknown, detail: .unknown,
             quality: .unknown, consistency: .unknown, recommended_source: .unknown, uncertain: true, evidence: ["Injected contract fixture; not measured model accuracy"]),
             tokens: 0, prefillSeconds: 0, decodeSeconds: 0, physicalFootprintBytes: 0, compressedBytes: 0,
-            review: ArenaGroupAssessment(sources: findings)))
+            review: ArenaGroupAssessment(sources: findings, selected_source: selected,
+                unresolved: selected.map { _ in false }, reason: selected.map { _ in "Selected by fixture." })))
 }
 private func recoveryFixture(_ root: URL, count: Int = 3) throws -> ArenaAnalysis {
     let width = 32, height = 24
@@ -37,6 +39,38 @@ private func recoveryFixture(_ root: URL, count: Int = 3) throws -> ArenaAnalysi
     return ArenaAnalysis(referenceID: sources.last!.id, width: width, height: height, sources: sources, regions: [region], warnings: [], elapsedSeconds: 0)
 }
 func registerArenaRecoveryTests() {
+    Registry.shared.add(suite: "Super Merger", TestCase(name: "JPEG wins comparable whole-source evidence in a six-source mix", knownBug: nil) {
+        let root = try Temporary.directory("merger-mixed-encodings")
+        var analysis = try recoveryFixture(root, count: 6)
+        for index in analysis.sources.indices {
+            analysis.sources[index].imageType = (index == 0 || index == 5 ? UTType.webP : UTType.jpeg).identifier
+        }
+        let jpeg = analysis.sources[1].id, webP = analysis.sources[0].id
+        let jobs = ArenaRecoveryPlanner.jobs(analysis)
+        let pending = ArenaRecoveryPlanner.plan(analysis, reviews: [])
+        checkEqual(pending.backboneID, jpeg, "JPEG is the provisional base")
+
+        func review(webPScore: Int, jpegClean: Bool = true) -> [ArenaReviewRecord] {
+            let scores = [webPScore, 90, 80, 79, 78, 77]
+            return jobs.map { job in
+                recoveryRecord(analysis, job: job, findings: scores.enumerated().map { index, score in
+                    recoveryFinding(index, originality: score, clean: index != 1 || jpegClean)
+                }, selected: 0)
+            }
+        }
+        let close = ArenaRecoveryPlanner.plan(analysis, reviews: review(webPScore: 91))
+        checkEqual(close.kind, .original, "both candidates have sufficient original-file evidence")
+        checkEqual(close.bestSourceID, jpeg, "comparable clean JPEG keeps its original bytes")
+        let stronger = ArenaRecoveryPlanner.plan(analysis, reviews: review(webPScore: 97))
+        checkEqual(stronger.bestSourceID, webP, "materially stronger WebP evidence wins")
+        let onlyClean = ArenaRecoveryPlanner.plan(analysis, reviews: review(webPScore: 91, jpegClean: false))
+        checkEqual(onlyClean.bestSourceID, webP, "JPEG format does not bypass the clean-original requirements")
+
+        let manual = ArenaRecoveryPlanner.plan(analysis, reviews: review(webPScore: 91), overrides: ["patch": webP])
+        checkEqual(manual.kind, .composite, "manual override switches to a composite")
+        checkEqual(manual.selections.map(\.sourceID), [jpeg, webP], "WebP remains eligible as a region donor")
+        check(manual.selections.last?.manual == true, "WebP patch is recorded as manual")
+    })
     Registry.shared.add(suite: "Super Merger", TestCase(name: "admission preserves masks and refuses excessive independent regions", knownBug: nil) {
         let root = try Temporary.directory("merger-admission")
         let fixture = try recoveryFixture(root)
@@ -55,6 +89,24 @@ func registerArenaRecoveryTests() {
         var incompatible = fixture
         for index in incompatible.sources.indices.dropFirst() { incompatible.sources[index].accepted = false }
         check(!(try MergerAdmission.assess(incompatible)).admitted, "one aligned source is insufficient")
+
+        let fragments = (0..<65).flatMap { row in
+            (0..<65).map { column in ArenaMaskRun(y: row * 3, x: column * 3, length: 1) }
+        }
+        let tile = ArenaRegion(id: fixture.regions[0].id,
+            rect: ArenaPixelRect(CGRect(x: 0, y: 0, width: 256, height: 256)),
+            measurements: fixture.regions[0].measurements, unresolved: true, evidence: [],
+            changeMask: ArenaPixelMask(runs: fragments))
+        let fragmented = ArenaAnalysis(referenceID: fixture.referenceID, width: 256, height: 256,
+            sources: fixture.sources, regions: [tile], warnings: [], elapsedSeconds: 0)
+        let limited = try MergerAdmission.assess(fragmented)
+        check(!limited.admitted, "fragmentation still stops automatic review")
+        guard let manual = limited.manualReview else { check(false, "manual review is available"); return }
+        checkEqual(manual.analysis.regions.first?.changeMask?.runs, fragments, "manual review keeps the exact measured mask")
+        check(ArenaRecoveryPlanner.jobs(manual.analysis).isEmpty, "manual review schedules no model work")
+        let choice = ArenaRecoveryPlanner.plan(manual.analysis, reviews: [], overrides: [tile.id: "s1"])
+        checkEqual(choice.kind, .composite, "manual review can produce a composite")
+        checkEqual(choice.selections.last?.sourceID, "s1", "manual recovery uses the selected donor")
     })
 
     Registry.shared.add(suite: "PhotoArena recovery", TestCase(name: "N-source contract rejects missing duplicated and invalid assessments", knownBug: nil) {

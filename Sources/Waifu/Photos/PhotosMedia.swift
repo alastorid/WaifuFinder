@@ -30,8 +30,8 @@ struct PhotosAlbum: Identifiable, Equatable, Sendable {
     }
 }
 
-/// PhotoKit supplies decoded photos and AVAssets directly. Originals are never
-/// exported, copied, or opened through the Photos library's private filesystem.
+/// PhotoKit supplies photo resources and AVAssets without accessing the Photos
+/// library's private filesystem.
 final class PhotosMedia: @unchecked Sendable {
     static let shared = PhotosMedia()
     static let analysisPixelSize = 512
@@ -85,6 +85,11 @@ final class PhotosMedia: @unchecked Sendable {
         let offset: Double
         var duration: Double { asset.mediaType == .video ? max(asset.duration, 0.001) : 1 }
         var isStill: Bool { asset.mediaType == .image }
+        var originalPhotoResource: PHAssetResource? {
+            guard isStill else { return nil }
+            let resources = PHAssetResource.assetResources(for: asset)
+            return resources.first { $0.type == .photo } ?? resources.first { $0.type == .alternatePhoto }
+        }
         /// This photo's own cache identity, or nil for album video items, which
         /// have no per-photo rendition to key.
         var assetCacheKey: AssetCacheKey? {
@@ -930,6 +935,33 @@ final class PhotosMedia: @unchecked Sendable {
         }
         try Task.checkCancellation()
         return image
+    }
+
+    func copyOriginalPhoto(_ item: Item, to directory: URL) async throws -> URL {
+        let read: @Sendable (Bool) async throws -> URL = { allowNetwork in
+            guard let resource = item.originalPhotoResource else {
+                throw Self.failure("Photos did not provide an unmodified image for this candidate.")
+            }
+            let filename = (resource.originalFilename as NSString).lastPathComponent
+            guard !filename.isEmpty, filename != ".", filename != ".." else {
+                throw Self.failure("Photos did not provide a usable original filename for this candidate.")
+            }
+            let destination = directory.appendingPathComponent(filename, isDirectory: false)
+            let options = PHAssetResourceRequestOptions()
+            options.isNetworkAccessAllowed = allowNetwork
+            do {
+                return try await PhotoResourceDataReader(resource: resource, options: options, destination: destination).read()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let detail = allowNetwork ? error.localizedDescription : "Check that the original is available locally."
+                throw Self.failure("Could not read the Photos original \(filename). \(detail)")
+            }
+        }
+        if Self.downloadFromICloud {
+            return try await PhotosCloudQueue.shared.perform(priority: .background) { try await read(Self.downloadFromICloud) }
+        }
+        return try await read(false)
     }
 
     static func asset(_ url: URL) async throws -> VideoAsset {

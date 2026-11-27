@@ -21,7 +21,18 @@ enum ArenaForensics {
         NSError(domain: "PhotoArena.Analysis", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
     }
     static func image(_ source: ArenaAnalyzedSource) throws -> CIImage {
-        guard source.url.isFileURL, let image = CIImage(contentsOf: source.url, options: [.applyOrientationProperty: true]) else {
+        guard source.url.isFileURL else {
+            throw failure("PhotoArena analysis requires readable local image files: \(source.url.lastPathComponent)")
+        }
+        let image: CIImage
+        if let decoded = CIImage(contentsOf: source.url, options: [.applyOrientationProperty: true]) {
+            image = decoded
+        } else if let container = CGImageSourceCreateWithURL(source.url as CFURL, nil),
+                  let pixels = CGImageSourceCreateImageAtIndex(container, 0, nil) {
+            let properties = CGImageSourceCopyPropertiesAtIndex(container, 0, nil) as? [CFString: Any]
+            let orientation = properties?[kCGImagePropertyOrientation] as? Int32 ?? 1
+            image = CIImage(cgImage: pixels).oriented(forExifOrientation: orientation)
+        } else {
             throw failure("PhotoArena analysis requires readable local image files: \(source.url.lastPathComponent)")
         }
         return image.transformed(by: .init(translationX: -image.extent.minX, y: -image.extent.minY))
@@ -196,9 +207,13 @@ enum ArenaForensics {
             while let data = try handle.read(upToCount: 1024*1024), !data.isEmpty { try Task.checkCancellation(); digest.update(data: data) }
             return ArenaAnalyzedSource(id: source.id,url: source.url,width: rotated ? h : w,height: rotated ? w : h,
                 transform: ArenaTransform(),alignmentConfidence: 1,accepted: true,issues: [],
-                fileSHA256: digest.finalize().map { String(format: "%02x", $0) }.joined())
+                fileSHA256: digest.finalize().map { String(format: "%02x", $0) }.joined(),
+                imageType: CGImageSourceGetType(container) as String?)
         }
-        let reference = sources.max { $0.width*$0.height < $1.width*$1.height }!
+        let largest = sources.max { $0.width*$0.height < $1.width*$1.height }!
+        let reference = largest.isWebP
+            ? sources.first { $0.isJPEG && $0.width == largest.width && $0.height == largest.height } ?? largest
+            : largest
         var registered: [String: ArenaAnalyzedSource] = [:]
         if let hash = reference.fileSHA256 { registered[hash] = reference }
         for i in sources.indices where sources[i].id != reference.id {

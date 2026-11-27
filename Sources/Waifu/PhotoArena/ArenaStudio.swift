@@ -80,12 +80,21 @@ final class ArenaStudio: ObservableObject {
                        CGImageSourceCreateWithURL(input.url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) != nil {
                         files.append(input); continue
                     }
-                    // Photos-library assets/video frames are materialized as explicit derived inputs.
-                    // Inference still uses anonymous pipes; no activations or model scratch are written.
                     if ingestionDirectory == nil {
                         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PhotoArena-inputs-"+UUID().uuidString)
                         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true); ingestionDirectory = directory
                     }
+                    let (mediaURL, seconds) = VideoCollection.resolve(input.url, seconds: input.seconds)
+                    let (resolved, _) = PhotosMedia.shared.resolve(mediaURL, seconds: seconds)
+                    if let item = PhotosMedia.shared.item(resolved), item.isStill {
+                        let slot = ingestionDirectory!.appendingPathComponent("source-\(files.count + 1)", isDirectory: true)
+                        try FileManager.default.createDirectory(at: slot, withIntermediateDirectories: false)
+                        let url = try await PhotosMedia.shared.copyOriginalPhoto(item, to: slot)
+                        try Task.checkCancellation()
+                        files.append(ArenaSource(id: input.id, url: url, seconds: 0))
+                        continue
+                    }
+                    // Video frames are derived inputs and have no original still-file format.
                     let image = try await PhotosMedia.shared.image(input.url, seconds: input.seconds)
                     try Task.checkCancellation()
                     let url = ingestionDirectory!.appendingPathComponent("candidate-\(files.count+1).tiff")
@@ -99,8 +108,8 @@ final class ArenaStudio: ObservableObject {
                 let preparedFiles = files
                 let admission = try await background { try MergerPreprocessor.prepare(preparedFiles) }
                 let result = admission.analysis
-                admissionReason = admission.reason; excludedSources = admission.excluded
                 try Task.checkCancellation(); guard token == generation else { return }
+                admissionReason = admission.reason; excludedSources = admission.excluded
                 analysis = result; sourceID = result.referenceID
                 regionID = result.regions.first(where: ArenaRecoveryPlanner.needsReview)?.id
                 let location = ArenaStudioPersistence.location(result)
@@ -128,13 +137,25 @@ final class ArenaStudio: ObservableObject {
                 guard admissionReason == nil else {
                     phase = .failed; status = admissionReason!; plan = nil; return
                 }
+                if result.manualReviewReason != nil {
+                    phase = .verifying
+                    status = "Preparing the base image…"
+                    recomputePlan()
+                    await updateDisplay(token: token)
+                    try Task.checkCancellation(); guard token == generation else { return }
+                    guard output != nil else { phase = .failed; return }
+                    loadRegion()
+                    phase = .partial
+                    status = "Select a difference area to choose pixels from an aligned source."
+                    return
+                }
                 recomputePlan(); refreshDisplay(); loadRegion()
                 await runReview(previous: previous, token: token)
             } catch { fail(error, token: token) }
         }
     }
     func reviewMore() {
-        guard !busy, admissionReason == nil, analysis != nil else { return }
+        guard !busy, admissionReason == nil, let analysis, analysis.manualReviewReason == nil else { return }
         let token = generation
         operation = Task { await runReview(previous: records, token: token) }
     }

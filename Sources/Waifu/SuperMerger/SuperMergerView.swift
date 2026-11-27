@@ -24,9 +24,11 @@ struct SuperMergerView: View {
     private var sourceImage: CGImage? { model.previews[model.sourceID] }
     private var canCompare: Bool { model.resultImage != nil && sourceImage != nil && selectedSource?.accepted == true }
     private var regionIndex: Int? { model.changeRegions.firstIndex { $0.id == model.regionID } }
+    private var isManualReview: Bool { model.analysis?.manualReviewReason != nil }
     private var resultTitle: String {
         guard let plan = model.output?.plan else { return "Preparing result" }
         if model.busy { return "Review in progress" }
+        if isManualReview { return "Manual recovery" }
         if !plan.pendingRegionIDs.isEmpty { return "Review incomplete" }
         if !plan.unresolvedRegionIDs.isEmpty || plan.kind == .unresolved { return "Needs your review" }
         return plan.kind == .original ? "Original preserved" : "Recovered from sources"
@@ -235,6 +237,8 @@ struct SuperMergerView: View {
                 }
                 if let reason = model.admissionReason {
                     Label(reason, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                } else if let reason = model.analysis?.manualReviewReason {
+                    Text(reason).font(.caption).foregroundStyle(.secondary)
                 }
             }.padding(16)
             Divider()
@@ -274,25 +278,31 @@ struct SuperMergerView: View {
     private var regionNavigation: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Difference regions").font(.subheadline.weight(.semibold))
+                Text(isManualReview ? "Difference areas" : "Difference regions").font(.subheadline.weight(.semibold))
                 Spacer()
                 Button { moveRegion(-1) } label: { Image(systemName: "chevron.left") }
                     .disabled(regionIndex == nil || regionIndex == 0).accessibilityLabel("Previous region")
                 Button { moveRegion(1) } label: { Image(systemName: "chevron.right") }
                     .disabled(regionIndex == model.changeRegions.count - 1).accessibilityLabel("Next region")
             }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 65))], spacing: 6) {
-                ForEach(Array(model.changeRegions.enumerated()), id: \.element.id) { index, region in
-                    Button { model.regionID = region.id } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: regionSymbol(region.id))
-                            Text("\(index + 1)")
-                        }.font(.callout).frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .background(model.regionID == region.id ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
-                                        in: RoundedRectangle(cornerRadius: 6))
-                    }.buttonStyle(.plain).accessibilityLabel("Region \(index + 1), \(regionStatus(region.id))")
-                        .help(regionStatus(region.id)).accessibilityAddTraits(model.regionID == region.id ? .isSelected : [])
-                }
+            if !isManualReview {
+                regionButtons
+            }
+        }
+    }
+
+    private var regionButtons: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 65))], spacing: 6) {
+            ForEach(Array(model.changeRegions.enumerated()), id: \.element.id) { index, region in
+                Button { model.regionID = region.id } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: regionSymbol(region.id))
+                        Text("\(index + 1)")
+                    }.font(.callout).frame(maxWidth: .infinity).padding(.vertical, 7)
+                        .background(model.regionID == region.id ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).accessibilityLabel("Region \(index + 1), \(regionStatus(region.id))")
+                    .help(regionStatus(region.id)).accessibilityAddTraits(model.regionID == region.id ? .isSelected : [])
             }
         }
     }
@@ -300,7 +310,8 @@ struct SuperMergerView: View {
     private func regionReview(_ region: ArenaRegion) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Region \((regionIndex ?? 0) + 1)").font(.headline)
+                Text(isManualReview ? "Area \((regionIndex ?? 0) + 1) of \(model.changeRegions.count)"
+                    : "Region \((regionIndex ?? 0) + 1)").font(.headline)
                 Spacer()
                 Button("Locate") { focus(region) }.controlSize(.small)
             }
@@ -309,7 +320,7 @@ struct SuperMergerView: View {
                     Label("No confident automatic choice", systemImage: "questionmark.circle").font(.callout).foregroundStyle(.orange)
                 }
                 Text(review.reason ?? "No explanation provided.").font(.callout).textSelection(.enabled)
-            } else {
+            } else if !isManualReview {
                 Text("Waiting for review. You can inspect the aligned sources now.").font(.callout).foregroundStyle(.secondary)
             }
             if let verification = model.output?.plan.verification?.first(where: { $0.regionID == region.id }), !verification.accepted {
@@ -374,7 +385,8 @@ struct SuperMergerView: View {
             Text(model.status).font(.caption).lineLimit(2).textSelection(.enabled).help(model.status)
             Spacer(minLength: 8)
             if model.busy { Button("Cancel", action: model.cancel).controlSize(.small) }
-            else if (model.phase == .cancelled || model.phase == .failed), model.admissionReason == nil, model.analysis != nil {
+            else if (model.phase == .cancelled || model.phase == .failed), model.admissionReason == nil,
+                    model.analysis != nil, !isManualReview {
                 Button("Resume Review", action: model.reviewMore).controlSize(.small)
             }
         }.padding(.horizontal, 16).padding(.vertical, 9)

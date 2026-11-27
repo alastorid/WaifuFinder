@@ -181,9 +181,7 @@ final class PhotoMetadataService: @unchecked Sendable {
         guard let item = PhotosMedia.shared.item(photoURL), item.isStill,
               let key = item.assetCacheKey else { return nil }
         if let filename = lock.withLock({ filenames[key] ?? cache[key]?.filename }) { return filename }
-        let resources = PHAssetResource.assetResources(for: item.asset)
-        let original = resources.first(where: { $0.type == .photo })
-            ?? resources.first(where: { $0.type == .alternatePhoto })
+        let original = item.originalPhotoResource
         let filename = original?.originalFilename ?? "Photo"
         lock.withLock {
             if filenames.count >= 512 { filenames.removeAll(keepingCapacity: true) }
@@ -277,12 +275,10 @@ final class PhotoMetadataService: @unchecked Sendable {
 
     private static func initialMetadata(for item: PhotosMedia.Item) -> (metadata: PhotoMetadata, resource: PHAssetResource?) {
         let asset = item.asset
-        let resources = PHAssetResource.assetResources(for: asset)
         // `.fullSizePhoto` can be an edited rendering; only inspect the
         // original photo resource or its full-resolution alternate (for
         // example, a paired RAW file).
-        let original = resources.first(where: { $0.type == .photo })
-            ?? resources.first(where: { $0.type == .alternatePhoto })
+        let original = item.originalPhotoResource
         let filename = original?.originalFilename ?? "Photo"
         let metadata = PhotoMetadata(
             filename: filename,
@@ -318,9 +314,9 @@ final class PhotoResourceDataReader: @unchecked Sendable {
     private var finished = false
     private var started = false
 
-    init(resource: PHAssetResource, options: PHAssetResourceRequestOptions) {
+    init(resource: PHAssetResource, options: PHAssetResourceRequestOptions, destination: URL? = nil) {
         let manager = PHAssetResourceManager.default()
-        temporaryURL = FileManager.default.temporaryDirectory
+        temporaryURL = destination ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("waifu-photo-metadata-\(UUID().uuidString)")
         startRequest = { dataReceived, completion in
             manager.requestData(for: resource, options: options,

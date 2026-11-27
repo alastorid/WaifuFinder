@@ -6,6 +6,10 @@ starts automatically. **Replace Sources** starts a new set when the current work
 has stopped. The persistent toolbar keeps Undo, Export and Done available without
 scrolling; progress, cancellation and resume live in the bottom status bar.
 
+Selections from a Photos album use the unmodified originals. When the evidence
+for a whole-image source is comparable, Super Merger prefers JPEG over WebP.
+Aligned WebP sources can still supply individual patches.
+
 The workspace puts the photograph on the left and the region review on the right.
 The source strip shows aligned previews, the base source and excluded inputs.
 Selecting a thumbnail inspects that source without changing the result. **Result**,
@@ -54,6 +58,10 @@ published, verified reconstruction plan.
    and coverage gates, then pass the boundary check. Manual overrides are labelled
    separately. Export independently verifies the written image against its recorded
    sources.
+
+When complete difference masks are too fragmented for automatic review, select
+an area on the image and click **Use Source** on an aligned version. The export
+verifies coverage for each manual patch and records the source of its pixels.
 
 ## Validation scope
 

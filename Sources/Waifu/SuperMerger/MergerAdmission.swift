@@ -9,7 +9,17 @@ enum MergerAdmission {
         let analysis: ArenaAnalysis
         let excluded: [ArenaAnalyzedSource]
         let reason: String?
+        var allowsManualReview = false
         var admitted: Bool { reason == nil }
+
+        var manualReview: Assessment? {
+            guard allowsManualReview, let reason else { return nil }
+            // Preserve the measured masks in their original, nonoverlapping tiles.
+            var result = analysis
+            result.sources = analysis.sources.filter(\.accepted)
+            result.manualReviewReason = reason
+            return Assessment(analysis: result, excluded: excluded, reason: nil)
+        }
     }
 
     static func assess(_ input: ArenaAnalysis) throws -> Assessment {
@@ -39,7 +49,7 @@ enum MergerAdmission {
         let components = mask.components
         guard components.count <= 4096 else {
             return Assessment(analysis: input, excluded: excluded,
-                reason: "Differences are too fragmented for bounded automatic analysis.")
+                reason: "Differences are too fragmented for automatic review.", allowsManualReview: true)
         }
         var groups: [ArenaPixelMask] = []
         let spacing = max(3.0, min(16.0, Double(min(input.width, input.height)) * 0.01))
